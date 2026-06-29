@@ -1,0 +1,3 @@
+; proto3 deltas: none. proto3's surface syntax is the common base
+; (implicit label via the optional [ label ], plus the "optional" keyword).
+; Version legality (no required, no group) is enforced in the walk.

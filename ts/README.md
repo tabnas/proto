@@ -1,67 +1,69 @@
-# @tabnas/zon
+# @tabnas/proto
 
-A [Tabnas](https://github.com/tabnas/parser) grammar plugin that parses
-[Zig Object Notation (ZON)](https://ziglang.org/documentation/master/#ZON)
-text into objects, arrays, and scalar values. ZON is the anonymous-struct
-data format used for Zig `build.zig.zon` manifests.
-
-## Install
-
-```bash
-npm install @tabnas/parser @tabnas/jsonic @tabnas/zon
-```
-
-Requires `@tabnas/parser` >= 2 and `@tabnas/jsonic` >= 2 as peer
-dependencies.
-
-## One example
-
-The plugin layers onto a Tabnas engine that already has the jsonic
-grammar:
+Parse Protocol Buffers `.proto` IDL — **proto2, proto3, and editions 2023
+/ 2024** — into [FileDescriptorProto][fdp]-shaped JSON, using the
+[Tabnas](https://github.com/tabnas/parser) parser driven by an
+[ABNF](https://github.com/tabnas/abnf) grammar.
 
 ```js
-import { Tabnas } from '@tabnas/parser'
-import { jsonic } from '@tabnas/jsonic'
-import { Zon } from '@tabnas/zon'
+const { parse } = require('@tabnas/proto')
 
-const j = new Tabnas().use(jsonic).use(Zon)
+const fdp = parse(`
+  syntax = "proto3";
+  package example;
+  message Person {
+    string name = 1;
+    repeated string emails = 2;
+  }
+`)
 
-j.parse('.{ .name = "Alice", .age = 30 }') // => { name: 'Alice', age: 30 }
-j.parse('.{ 1, 2, 3 }')                     // => [1, 2, 3]
+fdp.syntax                              // => 'proto3'
+fdp.package                             // => 'example'
+fdp.messageType[0].name                 // => 'Person'
+fdp.messageType[0].field[1].label       // => 'LABEL_REPEATED'
+fdp.messageType[0].field[0].type        // => 'TYPE_STRING'
 ```
 
-Build the instance once and reuse it — constructing the grammar is the
-expensive part.
+## Versions
 
-## Documentation
+The version is auto-detected from the file's `syntax` / `edition`
+declaration, and/or set explicitly with the `version` option:
 
-Full documentation follows the [Diátaxis](https://diataxis.fr)
-framework:
+```js
+const { parse } = require('@tabnas/proto')
 
-- [Tutorial](doc/tutorial.md) — a guided first parse, start to finish.
-- [How-to guide](doc/guide.md) — short recipes for individual tasks.
-- [Reference](doc/reference.md) — the public API, every option, and the
-  complete ZON syntax accepted.
-- [Concepts](doc/concepts.md) — how the plugin reshapes the engine, and
-  why.
+parse('edition = "2023";').edition             // => 'EDITION_2023'
+parse('message M {}', { version: 'proto3' }).syntax  // => 'proto3'
+```
 
-For the Go port, see [`../go/README.md`](../go/README.md).
+When both an explicit `version` and a declaration are present they must
+agree (`reconcile: true`, the default) or `parse` throws; set
+`reconcile: false` to let the declaration win.
 
-## Grammar diagram
+## API
 
-The grammar is defined in the top-level
-[`zon-grammar.jsonic`](../zon-grammar.jsonic) and embedded into this
-implementation (and the Go port) by [`embed-grammar.js`](embed-grammar.js)
-during the build.
+- `parse(src, options?) => FileDescriptorProto` — parse a `.proto` string.
+- `Proto` — the Tabnas plugin; `new Tabnas().use(Proto)` installs the
+  grammar so `tn.parse(src)` returns the raw `{rule, src, kids}` CST.
+- `toDescriptor(cst, options?)` — turn a parsed CST into a
+  FileDescriptorProto.
 
-The installed grammar as a railroad/syntax diagram, generated with
-[`@tabnas/railroad`](https://github.com/tabnas/railroad):
+Options: `{ version?: 'proto2'|'proto3'|'2023'|'2024' | null,
+reconcile?: boolean }`.
 
-![zon grammar railroad diagram](doc/grammar.svg)
+## What it produces
 
-A vertical ASCII version is in [`doc/grammar.txt`](doc/grammar.txt).
+A `FileDescriptorProto`-shaped object (the `descriptor.proto` JSON shape):
+`package`, `dependency` (+ `publicDependency` / `weakDependency`),
+`messageType` (recursive `DescriptorProto` with `field`, `nestedType`,
+`enumType`, `oneofDecl`, `extensionRange`, `reservedRange`), `enumType`,
+`service`, `extension`, `options`, and `syntax` / `edition`. `map<K,V>`
+fields are expanded to a repeated message field plus a synthesised
+`…Entry` nested message with `options.mapEntry = true`, exactly as `protoc`
+does. Type names are stored as written; cross-file resolution is a separate
+concern.
 
-## License
+See [doc/tutorial.md](doc/tutorial.md), [doc/guide.md](doc/guide.md),
+[doc/reference.md](doc/reference.md), and [doc/concepts.md](doc/concepts.md).
 
-Copyright (c) 2025 Richard Rodger and other contributors,
-[MIT License](LICENSE).
+[fdp]: https://protobuf.dev/reference/protobuf/google.protobuf/#file-descriptor-proto

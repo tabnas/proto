@@ -1,0 +1,4 @@
+; edition 2023 deltas: the file may open with an `edition = "2023";`
+; declaration instead of `syntax = ...`.
+syntaxOrEdition =/ editionDecl
+editionDecl     = "edition" "=" strLit ";"

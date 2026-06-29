@@ -1,284 +1,68 @@
 # Reference
 
-The complete public surface of `@tabnas/zon` (TypeScript): exports,
-the parse entry, the two options, and the exact ZON syntax accepted.
-For a guided introduction see the [tutorial](tutorial.md); for task
-recipes see the [how-to guide](guide.md); for how it works see
-[concepts](concepts.md).
-
-## Package
-
-```bash
-npm install @tabnas/parser @tabnas/jsonic @tabnas/zon
-```
-
-| | |
-|---|---|
-| Package | `@tabnas/zon` |
-| Module type | CommonJS (`main: dist/zon.js`, types `dist/zon.d.ts`) |
-| Peer deps | `@tabnas/parser` >= 2, `@tabnas/jsonic` >= 2 |
-| Engine | `@tabnas/parser` (Tabnas) |
-| Underlying grammar | `@tabnas/jsonic` |
-
 ## Exports
 
-| Export | Kind | Description |
-|---|---|---|
-| `Zon` | `Plugin` | The plugin function. Register with `engine.use(Zon, options)`. |
-| `ZonOptions` | type | The options object shape (see [Options](#options)). |
-
-`Zon.defaults` (a `ZonOptions`) holds the merged default options:
-
-```typescript
-Zon.defaults = {
-  charAsNumber: false,
-  enumTag: null,
-}
+```js ignore
+const { parse, toDescriptor, Proto } = require('@tabnas/proto')
 ```
 
-## Parse entry
+### `parse(src, options?) => FileDescriptorProto`
 
-The plugin has **no convenience `parse()` function** of its own. You
-parse by building a Tabnas engine, layering the jsonic grammar, then
-the `Zon` plugin, and calling the engine's `.parse()`:
+Parse a `.proto` source string. Builds a fresh engine per call.
 
-```js
-import { Tabnas } from '@tabnas/parser'
-import { jsonic } from '@tabnas/jsonic'
-import { Zon } from '@tabnas/zon'
+### `Proto` (Tabnas plugin)
 
-const j = new Tabnas().use(jsonic).use(Zon)
+`new Tabnas().use(Proto)` installs the union grammar; `tn.parse(src)` then
+returns the raw `{rule, src, kids}` CST. `Proto.defaults` is
+`{ version: null, reconcile: true }`. The plugin installs `@tabnas/abnf`
+automatically if it is not already present.
 
-j.parse('.{ .a = 1 }') // => { a: 1 }
-```
+### `toDescriptor(cst, options?) => FileDescriptorProto`
 
-### `engine.use(Zon, options?)`
-
-Registers and immediately applies the plugin. Returns the engine, so
-registrations chain (`new Tabnas().use(jsonic).use(Zon, opts)`). The
-plugin merges `options` over `Zon.defaults`, installs the embedded ZON
-grammar, and re-applies its jsonic option overrides (struct/tuple
-tokens, `=` separator, identifier keys, Zig escapes, ZON comments, and
-the three custom lex matchers).
-
-The instance is reusable and stateless across parses; build it once
-and reuse it. Building the grammar dominates a parse, so do not
-reconstruct the engine per call.
-
-### `engine.parse(src)`
-
-Parses a ZON source string and returns the resulting JavaScript value.
-Objects come back as maps built with `Object.create(null)` (no
-prototype); arrays are plain arrays; scalars are `number`, `string`,
-`boolean`, or `null`. A failed parse throws (see [Errors](#errors)).
+Turn a CST (from `tn.parse`) into a FileDescriptorProto.
 
 ## Options
 
-`ZonOptions` has exactly two fields:
+| Field | Type | Default | Meaning |
+|---|---|---|---|
+| `version` | `'proto2'｜'proto3'｜'2023'｜'2024'｜null` | `null` | Explicit version; `null` auto-detects from the file. |
+| `reconcile` | `boolean` | `true` | Error when `version` disagrees with the file's declaration; `false` lets the declaration win. |
 
-```typescript
-type ZonOptions = {
-  charAsNumber: boolean
-  enumTag: null | string
-}
-```
+With no declaration and no `version`, the default is `proto2` (matching
+`protoc`).
 
-### `charAsNumber`
+## Output shape
 
-- **Type:** `boolean`
-- **Default:** `false`
-- **Effect:** Controls how Zig character literals (`'x'`, `'\n'`,
-  `'\x41'`, `'\u{1F600}'`) are parsed.
-  - `false` — the literal becomes a one-character string. `'A'` → `'A'`.
-  - `true` — the literal becomes its numeric Unicode code point. `'A'`
-    → `65`, `'\n'` → `10`, `'\u{1F600}'` → `128512`.
+`FileDescriptorProto` mirrors `descriptor.proto`'s JSON form (camelCase
+fields; enum values as their string names):
 
-```js
-import { Tabnas } from '@tabnas/parser'
-import { jsonic } from '@tabnas/jsonic'
-import { Zon } from '@tabnas/zon'
+- `package?`, `dependency[]`, `publicDependency[]`, `weakDependency[]`
+- `messageType[]` — `DescriptorProto`: `name`, `field[]`, `nestedType[]`,
+  `enumType[]`, `oneofDecl[]`, `extension[]`, `extensionRange[]`,
+  `reservedRange[]`, `reservedName[]`, `options?`
+- `enumType[]` — `EnumDescriptorProto`: `name`, `value[]`, `reservedRange[]`,
+  `reservedName[]`, `options?`
+- `service[]` — `ServiceDescriptorProto`: `name`, `method[]`
+- `extension[]`, `options?`, and `syntax?` / `edition?`
 
-const j = new Tabnas().use(jsonic).use(Zon, { charAsNumber: true })
-j.parse("'A'") // => 65
-```
+### `FieldDescriptorProto`
 
-### `enumTag`
+`name`, `number`, `label` (`LABEL_OPTIONAL` / `LABEL_REQUIRED` /
+`LABEL_REPEATED`), `type` (`TYPE_*`), `typeName?` (for message/enum types,
+stored as written), `proto3Optional?`, `oneofIndex?`, `options?`.
 
-- **Type:** `null | string`
-- **Default:** `null`
-- **Effect:** Controls how enum-literal *values* (a bare `.foo` used in
-  value position) are represented.
-  - `null` — the enum literal becomes the bare identifier string.
-    `.red` → `'red'`.
-  - a string `T` — the enum literal is wrapped in a one-key object
-    `{ [T]: name }`, so it can be distinguished from an ordinary
-    string. With `enumTag: '$enum'`, `.red` → `{ $enum: 'red' }`.
+Scalar types map to `TYPE_DOUBLE … TYPE_SINT64`; any other type is treated
+as a message/enum reference: `type` is `TYPE_MESSAGE` and `typeName` holds
+the name as written. Cross-file / scope resolution is a separate pass.
 
-The tag affects enum literals only when they are *values*. A `.field`
-used as a key (before `=`) is always the plain field name regardless of
-`enumTag`.
+### `map<K,V>`
 
-```js
-import { Tabnas } from '@tabnas/parser'
-import { jsonic } from '@tabnas/jsonic'
-import { Zon } from '@tabnas/zon'
-
-const j = new Tabnas().use(jsonic).use(Zon, { enumTag: '$enum' })
-j.parse('.{ .kind = .red, .label = "red" }') // => { kind: { $enum: 'red' }, label: 'red' }
-```
-
-## ZON syntax
-
-ZON is **not** a superset of JSON. It uses Zig anonymous-struct
-syntax. The plugin disables the bare `{`, `[`, `]` openers and rebinds
-the key/value separator to `=`.
-
-### Structs (maps)
-
-A struct literal opens with `.{`, contains `.field = value` pairs
-separated by commas, and closes with `}`. Field names are identifiers
-(`[A-Za-z_][A-Za-z0-9_]*`), written with a leading dot that is
-stripped from the key.
-
-```
-.{ .a = 1, .b = 2 }     => { a: 1, b: 2 }
-.{ .a = .{ .b = 1 } }   => { a: { b: 1 } }
-```
-
-### Tuples (lists)
-
-A tuple literal also opens with `.{`, but contains bare values (no
-`.field =`), separated by commas, and closes with `}`. It produces an
-array.
-
-```
-.{ 1, 2, 3 }            => [1, 2, 3]
-.{ "a", "b" }           => ['a', 'b']
-.{ .{ 1, 2 }, .{ 3, 4 } } => [[1, 2], [3, 4]]
-```
-
-The struct-vs-tuple decision is made at lex time by peeking past the
-`.{`: if the next significant token is `.identifier` followed by `=`,
-it is a struct; otherwise it is a tuple.
-
-### Empty literal
-
-An empty `.{}` parses as an **empty array** (`[]`), since with no
-contents there is no `.field =` to mark it as a struct.
-
-```
-.{}                     => []
-```
-
-### Trailing commas
-
-A trailing comma before `}` is allowed in both structs and tuples.
-
-```
-.{ .a = 1, }            => { a: 1 }
-.{ 1, 2, 3, }           => [1, 2, 3]
-```
-
-### Scalars
-
-| Construct | Example | Result |
-|---|---|---|
-| Integer | `42` | `42` |
-| Float | `3.14` | `3.14` |
-| Hex | `0x2a` | `42` |
-| Octal | `0o52` | `42` |
-| Binary | `0b101010` | `42` |
-| Digit separator | `1_000_000` | `1000000` |
-| Boolean | `true`, `false` | `true`, `false` |
-| Null | `null` | `null` |
-| String | `"hello"` | `'hello'` |
-| Enum literal | `.red` | `'red'` (or `{ tag: 'red' }`) |
-| Char literal | `'A'` | `'A'` (or `65`) |
-
-### Strings
-
-Double-quoted strings only (single quotes are reserved for char
-literals). Zig-flavoured escapes are recognised: `\n`, `\r`, `\t`,
-`\\`, `\"`, `\'`. Unknown escapes are an error.
-
-```
-"hello"                 => 'hello'
-"a\nb"                  => 'a\nb'
-"a\\b"                  => 'a\b'
-```
-
-### Multi-line strings
-
-Consecutive lines beginning with `\\` form one string. Each line
-contributes its text after the `\\`; lines are joined with `\n`.
-Inter-line whitespace before the next `\\` is allowed.
-
-```
-\\hello
-\\world                 => 'hello\nworld'
-```
-
-### Character literals
-
-Single-quoted Zig char literals: a single character, or an escape
-`'\n'` `'\r'` `'\t'` `'\\'` `'\''` `'\"'` `'\0'`, a hex escape
-`'\xNN'`, or a Unicode escape `'\u{...}'`. By default the result is a
-one-character string; with `charAsNumber: true` it is the numeric code
-point.
-
-```
-'A'                     => 'A'   (or 65 with charAsNumber)
-'\n'                    => '\n'  (or 10)
-'\u{1F600}'             => '😀'  (or 128512)
-```
-
-### Comments
-
-`//` line comments only. They are discarded.
-
-```
-.{
-  // a comment
-  .name = "x", // trailing comment
-}                       => { name: 'x' }
-```
-
-(Jsonic's `#` hash comments and `/* */` block comments are disabled by
-the plugin.)
-
-## Tokens
-
-The plugin's lexer produces these tokens (as surfaced in the railroad
-diagram legend):
-
-| Token | Source | Meaning |
-|---|---|---|
-| `#OB` | `.{` | start of a struct (map) |
-| `#OS` | `.{` | start of a tuple (list) |
-| `#CB` | `}` | close of struct or tuple |
-| `#CL` | `=` | key/value separator |
-| `#TX` | `.ident` | field name (key) or enum literal (value) |
-| `VAL` | — | a value: number, string, `true`/`false`/`null`, or `.enum` |
-
-`{`, `[`, and `]` are **not** tokens — they are removed, so a bare `{`
-is a syntax error.
-
-## Grammar group tag
-
-Every grammar alternate the plugin adds carries the group tag `zon`.
-Callers can switch the ZON alts off (restoring plain jsonic) via
-`rule.exclude: 'zon'`:
-
-```typescript
-const j = new Tabnas().use(jsonic).use(Zon).options({
-  rule: { exclude: 'zon' },
-})
-```
+A map field becomes a `LABEL_REPEATED` `TYPE_MESSAGE` field whose
+`typeName` is a synthesised nested `<Name>Entry` message with
+`options.mapEntry = true` and `key` (1) / `value` (2) fields.
 
 ## Errors
 
-A failed parse throws the engine's standard parse error. It carries
-the usual fields — an error `code`, the source location (`row`, `col`,
-`pos`), the offending `src` fragment, and a formatted multi-line
-`message` with a source-context extract. Inputs that are valid jsonic
-but not valid ZON (such as a bare `{` opener) are errors.
+`parse` throws on malformed input (a Tabnas parse error), on an unknown
+`syntax`/`edition` value, and on a version mismatch when `reconcile` is
+true.

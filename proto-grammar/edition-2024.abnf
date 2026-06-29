@@ -1,0 +1,6 @@
+; edition 2024 deltas: `import option "...";` and symbol visibility
+; (export / local) on message and enum declarations.
+importStmt      =/ "import" "option" strLit ";"
+topLevelDef     =/ symbolVisibility message / symbolVisibility enumDef
+messageElement  =/ symbolVisibility message / symbolVisibility enumDef
+symbolVisibility = "export" / "local"
