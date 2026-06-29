@@ -1,0 +1,57 @@
+# ZON Grammar Definition
+# Parses Zig Object Notation (ZON) - a data format based on Zig anonymous
+# struct literals.
+#
+# Example:
+#   .{
+#       .name = "example",
+#       .version = "0.0.1",
+#       .deps = .{ .foo = .{ .url = "https://..." } },
+#       .paths = .{ "build.zig", "src" },
+#   }
+#
+# The custom zon-dot lex matcher distinguishes struct (map) and tuple (list)
+# openings at lex time by peeking ahead:
+#   .{  followed by  .ident =    -> emits #OB  (struct / map)
+#   .{  otherwise                -> emits #OS  (tuple / list)
+# Both close on } which lexes as #CB. The list rules below use #CB (not
+# the default #CS) as the list terminator so that the single } character
+# closes both struct and tuple literals.
+#
+# A bare .identifier emits #TX with val = identifier (the leading dot is
+# stripped). This token is both a valid KEY (when followed by =) and a
+# valid VAL (when used as an enum literal).
+#
+# The grammar is applied with { rule: { alt: { g: 'zon' } } } so every
+# alt below is automatically tagged with the 'zon' group.
+
+{
+  rule: val: open: [
+    # Empty .{} -> empty list.
+    { s: '#OS #CB' b: 2 p: list g: 'list,empty' }
+  ]
+
+  rule: list: open: [
+    # @array$ allocates the list node (an empty array). Under the new core
+    # the list node is no longer auto-seeded: @tabnas/json's @array$ only
+    # runs on its own #OS open alts, which ZON replaces here. Without this
+    # the elem rule's @elem-bc/replace would push onto an undefined node.
+    { s: '#OS #CB' b: 1 a: '@array$' g: 'list,empty' }
+    { s: '#OS' p: elem a: '@array$' g: 'list,open' }
+  ]
+  rule: list: close: [
+    { s: '#CB' g: 'list,close' }
+  ]
+
+  rule: elem: close: [
+    { s: '#CA #CB' b: 1 g: 'elem,trailing' }
+    { s: '#CA' r: elem g: 'elem,next' }
+    { s: '#CB' b: 1 g: 'elem,end' }
+  ]
+
+  rule: pair: close: [
+    { s: '#CA #CB' b: 1 g: 'pair,trailing' }
+    { s: '#CA' r: pair g: 'pair,next' }
+    { s: '#CB' b: 1 g: 'pair,end' }
+  ]
+}

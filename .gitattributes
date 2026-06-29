@@ -1,0 +1,6 @@
+# Syntax highlighting for .jsonic files
+*.jsonic linguist-language=CUE
+
+# Preserve line endings in test fixtures - some tests depend on specific line endings
+test/fixtures/*.csv binary
+test/fixtures/*.json binary
