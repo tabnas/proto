@@ -1,0 +1,4 @@
+github.com/tabnas/abnf/go v0.2.1 h1:cFF+qGBE9KTGUfAUtEtFadifrm/WFgZ7rSlcopeMOiA=
+github.com/tabnas/abnf/go v0.2.1/go.mod h1:ypdOO0gzNz8Ny52Huf0piJG6OcRJAR6PsoJyV2udTqk=
+github.com/tabnas/parser/go v0.2.0 h1:jpnX0kXTCX/1EKnL242UYhVcNVCdFq8JN54BNrz8nTg=
+github.com/tabnas/parser/go v0.2.0/go.mod h1:WrlfEVyZ1QjEIowWiyEu3K1iHj7wxuPut5zoH9Trehk=
