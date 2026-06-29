@@ -27,6 +27,8 @@
     "test": "node --enable-source-maps --test \"dist-test/*.test.js\"",
     "test-some": "node --enable-source-maps --test-name-pattern=\"$npm_config_pattern\" --test \"dist-test/*.test.js\"",
     "embed": "node embed-grammar.js",
+    "example": "node examples/wire-poc/demo.js",
+    "example-test": "node --test examples/wire-poc/codec.test.js",
     "watch": "tsc --build src test -w",
     "build": "node embed-grammar.js && tsc --build src test",
     "clean": "rm -rf node_modules dist dist-test yarn.lock package-lock.json",
