@@ -1,6 +1,6 @@
 {
   "name": "@tabnas/proto",
-  "version": "0.2.0",
+  "version": "0.1.0",
   "description": "Parse Protocol Buffers .proto IDL (proto2, proto3, edition 2023/2024) into FileDescriptorProto-shaped JSON, using the Tabnas parser and an ABNF grammar.",
   "main": "dist/proto.js",
   "type": "commonjs",
@@ -26,13 +26,17 @@
   "scripts": {
     "test": "node --enable-source-maps --test \"dist-test/*.test.js\"",
     "test-some": "node --enable-source-maps --test-name-pattern=\"$npm_config_pattern\" --test \"dist-test/*.test.js\"",
+    "test-watch": "node --test --watch dist-test/proto.test.js",
     "embed": "node embed-grammar.js",
     "example": "node examples/wire-poc/demo.js",
     "example-test": "node --test examples/wire-poc/codec.test.js",
     "watch": "tsc --build src test -w",
     "build": "node embed-grammar.js && tsc --build src test",
     "clean": "rm -rf node_modules dist dist-test yarn.lock package-lock.json",
-    "reset": "npm run clean && npm i && npm run build && npm test"
+    "reset": "npm run clean && npm i && npm run build && npm test",
+    "repo-tag": "REPO_VERSION=`node -e \"console.log(require('./package').version)\"` && echo TAG: v$REPO_VERSION && git commit -a -m v$REPO_VERSION && git push && git tag v$REPO_VERSION && git push --tags;",
+    "repo-publish": "npm run clean && npm i && npm run repo-publish-quick",
+    "repo-publish-quick": "npm run build && npm run test && npm run repo-tag && npm publish --access public --registry https://registry.npmjs.org "
   },
   "license": "MIT",
   "files": [
