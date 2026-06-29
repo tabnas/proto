@@ -1,88 +1,40 @@
-# @tabnas/zon
+# @tabnas/proto
 
-A grammar plugin that teaches the [Tabnas](https://github.com/tabnas/parser)
-parser to read [Zig Object Notation (ZON)](https://ziglang.org/documentation/master/#ZON) —
-the anonymous-struct data format used for `build.zig.zon` manifests.
-Available for both TypeScript and Go, built on the same grammar.
+Parse Protocol Buffers `.proto` IDL (proto2, proto3, editions 2023/2024)
+into [FileDescriptorProto][fdp]-shaped JSON, using the
+[Tabnas](https://github.com/tabnas/parser) parser and an
+[ABNF](https://github.com/tabnas/abnf) grammar.
 
-ZON looks like this:
-
-```zon
-.{
-    .name = "example",
-    .version = "0.0.1",
-    .dependencies = .{
-        .foo = .{ .url = "https://example.com/foo.tar.gz", .hash = "1220deadbeef" },
-    },
-    .paths = .{ "build.zig", "src" },
-}
-```
-
-## Install
-
-```bash
-# TypeScript / JavaScript
-npm install @tabnas/parser @tabnas/jsonic @tabnas/zon
-
-# Go
-go get github.com/tabnas/zon/go@latest
-```
-
-## One tiny example
-
-**TypeScript** — the plugin layers onto a Tabnas engine:
+The TypeScript implementation lives in [`ts/`](ts) — see
+[`ts/README.md`](ts/README.md) for usage and API.
 
 ```js
-import { Tabnas } from '@tabnas/parser'
-import { jsonic } from '@tabnas/jsonic'
-import { Zon } from '@tabnas/zon'
-
-const j = new Tabnas().use(jsonic).use(Zon)
-
-j.parse('.{ .name = "Alice", .age = 30 }') // => { name: 'Alice', age: 30 }
-j.parse('.{ 1, 2, 3 }')                     // => [1, 2, 3]
+const { parse } = require('@tabnas/proto')
+const fdp = parse('syntax = "proto3"; message M { int32 a = 1; }')
+// fdp.messageType[0].field[0] => { name: 'a', number: 1, label: 'LABEL_OPTIONAL', type: 'TYPE_INT32' }
 ```
 
-**Go** — `tabnaszon.Parse` is the one-call entry point:
+## How it works
 
-```go
-import tabnaszon "github.com/tabnas/zon/go"
+The grammar is authored once in ABNF (`proto-grammar/*.abnf`): a shared
+`common.abnf` base plus per-version deltas (`proto2`, `proto3`,
+`edition-2023`, `edition-2024`) that extend it with ABNF incremental
+alternatives (`name =/ alt`). `embed-grammar.js` concatenates them into a
+single permissive union grammar embedded in the package. `@tabnas/abnf`
+compiles that grammar to a Tabnas `GrammarSpec`; the engine parses a
+`.proto` file into a CST, and a small walk assembles the
+FileDescriptorProto. Version-specific legality is recorded from the
+`syntax` / `edition` declaration.
 
-result, _ := tabnaszon.Parse(`.{ .name = "Alice", .age = 30 }`)
-// map[string]any{"name": "Alice", "age": float64(30)}
+The grammar is pure structure over the lexer's whole-word tokens (`TX`
+identifier, `NR` number, `ST` string, `VL` keyword value); whitespace and
+`//` / `/* */` comments are handled by the lexer.
+
+## Layout
+
+```
+proto-grammar/        # ABNF grammar: common.abnf + per-version deltas
+ts/                   # TypeScript implementation (plugin + descriptor walk)
 ```
 
-## Documentation
-
-Full documentation follows the [Diátaxis](https://diataxis.fr)
-framework — one file per quadrant, per language:
-
-| | TypeScript | Go |
-|---|---|---|
-| **Tutorial** (learning) | [ts/doc/tutorial.md](ts/doc/tutorial.md) | [go/doc/tutorial.md](go/doc/tutorial.md) |
-| **How-to guide** (tasks) | [ts/doc/guide.md](ts/doc/guide.md) | [go/doc/guide.md](go/doc/guide.md) |
-| **Reference** (API + options + syntax) | [ts/doc/reference.md](ts/doc/reference.md) | [go/doc/reference.md](go/doc/reference.md) |
-| **Concepts** (explanation) | [ts/doc/concepts.md](ts/doc/concepts.md) | [go/doc/concepts.md](go/doc/concepts.md) |
-
-Per-language hubs: [`ts/README.md`](ts/README.md),
-[`go/README.md`](go/README.md).
-
-## Grammar diagram
-
-The grammar is defined once in the top-level
-[`zon-grammar.jsonic`](zon-grammar.jsonic) and embedded into both
-implementations — TypeScript ([`ts/src/zon.ts`](ts/src/zon.ts)) and Go
-([`go/zon.go`](go/zon.go)) — by [`ts/embed-grammar.js`](ts/embed-grammar.js)
-during the TypeScript build. Edit the grammar there, not in the
-generated sources.
-
-As a railroad/syntax diagram, generated from the live grammar with
-[`@tabnas/railroad`](https://github.com/tabnas/railroad):
-
-![zon grammar railroad diagram](ts/doc/grammar.svg)
-
-ASCII version: [`ts/doc/grammar.txt`](ts/doc/grammar.txt).
-
-## License
-
-MIT. Copyright (c) Richard Rodger.
+[fdp]: https://protobuf.dev/reference/protobuf/google.protobuf/#file-descriptor-proto

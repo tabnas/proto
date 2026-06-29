@@ -1,0 +1,32 @@
+syntax = "proto3";
+
+package chat;
+
+// A chat message sent from client to server.
+message ChatMessage {
+  uint32 id = 1;              // varint
+  string user = 2;            // length-delimited
+  string text = 3;            // length-delimited
+  int64 timestamp = 4;        // varint (64-bit)
+  repeated string tags = 5;   // repeated (non-packed) length-delimited
+  Priority priority = 6;      // enum -> varint
+  Meta meta = 7;              // nested message -> length-delimited
+
+  enum Priority {
+    NORMAL = 0;
+    HIGH = 1;
+    URGENT = 2;
+  }
+
+  message Meta {
+    string client = 1;
+    bool encrypted = 2;       // varint (bool)
+  }
+}
+
+// The server's acknowledgement, sent back to the client.
+message Ack {
+  uint32 id = 1;
+  bool ok = 2;
+  string note = 3;
+}

@@ -1,0 +1,68 @@
+; @tabnas/proto — Protocol Buffers .proto IDL, common (union base).
+; Structure only; lexical atoms are the engine's whole-word tokens:
+;   TX = identifier   NR = number   ST = string   VL = true/false/null
+; Whitespace and // and /* */ comments are ignored by the lexer.
+; The grammar is a permissive superset of proto2 / proto3 / editions;
+; version-specific legality is enforced in the descriptor walk.
+
+proto          = [ syntaxOrEdition ] *topLevelDef
+
+syntaxOrEdition = "syntax" "=" strLit ";"
+
+topLevelDef    = importStmt / packageStmt / optionStmt / message / enumDef
+               / service / extendStmt / emptyStmt
+
+importStmt     = "import" [ "weak" / "public" ] strLit ";"
+packageStmt    = "package" fullIdent ";"
+
+optionStmt     = "option" optionName "=" constant ";"
+optionName     = optionNamePart *( "." optionNamePart )
+optionNamePart = ident / "(" [ "." ] fullIdent ")"
+
+message        = "message" ident messageBody
+messageBody    = "{" *messageElement "}"
+messageElement = field / enumDef / message / optionStmt / oneof / mapField
+               / extendStmt / extensions / reserved / emptyStmt
+
+field          = [ label ] fieldType ident "=" fieldNumber [ fieldOptions ] ";"
+label          = "required" / "optional" / "repeated"
+fieldType      = messageType
+fieldNumber    = NR
+fieldOptions   = "[" fieldOption *( "," fieldOption ) "]"
+fieldOption    = optionName "=" constant
+
+oneof          = "oneof" ident "{" *oneofElement "}"
+oneofElement   = optionStmt / oneofField / emptyStmt
+oneofField     = fieldType ident "=" fieldNumber [ fieldOptions ] ";"
+
+mapField       = "map" "<" fieldType "," fieldType ">" ident "=" fieldNumber
+                 [ fieldOptions ] ";"
+
+enumDef        = "enum" ident "{" *enumElement "}"
+enumElement    = optionStmt / enumField / reserved / emptyStmt
+enumField      = ident "=" [ "-" ] fieldNumber [ fieldOptions ] ";"
+
+service        = "service" ident "{" *serviceElement "}"
+serviceElement = optionStmt / rpc / emptyStmt
+rpc            = "rpc" ident "(" [ "stream" ] messageType ")"
+                 "returns" "(" [ "stream" ] messageType ")"
+                 ( ";" / "{" *( optionStmt / emptyStmt ) "}" )
+
+extendStmt     = "extend" messageType "{" *( field / emptyStmt ) "}"
+extensions     = "extensions" ranges [ fieldOptions ] ";"
+reserved       = "reserved" ( ranges / fieldNames ) ";"
+ranges         = range *( "," range )
+range          = NR [ "to" ( NR / "max" ) ]
+fieldNames     = strLit *( "," strLit )
+
+constant       = boolLit / fullIdent / signedNumber / strLit / messageValue
+signedNumber   = [ "-" / "+" ] NR
+boolLit        = VL
+messageValue   = "{" *messageValueEntry "}"
+messageValueEntry = ident [ ":" ] constant [ "," / ";" ]
+
+messageType    = [ "." ] fullIdent
+fullIdent      = ident *( "." ident )
+ident          = TX
+strLit         = ST
+emptyStmt      = ";"

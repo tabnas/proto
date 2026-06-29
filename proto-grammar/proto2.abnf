@@ -1,0 +1,5 @@
+; proto2 deltas: groups are proto2-only (deprecated). Labels (required/
+; optional/repeated), extend, and extensions live in common (the permissive
+; union); the descriptor walk enforces what each version actually allows.
+messageElement =/ groupField
+groupField     = [ label ] "group" ident "=" fieldNumber messageBody
