@@ -1,0 +1,48 @@
+# Release workflow (Release Please) — mirrors the tabnas/json pilot.
+# On push to main, release-please maintains a release PR. When it merges:
+#   ts/  tags vX.Y.Z and publishes @tabnas/proto to npm via OIDC Trusted Publishing
+#        (register once: tabnas/admin rollout/setup-npm-trusted-publishing.sh).
+#   go/  tags go/vX.Y.Z; the Go module proxy picks tags up directly.
+
+name: release
+
+on:
+  push:
+    branches: [ main ]
+
+permissions:
+  contents: write
+  pull-requests: write
+
+jobs:
+  release-please:
+    runs-on: ubuntu-latest
+    outputs:
+      ts_release: ${{ steps.rp.outputs['ts--release_created'] }}
+    steps:
+      - uses: googleapis/release-please-action@5c625bfb5d1ff62eadeeb3772007f7f66fdcf071 # v4
+        id: rp
+        with:
+          config-file: release-please-config.json
+          manifest-file: .release-please-manifest.json
+
+  publish-npm:
+    needs: release-please
+    if: needs.release-please.outputs.ts_release == 'true'
+    runs-on: ubuntu-latest
+    permissions:
+      id-token: write
+      contents: read
+    steps:
+      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
+        with:
+          node-version: 24
+          registry-url: https://registry.npmjs.org
+      - name: Publish @tabnas/proto (OIDC trusted publishing)
+        working-directory: ts
+        run: |
+          npm install -g npm@latest
+          npm i
+          npm run build --if-present
+          npm publish --access public
