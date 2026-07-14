@@ -1,0 +1,14 @@
+# Shared CI caller — org standard (replaces the bespoke build.yml).
+name: ci
+
+on:
+  push:
+    branches: [ main ]
+  pull_request:
+    branches: [ main ]
+
+jobs:
+  ci:
+    uses: tabnas/.github/.github/workflows/polyglot-ci.yml@main
+    with:
+      deps: "parser abnf"
