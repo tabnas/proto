@@ -49,8 +49,8 @@
     "@tabnas/parser": ">=0"
   },
   "devDependencies": {
-    "@tabnas/abnf": "file:../../abnf/ts",
-    "@tabnas/parser": "file:../../parser/ts",
+    "@tabnas/abnf": "*",
+    "@tabnas/parser": "*",
     "@types/node": "25.6.0",
     "typescript": "6.0.3"
   },
