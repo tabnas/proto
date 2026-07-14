@@ -35,7 +35,7 @@ func Proto(j *tabnas.Tabnas) error {
 	// Proto drives parsing through @tabnas/abnf. wordKeywords is required so
 	// literal keywords match as whole words (e.g. `option` does not grab the
 	// `option` prefix of `optional`).
-	_, err := abnf.Install(j, grammarText, &abnf.AbnfConvertOptions{
+	_, err := abnf.Install(j, GrammarText, &abnf.AbnfConvertOptions{
 		Tag:          "proto",
 		Start:        "proto",
 		WordKeywords: true,
@@ -65,18 +65,18 @@ func ToDescriptor(cst any, opts *ProtoOptions) (FileDescriptorProto, error) {
 	}
 	declared := ProtoVersion("")
 	if first != nil && nrule(first) == "syntaxOrEdition" {
-		d, err := declaredVersion(first)
+		d, err := DeclaredVersion(first)
 		if err != nil {
 			return FileDescriptorProto{}, err
 		}
 		declared = d
 	}
 
-	resolved, err := resolveVersion(declared, version, reconcile)
+	resolved, err := ResolveVersion(declared, version, reconcile)
 	if err != nil {
 		return FileDescriptorProto{}, err
 	}
-	return buildFile(root, resolved), nil
+	return BuildFile(root, resolved), nil
 }
 
 // Parse parses a .proto source string to a FileDescriptorProto in one call.

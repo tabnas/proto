@@ -19,11 +19,12 @@ var (
 	declRe          = regexp.MustCompile(`^(syntax|edition)=["']([^"']+)["']`)
 )
 
-// declaredVersion pulls the declared version out of a `syntaxOrEdition` CST
+// DeclaredVersion pulls the declared version out of a `syntaxOrEdition` CST
 // node, or "" if the file has no leading syntax/edition declaration. The
 // node's src is whitespace-stripped, e.g. `syntax="proto3";`. It returns an
 // error for a recognised keyword carrying an unknown version value.
-func declaredVersion(syntaxNode map[string]any) (ProtoVersion, error) {
+// Go counterpart of the TS `declaredVersion` (ts/src/detect-version.ts).
+func DeclaredVersion(syntaxNode map[string]any) (ProtoVersion, error) {
 	if syntaxNode == nil {
 		return "", nil
 	}
@@ -38,11 +39,12 @@ func declaredVersion(syntaxNode map[string]any) (ProtoVersion, error) {
 	return "", fmt.Errorf("proto: unknown %s version %q", m[1], value)
 }
 
-// resolveVersion reconciles the version declared in the source with the
+// ResolveVersion reconciles the version declared in the source with the
 // version supplied via the plugin option. With reconcile true (the default) a
 // mismatch is an error; otherwise the declaration wins when present. Falls
 // back to proto2 (protoc's default for a file with no declaration/option).
-func resolveVersion(declared, option ProtoVersion, reconcile bool) (ProtoVersion, error) {
+// Go counterpart of the TS `resolveVersion` (ts/src/detect-version.ts).
+func ResolveVersion(declared, option ProtoVersion, reconcile bool) (ProtoVersion, error) {
 	if declared != "" && option != "" && declared != option {
 		if reconcile {
 			return "", fmt.Errorf(
@@ -60,7 +62,16 @@ func resolveVersion(declared, option ProtoVersion, reconcile bool) (ProtoVersion
 	return "proto2", nil
 }
 
-// isEdition reports whether v is an edition version (2023 / 2024).
-func isEdition(v ProtoVersion) bool {
+// IsEdition reports whether v is an edition version (2023 / 2024).
+// Go counterpart of the TS `isEdition` (ts/src/detect-version.ts).
+func IsEdition(v ProtoVersion) bool {
 	return editionVersions[v]
+}
+
+// EditionEnum returns the FileDescriptorProto edition enum name for an
+// edition version, e.g. "EDITION_2023" for "2023". FileDescriptorProto
+// records syntax files via Syntax and edition files via Edition.
+// Go counterpart of the TS `editionEnum` (ts/src/detect-version.ts).
+func EditionEnum(v ProtoVersion) string {
+	return "EDITION_" + v
 }

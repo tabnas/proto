@@ -243,7 +243,7 @@ func fieldLabel(labelNode map[string]any, version ProtoVersion) (label string, p
 
 func fieldTypeName(typeText string) (typ, typeName string) {
 	bare := strings.TrimPrefix(typeText, ".")
-	if scalar, ok := scalarTypes[bare]; ok {
+	if scalar, ok := ScalarTypes[bare]; ok {
 		return scalar, ""
 	}
 	// Message or enum reference; resolution deferred, store as written.
@@ -583,14 +583,18 @@ func buildRpc(el map[string]any) MethodDescriptorProto {
 
 // ---- file -----------------------------------------------------------------
 
-func buildFile(proto map[string]any, version ProtoVersion) FileDescriptorProto {
+// BuildFile turns a parsed `proto` CST root into a FileDescriptorProto for
+// the given (already resolved) version. Most callers want ToDescriptor or
+// Parse, which resolve the version first.
+// Go counterpart of the TS `buildFile` (ts/src/build-descriptor.ts).
+func BuildFile(proto map[string]any, version ProtoVersion) FileDescriptorProto {
 	file := FileDescriptorProto{
 		Dependency: []string{}, PublicDependency: []int{}, WeakDependency: []int{},
 		MessageType: []DescriptorProto{}, EnumType: []EnumDescriptorProto{},
 		Service: []ServiceDescriptorProto{}, Extension: []FieldDescriptorProto{},
 	}
-	if isEdition(version) {
-		file.Edition = "EDITION_" + version
+	if IsEdition(version) {
+		file.Edition = EditionEnum(version)
 	} else {
 		file.Syntax = version
 	}

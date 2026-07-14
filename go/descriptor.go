@@ -110,10 +110,11 @@ type FileDescriptorProto struct {
 	Edition string `json:"edition,omitempty"`
 }
 
-// scalarTypes maps a bare protobuf scalar type to its FieldDescriptorProto
+// ScalarTypes maps a bare protobuf scalar type to its FieldDescriptorProto
 // type. A field whose type is not here is a message/enum/group reference
 // (resolution deferred) and gets a TypeName instead.
-var scalarTypes = map[string]string{
+// Go counterpart of the TS `SCALAR_TYPES` (ts/src/descriptor.ts).
+var ScalarTypes = map[string]string{
 	"double":   "TYPE_DOUBLE",
 	"float":    "TYPE_FLOAT",
 	"int32":    "TYPE_INT32",
