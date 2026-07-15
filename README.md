@@ -1,5 +1,12 @@
 # @tabnas/proto
 
+<!-- tabnas-badges -->
+[![npm](https://tabnas.github.io/status/badges/proto-npm.svg)](https://www.npmjs.com/package/@tabnas/proto)
+[![CI](https://github.com/tabnas/proto/actions/workflows/ci.yml/badge.svg)](https://github.com/tabnas/proto/actions/workflows/ci.yml)
+[![go](https://tabnas.github.io/status/badges/proto-go.svg)](https://pkg.go.dev/github.com/tabnas/proto/go)
+[![tabnas standard](https://tabnas.github.io/status/badges/proto-standard.svg)](https://tabnas.github.io/status/)
+<!-- /tabnas-badges -->
+
 Parse Protocol Buffers `.proto` IDL (proto2, proto3, editions 2023/2024)
 into [FileDescriptorProto][fdp]-shaped JSON, using the
 [Tabnas](https://github.com/tabnas/parser) parser and an
