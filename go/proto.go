@@ -14,7 +14,7 @@ import (
 	tabnas "github.com/tabnas/parser/go"
 )
 
-const Version = "0.2.0"
+const Version = "0.2.1"
 
 //go:generate go run grammar_gen.go
 

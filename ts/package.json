@@ -1,6 +1,6 @@
 {
   "name": "@tabnas/proto",
-  "version": "0.1.0",
+  "version": "0.2.1",
   "description": "Parse Protocol Buffers .proto IDL (proto2, proto3, edition 2023/2024) into FileDescriptorProto-shaped JSON, using the Tabnas parser and an ABNF grammar.",
   "main": "dist/proto.js",
   "type": "commonjs",
@@ -21,7 +21,8 @@
   "author": "Richard Rodger (http://richardrodger.com)",
   "repository": {
     "type": "git",
-    "url": "git://github.com/tabnas/proto.git"
+    "url": "git://github.com/tabnas/proto.git",
+    "directory": "ts"
   },
   "scripts": {
     "test": "node --enable-source-maps --test \"dist-test/*.test.js\"",
