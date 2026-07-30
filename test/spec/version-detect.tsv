@@ -1,0 +1,10 @@
+input	expected	opts
+syntax = "proto2";	{"dependency":[],"publicDependency":[],"weakDependency":[],"messageType":[],"enumType":[],"service":[],"extension":[],"syntax":"proto2"}
+syntax = "proto3";	{"dependency":[],"publicDependency":[],"weakDependency":[],"messageType":[],"enumType":[],"service":[],"extension":[],"syntax":"proto3"}
+edition = "2023";	{"dependency":[],"publicDependency":[],"weakDependency":[],"messageType":[],"enumType":[],"service":[],"extension":[],"edition":"EDITION_2023"}
+edition = "2024";	{"dependency":[],"publicDependency":[],"weakDependency":[],"messageType":[],"enumType":[],"service":[],"extension":[],"edition":"EDITION_2024"}
+message M {}	{"dependency":[],"publicDependency":[],"weakDependency":[],"messageType":[{"name":"M","field":[],"nestedType":[],"enumType":[],"oneofDecl":[],"extension":[]}],"enumType":[],"service":[],"extension":[],"syntax":"proto2"}
+message M {}	{"dependency":[],"publicDependency":[],"weakDependency":[],"messageType":[{"name":"M","field":[],"nestedType":[],"enumType":[],"oneofDecl":[],"extension":[]}],"enumType":[],"service":[],"extension":[],"syntax":"proto3"}	{"version":"proto3"}
+message M {}	{"dependency":[],"publicDependency":[],"weakDependency":[],"messageType":[{"name":"M","field":[],"nestedType":[],"enumType":[],"oneofDecl":[],"extension":[]}],"enumType":[],"service":[],"extension":[],"edition":"EDITION_2024"}	{"version":"2024"}
+syntax = "proto3";	ERROR:version mismatch	{"version":"proto2"}
+syntax = "proto3";	{"dependency":[],"publicDependency":[],"weakDependency":[],"messageType":[],"enumType":[],"service":[],"extension":[],"syntax":"proto3"}	{"version":"proto2","reconcile":false}

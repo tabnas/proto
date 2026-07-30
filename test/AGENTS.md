@@ -1,0 +1,45 @@
+# Agents Guide — shared spec fixtures
+
+`spec/*.tsv` holds the cross-runtime conformance fixtures. Both runtimes
+auto-discover and run **every** file in this directory, so a change here
+affects TypeScript and Go together — edit with that in mind.
+
+## Format
+
+Tab-separated, one case per line, with a header row naming the columns.
+Blank lines are skipped, and so are comment lines — a line starting with
+`#` that contains no tab. (A data row always has at least one tab, so a
+`#`-leading source such as a C preprocessor directive still works.)
+
+| Column | Meaning |
+|---|---|
+| `input` | `.proto` source. Escapes `\n` `\r` `\t` `\\` are decoded. |
+| `expected` | The resulting FileDescriptorProto as JSON, or `ERROR` / `ERROR:<substring>` for input that must be rejected. |
+| `opts` | Optional JSON `ProtoOptions` — `{"version":"proto3"}`, `{"reconcile":false}` (empty means auto-detect). |
+
+`expected` and `opts` are **not** escape-decoded — they are raw JSON, so
+JSON's own escape rules apply. To put a literal backslash in `input`,
+write `\\`.
+
+Results are compared after a JSON round-trip, so absent fields and field
+order do not affect the comparison.
+
+## Who runs what
+
+- TypeScript: `ts/test/parity.test.ts` — reads `../../test/spec` at runtime
+  from `dist-test/`, one `describe` per file.
+- Go: `go/parity_test.go` — `TestSpec` globs `../test/spec/*.tsv`.
+
+Both discover files by directory listing: adding a `.tsv` here runs it in
+both runtimes without touching either runner.
+
+## Rules
+
+- Prefer adding a fixture here over a one-off in-language assertion when a
+  case is expressible as source → descriptor. That is what keeps the two
+  runtimes honest against each other.
+- TypeScript is canonical. If the two runtimes disagree, the TS behaviour is
+  the expected value — unless Go has exposed a genuine TS defect, in which
+  case fix TS first and pin the corrected behaviour here.
+- A new fixture must pass in BOTH runtimes: run `go test ./...` (from `go/`)
+  and `npm test` (from `ts/`) before considering it done.
