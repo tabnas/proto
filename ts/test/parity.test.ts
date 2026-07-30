@@ -88,7 +88,14 @@ function runSpec(file: string) {
 
         // Round-trip through JSON so absent fields and property order do not
         // affect the structural comparison.
-        const got = JSON.parse(JSON.stringify(parse(row.input, opts) ?? null))
+        const raw = parse(row.input, opts)
+
+        // A fixture that says `null` must not be satisfied by a parse that
+        // produced nothing: the two are different results.
+        assert.notStrictEqual(raw, undefined,
+          `${file}:${row.line}: no value; expected ${row.expected}`)
+
+        const got = JSON.parse(JSON.stringify(raw))
         assert.deepStrictEqual(got, JSON.parse(row.expected),
           `${file}:${row.line}`)
       })
