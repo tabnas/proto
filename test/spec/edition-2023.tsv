@@ -1,0 +1,2 @@
+input	expected	opts
+edition = "2023";\npackage e;\noption features.field_presence = EXPLICIT;\nmessage M { int32 a = 1 [features.field_presence = IMPLICIT]; }\n	{"dependency":[],"publicDependency":[],"weakDependency":[],"messageType":[{"name":"M","field":[{"name":"a","number":1,"label":"LABEL_OPTIONAL","type":"TYPE_INT32","options":{"features.field_presence":"IMPLICIT"}}],"nestedType":[],"enumType":[],"oneofDecl":[],"extension":[]}],"enumType":[],"service":[],"extension":[],"edition":"EDITION_2023","options":{"features.field_presence":"EXPLICIT"}}
