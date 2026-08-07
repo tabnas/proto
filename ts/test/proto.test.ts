@@ -113,6 +113,39 @@ extend Foo { optional string ext = 100; }
   })
 })
 
+// HARNESS DEFECT, found 2026-08: the proto2 fixture above contains
+// `group MyGroup = 4 { optional int32 a = 1; }` (line 93) and NOT ONE
+// assertion in this file or in go/proto_test.go ever looked at it. It parses,
+// so the suite was green — while `group` is in fact unimplemented at
+// descriptor level.
+//
+// KNOWN GAP. This test pins protoc's answer and is EXPECTED TO FAIL until
+// build-descriptor grows group support. Verified against protoc 35.1 and
+// against the pinned upstream corpus case ParseMessageTest.Group, whose
+// parser-level golden is {name:"testgroup", type:TYPE_GROUP,
+// typeName:"TestGroup"} plus a nested message named TestGroup.
+//
+// Do not delete or weaken this to get green.
+describe('proto2 group (KNOWN GAP — expected to fail)', () => {
+  const fdp = parse(`syntax = "proto2";
+message Foo { optional group MyGroup = 4 { optional int32 a = 1; } }
+`)
+
+  it('lowercases the field name, emits TYPE_GROUP and a nested message', () => {
+    const f = fdp.messageType[0].field[0]
+    assert.deepEqual(
+      [f.name, f.number, f.label, f.type, f.typeName],
+      ['mygroup', 4, 'LABEL_OPTIONAL', 'TYPE_GROUP', 'MyGroup'],
+    )
+    const nested = fdp.messageType[0].nestedType.find((m: any) => 'MyGroup' === m.name)
+    assert.ok(nested, 'no nested message synthesised for the group body')
+    assert.deepEqual(
+      nested.field.map((x: any) => [x.name, x.number, x.type]),
+      [['a', 1, 'TYPE_INT32']],
+    )
+  })
+})
+
 describe('edition 2023', () => {
   const fdp = parse(`edition = "2023";
 package e;

@@ -1,0 +1,19 @@
+input	expected	opts
+# int-literals.tsv - .proto intLit = decLit | octLit | hexLit.
+#
+# KNOWN RED, added 2026-08 as part of the conformance baseline. Every
+# `expected` below is protoc 35.1's OWN answer, obtained by running
+# `protoc --descriptor_set_out` over the same source and decoding the
+# FileDescriptorSet - never by copying what either runtime produces.
+#
+# Observed 2026-08 (row numbers are this file's):
+#   row 17 hex enum value 0x7FFFFFFF : TS 2147483647 ok,  Go 0    WRONG
+#   row 18 hex field number 0x10     : TS 16 ok,          Go 0    WRONG
+#   row 19 octal field number 010    : TS 10 WRONG,       Go 10   WRONG  (protoc: 8)
+#
+# test/AGENTS.md normally requires a new fixture to pass in BOTH runtimes.
+# These deliberately do not: phase 1 of the conformance effort measures, it
+# does not fix. Do NOT edit these values to match the implementations.
+syntax = "proto2";\nenum E { HEX_MAX = 0x7FFFFFFF; }\n	{"dependency":[],"publicDependency":[],"weakDependency":[],"messageType":[],"enumType":[{"name":"E","value":[{"name":"HEX_MAX","number":2147483647}]}],"service":[],"extension":[],"syntax":"proto2"}	
+syntax = "proto2";\nmessage M { optional int32 a = 0x10; }\n	{"dependency":[],"publicDependency":[],"weakDependency":[],"messageType":[{"name":"M","field":[{"name":"a","number":16,"label":"LABEL_OPTIONAL","type":"TYPE_INT32"}],"nestedType":[],"enumType":[],"oneofDecl":[],"extension":[]}],"enumType":[],"service":[],"extension":[],"syntax":"proto2"}	
+syntax = "proto2";\nmessage M { optional int32 a = 010; }\n	{"dependency":[],"publicDependency":[],"weakDependency":[],"messageType":[{"name":"M","field":[{"name":"a","number":8,"label":"LABEL_OPTIONAL","type":"TYPE_INT32"}],"nestedType":[],"enumType":[],"oneofDecl":[],"extension":[]}],"enumType":[],"service":[],"extension":[],"syntax":"proto2"}	

@@ -5,7 +5,8 @@
 # repo-set go.work + node_modules symlinks (admin/scripts/link.sh).
 
 .PHONY: all build test clean build-ts build-go test-ts test-go \
-        clean-ts clean-go publish-ts publish-go tags-go reset embed generate
+        clean-ts clean-go publish-ts publish-go tags-go reset embed generate \
+        fetch-corpus
 
 all: build test
 
@@ -36,11 +37,17 @@ publish-ts: test-ts
 build-go:
 	cd go && go build ./...
 
-test-go:
+test-go: fetch-corpus
 	cd go && go test -v ./...
 
 clean-go:
 	cd go && go clean
+
+# Third-party conformance corpus: protobuf's own parser_unittest.cc at a pinned
+# commit, plus recorded protoc verdicts. NEVER committed — fetched into the
+# gitignored test/protobuf-suite/. The tests FAIL LOUDLY (never skip) without it.
+fetch-corpus:
+	./scripts/fetch-protobuf-corpus.sh
 
 # Regenerate go/grammar.go from proto-grammar/*.abnf (Go counterpart of embed).
 generate:

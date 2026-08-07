@@ -1,0 +1,56 @@
+# Third-party conformance: protobuf's own parser test corpus.
+#
+# This workflow exists because of a real defect found in 2026-08: the
+# conformance corpora in these repos were fetched BY HAND, so CI never had them
+# and the conformance tests silently skipped. A green tick then meant nothing.
+#
+# So: the corpus fetch is a REQUIRED STEP here, run BEFORE the tests, and the
+# tests themselves FAIL LOUDLY (they never skip) when the corpus is absent.
+#
+# This job is EXPECTED TO BE RED. It is the conformance dial, not a gate — see
+# the baseline table in AGENTS.md. Do not make it green by weakening a test.
+name: conformance
+
+on:
+  push:
+    branches: [ main, 'conformance-**' ]
+  pull_request:
+    branches: [ main ]
+  workflow_dispatch:
+
+jobs:
+  conformance:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+
+      - uses: actions/setup-go@v5
+        with:
+          go-version: '1.24'
+
+      # REQUIRED: without this the tests fail loudly rather than skipping.
+      - name: Fetch the pinned protobuf corpus
+        run: ./scripts/fetch-protobuf-corpus.sh
+
+      - name: Assert the corpus is actually present
+        run: |
+          set -e
+          for f in valid.json invalid.json accept-only.json excluded.json leniency.json; do
+            test -s "test/protobuf-suite/$f" || {
+              echo "::error::test/protobuf-suite/$f missing after fetch"; exit 1; }
+          done
+
+      - name: TypeScript conformance
+        working-directory: ts
+        run: |
+          npm i
+          npm run build
+          npm test
+
+      - name: Go conformance
+        working-directory: go
+        run: go test ./...

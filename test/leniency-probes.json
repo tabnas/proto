@@ -1,0 +1,67 @@
+[
+ {
+  "name": "hash-line-comment",
+  "input": "syntax = \"proto3\";\n# a hash comment\nmessage M { int32 a = 1; }\n",
+  "why": "`#` is a comment in jsonic/the shared @tabnas/abnf lexer. The .proto language spec has only // and /* */ comments."
+ },
+ {
+  "name": "backtick-string",
+  "input": "syntax = \"proto3\";\npackage `demo`;\n",
+  "why": "backtick strings are a jsonic lexer feature; .proto has no backtick string literal."
+ },
+ {
+  "name": "digit-separator-in-field-number",
+  "input": "syntax = \"proto3\";\nmessage M { int32 a = 1_0; }\n",
+  "why": "`1_0` is a jsonic-style digit separator. .proto intLit has no separators."
+ },
+ {
+  "name": "exponent-field-number",
+  "input": "syntax = \"proto3\";\nmessage M { int32 a = 1e2; }\n",
+  "why": "`1e2` is a float literal. .proto fieldNumber = intLit, so a float is not a field number."
+ },
+ {
+  "name": "underscore-suffixed-number-in-enum",
+  "input": "syntax = \"proto2\";\nenum E { A = 1_000; }\n",
+  "why": "same digit-separator leniency, in enum value position."
+ },
+ {
+  "name": "empty-file",
+  "input": "",
+  "why": "an empty .proto is a legal (if useless) file; it must not crash the parser."
+ },
+ {
+  "name": "single-quoted-string",
+  "input": "syntax = 'proto3';\n",
+  "why": "control probe: .proto strLit allows BOTH quote characters, so this must be ACCEPTED. It is here so the probe set cannot be read as 'everything unusual is rejected'."
+ },
+ {
+  "name": "hex-field-number",
+  "input": "syntax = \"proto2\";\nmessage M { optional int32 a = 0x10; }\n",
+  "why": "control probe: .proto intLit includes hexLit, so this must be ACCEPTED (as 16)."
+ },
+ {
+  "name": "octal-field-number",
+  "input": "syntax = \"proto2\";\nmessage M { optional int32 a = 010; }\n",
+  "why": "control probe: .proto intLit includes octLit, so this must be ACCEPTED (as 8, not 10)."
+ },
+ {
+  "name": "trailing-close-brace",
+  "input": "syntax = \"proto3\";\nmessage M { int32 a = 1; }\n}\n",
+  "why": "trailing garbage after a complete file must be rejected, not silently ignored."
+ },
+ {
+  "name": "unterminated-message",
+  "input": "syntax = \"proto3\";\nmessage M { int32 a = 1;\n",
+  "why": "truncated input at EOF must be rejected (the csv/json5 unterminated-at-EOF failure class)."
+ },
+ {
+  "name": "json-object",
+  "input": "{a:1}\n",
+  "why": "the json5 leniency-leak probe: a jsonic document must NOT be accepted as .proto."
+ },
+ {
+  "name": "unterminated-json-object",
+  "input": "{a:1\n",
+  "why": "the exact json5 leak input: '{a:1' errors with the json5 plugin alone but is ACCEPTED through the documented jsonic stack."
+ }
+]

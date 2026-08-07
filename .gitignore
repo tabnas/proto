@@ -32,4 +32,9 @@ dist-test
 package-lock.json
 yarn.lock
 
+# Third-party conformance corpus — NEVER committed (project rule: no vendored
+# third-party test corpora). Fetched at a pinned commit by
+# scripts/fetch-protobuf-corpus.sh; only that script and the pin are committed.
+test/protobuf-suite/
+
 

@@ -25,6 +25,7 @@
     "directory": "ts"
   },
   "scripts": {
+    "pretest": "../scripts/fetch-protobuf-corpus.sh",
     "test": "node --enable-source-maps --test \"dist-test/*.test.js\"",
     "test-some": "node --enable-source-maps --test-name-pattern=\"$npm_config_pattern\" --test \"dist-test/*.test.js\"",
     "test-watch": "node --test --watch dist-test/proto.test.js",

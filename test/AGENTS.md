@@ -43,3 +43,28 @@ both runtimes without touching either runner.
   case fix TS first and pin the corrected behaviour here.
 - A new fixture must pass in BOTH runtimes: run `go test ./...` (from `go/`)
   and `npm test` (from `ts/`) before considering it done.
+
+  **Exception, deliberate and documented:** `int-literals.tsv` is KNOWN RED in
+  both runtimes. Its `expected` values are protoc 35.1's own answers (obtained
+  by running `protoc --descriptor_set_out`), not either runtime's current
+  output. It was added in the 2026-08 conformance baseline, whose job is to
+  measure, not to fix. Do not edit those values to match the implementations.
+
+## Third-party conformance corpus — `protobuf-suite/` (gitignored)
+
+`test/protobuf-suite/` holds protobuf's OWN parser test corpus, extracted from
+`compiler/parser_unittest.cc` at a pinned commit, plus recorded `protoc`
+verdicts for the leniency probes. It is **never committed** — see
+`scripts/fetch-protobuf-corpus.sh` and the baseline table in `../AGENTS.md`.
+
+`leniency-probes.json` (committed) holds OUR probe inputs. The verdicts are
+protoc's, recorded by running it, never hand-written.
+
+Both runners (`ts/test/protobuf.test.ts`, `go/protobuf_test.go`,
+`ts/test/leniency.test.ts`, `go/leniency_test.go`) **FAIL LOUDLY** when the
+corpus is absent. They must never skip: a conformance test that quietly does
+not run is worse than no test, because the green tick is a lie.
+
+Note for anyone touching the TS runners: never throw out of a `describe()`
+body. node's test runner prints a red suite for that and still counts ZERO
+failed tests, so the process **exits 0**. Turn the failure into a leaf `it()`.

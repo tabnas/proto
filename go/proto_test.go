@@ -230,6 +230,42 @@ func TestProto2(t *testing.T) {
 	})
 }
 
+// HARNESS DEFECT, found 2026-08: proto2Src above contains
+// `group MyGroup = 4 { optional int32 a = 1; }` (line 198) and NOT ONE
+// assertion in this file or in ts/test/proto.test.ts ever looked at it. It
+// parses, so the suite was green — while `group` is in fact unimplemented at
+// descriptor level.
+//
+// KNOWN GAP. This test pins protoc's answer and is EXPECTED TO FAIL until
+// BuildFile grows group support. Verified against protoc 35.1 and against the
+// pinned upstream corpus case ParseMessageTest.Group, whose parser-level golden
+// is {name:"testgroup", type:TYPE_GROUP, typeName:"TestGroup"} plus a nested
+// message named TestGroup.
+//
+// Do not delete or weaken this to get green.
+func TestProto2GroupKnownGap(t *testing.T) {
+	fdp := mustParse(t, `syntax = "proto2";
+message Foo { optional group MyGroup = 4 { optional int32 a = 1; } }
+`, nil)
+
+	f := fdp.MessageType[0].Field[0]
+	got := []any{f.Name, f.Number, f.Label, f.Type, f.TypeName}
+	want := []any{"mygroup", 4, "LABEL_OPTIONAL", "TYPE_GROUP", "MyGroup"}
+	if !reflect.DeepEqual(got, want) {
+		t.Errorf("group field:\n got  %v\n want %v", got, want)
+	}
+
+	nested := findNested(fdp.MessageType[0].NestedType, "MyGroup")
+	if nested == nil {
+		t.Fatalf("no nested message synthesised for the group body: %+v",
+			fdp.MessageType[0].NestedType)
+	}
+	if len(nested.Field) != 1 || nested.Field[0].Name != "a" ||
+		nested.Field[0].Number != 1 || nested.Field[0].Type != "TYPE_INT32" {
+		t.Errorf("group body fields = %+v", nested.Field)
+	}
+}
+
 // ---- edition 2023 ---------------------------------------------------------
 
 func TestEdition2023(t *testing.T) {

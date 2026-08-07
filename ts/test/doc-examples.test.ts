@@ -185,8 +185,19 @@ describe('doc-examples', () => {
     })
   }
 
-  it('found at least one tested example (sanity)', () => {
-    // Not a hard failure if a repo has no `// =>` examples yet.
-    assert.ok(testable >= 0, `tested ${testable} doc example block(s)`)
+  // HARNESS DEFECT, fixed 2026-08: this used to be `assert.ok(testable >= 0)`,
+  // which is true for every possible value of `testable` — including 0. The
+  // whole doc-example harness could therefore go green while extracting and
+  // running NOTHING (a silent regression in extractBlocks, a renamed doc
+  // directory, a `tsc` output layout change). A ratchet at the observed count
+  // is the honest version: it fails if extraction ever drops a block.
+  const MIN_TESTABLE = 11 // observed 2026-08 across README.md + ts/doc/*
+  it(`extracted at least ${MIN_TESTABLE} testable doc blocks`, () => {
+    assert.ok(
+      testable >= MIN_TESTABLE,
+      `extracted ${testable} testable doc example block(s), expected at least ` +
+        `${MIN_TESTABLE}. Doc examples stopped being found — fix the extractor ` +
+        `or the docs. Do NOT lower this number to get green.`,
+    )
   })
 })
