@@ -88,8 +88,12 @@ python3 "$REPO_ROOT/scripts/corpus/extract-parser-corpus.py" \
 # a throwaway module inside the gitignored output dir, with GOWORK=off, so it
 # cannot perturb this repo's go.mod / the shared go.work.
 
-BUILD="$OUT_DIR/.convert"
-mkdir -p "$BUILD"
+# The build dir lives OUTSIDE the repo on purpose: admin/scripts/link.sh
+# regenerates the shared go.work with `find <tabnas-root> -name go.mod`, so a
+# throwaway go.mod anywhere under this repo would be added to the workspace and
+# break every sibling. Keep it in $TMPDIR.
+BUILD="$(mktemp -d "${TMPDIR:-/tmp}/tabnas-proto-corpus.XXXXXX")"
+trap 'rm -rf "$BUILD"' EXIT
 cp "$REPO_ROOT/scripts/corpus/convert-goldens.go" "$BUILD/main.go"
 cat >"$BUILD/go.mod" <<'EOF'
 module tabnas.local/protocorpus
