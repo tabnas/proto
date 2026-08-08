@@ -4,3 +4,8 @@ importStmt      =/ "import" "option" strLit ";"
 topLevelDef     =/ symbolVisibility message / symbolVisibility enumDef
 messageElement  =/ symbolVisibility message / symbolVisibility enumDef
 symbolVisibility = "export" / "local"
+; `export` and `local` are contextual: they are only visibility modifiers
+; ahead of `message`/`enum`, and stay usable as ordinary name components
+; (`local.pkg.SomeMessage`). The union grammar lexes them as keywords, so
+; give fullIdent an alternative that may open with one.
+fullIdent       =/ symbolVisibility *( "." ident )

@@ -44,12 +44,13 @@ function makeRegistry(fdp) {
 }
 
 // Classify a field for the wire: its wire type and how to (de)serialise it.
-// @tabnas/proto emits message AND enum references both as TYPE_MESSAGE +
-// typeName (it defers resolution), so we look the name up in the registry
-// to tell an enum (varint) from a message (length-delimited).
+// @tabnas/proto defers name resolution, so a message OR enum reference
+// arrives as a bare `typeName` with no `type` (protoc's parser does the
+// same). Look the name up in the registry to tell an enum (varint) from a
+// message (length-delimited).
 function classify(reg, field) {
   const t = field.type
-  if ('TYPE_MESSAGE' === t || 'TYPE_ENUM' === t) {
+  if (field.typeName) {
     const entry = reg[simpleName(field.typeName)]
     if (entry && 'enum' === entry.kind) return { wire: VARINT, kind: 'enum', enum: entry.desc }
     return { wire: LEN, kind: 'message', msg: entry ? entry.desc : null }

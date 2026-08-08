@@ -1,0 +1,38 @@
+[
+ {
+  "case": "ParseMessageTest.IgnoreBOM",
+  "helper": "ExpectParsesTo",
+  "lane": "valid",
+  "reason": "input is computed in C++ at run time, not written as a string literal"
+ },
+ {
+  "case": "ParseMessageTest.FieldDefaults",
+  "helper": "ExpectParsesTo",
+  "lane": "valid",
+  "reason": "expected output is built in C++ at run time, not a string literal"
+ },
+ {
+  "case": "ParseMessageTest.BOMError",
+  "helper": "ExpectHasErrors",
+  "lane": "invalid",
+  "reason": "input is computed in C++ at run time, not written as a string literal"
+ },
+ {
+  "case": "ParseErrorTest.NestingIsLimitedWithoutCrashing",
+  "helper": "ExpectHasErrors",
+  "lane": "invalid",
+  "reason": "input is computed in C++ at run time, not written as a string literal"
+ },
+ {
+  "case": "ParseErrorTest.NestingIsLimitedWithoutCrashing",
+  "helper": "ExpectHasErrors",
+  "lane": "invalid",
+  "reason": "input is computed in C++ at run time, not written as a string literal"
+ },
+ {
+  "case": "ParserTest.RegressionNestedOpenBraceDoNotStackOverflow",
+  "helper": "ExpectHasEarlyExitErrors",
+  "lane": "invalid",
+  "reason": "input is computed in C++ at run time, not written as a string literal"
+ }
+]

@@ -32,4 +32,11 @@ dist-test
 package-lock.json
 yarn.lock
 
+# The conformance corpus JSON under test/protobuf-suite/ IS committed; the
+# upstream artefacts it was extracted from are not (large, and upstream's
+# to distribute). See test/protobuf-suite/AGENTS.md.
+test/protobuf-suite/protoc/
+test/protobuf-suite/protoc-*.zip
+test/protobuf-suite/parser_unittest.cc
+
 

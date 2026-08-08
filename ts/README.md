@@ -54,14 +54,30 @@ reconcile?: boolean }`.
 ## What it produces
 
 A `FileDescriptorProto`-shaped object (the `descriptor.proto` JSON shape):
-`package`, `dependency` (+ `publicDependency` / `weakDependency`),
-`messageType` (recursive `DescriptorProto` with `field`, `nestedType`,
-`enumType`, `oneofDecl`, `extensionRange`, `reservedRange`), `enumType`,
-`service`, `extension`, `options`, and `syntax` / `edition`. `map<K,V>`
-fields are expanded to a repeated message field plus a synthesised
-`…Entry` nested message with `options.mapEntry = true`, exactly as `protoc`
-does. Type names are stored as written; cross-file resolution is a separate
-concern.
+`package`, `dependency` (+ `publicDependency` / `weakDependency` /
+`optionDependency`), `messageType` (recursive `DescriptorProto` with
+`field`, `nestedType`, `enumType`, `oneofDecl`, `extensionRange`,
+`reservedRange`), `enumType`, `service`, `extension`, `options`, and
+`syntax` / `edition`. `map<K,V>` fields are expanded to a repeated message
+field plus a synthesised `…Entry` nested message with
+`options.mapEntry = true`, groups to a `TYPE_GROUP` field plus a nested
+message, and a proto3 explicit `optional` to a synthetic `_<field>` oneof —
+exactly as `protoc` does. Type names are stored as written and `type` is
+left unset for them; cross-file resolution is a separate concern.
+
+Two things are deliberately shaped for readability rather than byte-for-byte
+`protoc` parity: options are a plain `{ name: value }` map (not an
+`uninterpretedOption` list), and `defaultValue` keeps the literal as
+written. See [doc/reference.md](doc/reference.md).
+
+## Conformance
+
+Checked against protoc 35.1's own parser test corpus (extracted from
+`parser_unittest.cc`): every one of the 71 in-scope `valid` cases and all
+50 `accept-only` cases, run by `test/protobuf-conformance.test.ts`. The 11
+excluded cases declare protoc-internal editions (`UNSTABLE`,
+`99998_TEST_ONLY`) outside the proto2 / proto3 / 2023 / 2024 support this
+package claims.
 
 See [doc/tutorial.md](doc/tutorial.md), [doc/guide.md](doc/guide.md),
 [doc/reference.md](doc/reference.md), and [doc/concepts.md](doc/concepts.md).

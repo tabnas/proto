@@ -1,0 +1,352 @@
+[
+ {
+  "name": "ParseErrorTest.EnumReservedInvalidIdentifier",
+  "helper": "ExpectHasWarnings",
+  "input": "\n        enum TestEnum {\n          FOO = 1;\n          reserved \"foo bar\";\n        }\n      ",
+  "error": "3:19: Reserved name \"foo bar\" is not a valid identifier.\n",
+  "note": "upstream ExpectHasWarnings: asserts the parser reported NO error and only a warning; publishes no descriptor golden. Accept-only."
+ },
+ {
+  "name": "ParseErrorTest.ReservedInvalidIdentifier",
+  "helper": "ExpectHasWarnings",
+  "input": "\n        message Foo {\n          reserved \"foo bar\";\n        }\n      ",
+  "error": "2:19: Reserved name \"foo bar\" is not a valid identifier.\n",
+  "note": "upstream ExpectHasWarnings: asserts the parser reported NO error and only a warning; publishes no descriptor golden. Accept-only."
+ },
+ {
+  "name": "ParseMessageTest.Varint32Edition2024Fails",
+  "helper": "ExpectHasValidationErrors",
+  "input": "edition = \"2024\";\nmessage NewVarintTypes {\n  varint32 value = 1;\n}",
+  "error": "\"varint32\" is not defined.\n",
+  "note": "upstream ExpectHasValidationErrors: asserts protoc's PARSER accepted it (ASSERT_EQ(\"\", error_collector_.text_)); it fails only later, in DescriptorPool validation, which this package does not perform. Must therefore be ACCEPTED."
+ },
+ {
+  "name": "ParseMessageTest.Varint64Edition2024Fails",
+  "helper": "ExpectHasValidationErrors",
+  "input": "edition = \"2024\";\nmessage NewVarintTypes {\n  varint64 int64_field = 1;\n}",
+  "error": "\"varint64\" is not defined.\n",
+  "note": "upstream ExpectHasValidationErrors: asserts protoc's PARSER accepted it (ASSERT_EQ(\"\", error_collector_.text_)); it fails only later, in DescriptorPool validation, which this package does not perform. Must therefore be ACCEPTED."
+ },
+ {
+  "name": "ParseMessageTest.Zigzag32Edition2024Fails",
+  "helper": "ExpectHasValidationErrors",
+  "input": "edition = \"2024\";\nmessage NewVarintTypes {\n  zigzag32 sint32_field = 1;\n}",
+  "error": "\"zigzag32\" is not defined.\n",
+  "note": "upstream ExpectHasValidationErrors: asserts protoc's PARSER accepted it (ASSERT_EQ(\"\", error_collector_.text_)); it fails only later, in DescriptorPool validation, which this package does not perform. Must therefore be ACCEPTED."
+ },
+ {
+  "name": "ParseMessageTest.Zigzag64Edition2024Fails",
+  "helper": "ExpectHasValidationErrors",
+  "input": "edition = \"2024\";\nmessage NewVarintTypes {\n  zigzag64 sint64_field = 1;\n}",
+  "error": "\"zigzag64\" is not defined.\n",
+  "note": "upstream ExpectHasValidationErrors: asserts protoc's PARSER accepted it (ASSERT_EQ(\"\", error_collector_.text_)); it fails only later, in DescriptorPool validation, which this package does not perform. Must therefore be ACCEPTED."
+ },
+ {
+  "name": "ParseMessageTest.Uvarint32Edition2024Fails",
+  "helper": "ExpectHasValidationErrors",
+  "input": "edition = \"2024\";\nmessage NewVarintTypes {\n  uvarint32 uint32_field = 1;\n}",
+  "error": "\"uvarint32\" is not defined.\n",
+  "note": "upstream ExpectHasValidationErrors: asserts protoc's PARSER accepted it (ASSERT_EQ(\"\", error_collector_.text_)); it fails only later, in DescriptorPool validation, which this package does not perform. Must therefore be ACCEPTED."
+ },
+ {
+  "name": "ParseMessageTest.Uvarint64Edition2024Fails",
+  "helper": "ExpectHasValidationErrors",
+  "input": "edition = \"2024\";\nmessage NewVarintTypes {\n  uvarint64 uint64_field = 1;\n}",
+  "error": "\"uvarint64\" is not defined.\n",
+  "note": "upstream ExpectHasValidationErrors: asserts protoc's PARSER accepted it (ASSERT_EQ(\"\", error_collector_.text_)); it fails only later, in DescriptorPool validation, which this package does not perform. Must therefore be ACCEPTED."
+ },
+ {
+  "name": "ParserValidationErrorTest.PackageNameError",
+  "helper": "ExpectHasValidationErrors",
+  "input": "package foo.bar;",
+  "error": "0:0: \"foo\" is already defined (as something other than a package) in file \"bar.proto\".\n",
+  "note": "upstream ExpectHasValidationErrors: asserts protoc's PARSER accepted it (ASSERT_EQ(\"\", error_collector_.text_)); it fails only later, in DescriptorPool validation, which this package does not perform. Must therefore be ACCEPTED."
+ },
+ {
+  "name": "ParserValidationErrorTest.ImportUnloadedError",
+  "helper": "ExpectHasValidationErrors",
+  "input": "package test;\n\nimport \"unloaded.proto\";",
+  "error": "2:0: Import \"unloaded.proto\" has not been loaded.\n",
+  "note": "upstream ExpectHasValidationErrors: asserts protoc's PARSER accepted it (ASSERT_EQ(\"\", error_collector_.text_)); it fails only later, in DescriptorPool validation, which this package does not perform. Must therefore be ACCEPTED."
+ },
+ {
+  "name": "ParserValidationErrorTest.ImportTwice",
+  "helper": "ExpectHasValidationErrors",
+  "input": "package test;\n\nimport \"bar.proto\";\n  import \"bar.proto\";",
+  "error": "3:2: Import \"bar.proto\" was listed twice.\n",
+  "note": "upstream ExpectHasValidationErrors: asserts protoc's PARSER accepted it (ASSERT_EQ(\"\", error_collector_.text_)); it fails only later, in DescriptorPool validation, which this package does not perform. Must therefore be ACCEPTED."
+ },
+ {
+  "name": "ParserValidationErrorTest.ImportOptionTwice",
+  "helper": "ExpectHasValidationErrors",
+  "input": "\n        edition = \"2024\";\n        package test;\n        import option \"bar.proto\";\n          import option \"bar.proto\";\n      ",
+  "error": "4:10: Import \"bar.proto\" was listed twice.\n",
+  "note": "upstream ExpectHasValidationErrors: asserts protoc's PARSER accepted it (ASSERT_EQ(\"\", error_collector_.text_)); it fails only later, in DescriptorPool validation, which this package does not perform. Must therefore be ACCEPTED."
+ },
+ {
+  "name": "ParserValidationErrorTest.ImportAndImportOptionTwice",
+  "helper": "ExpectHasValidationErrors",
+  "input": "\n        edition = \"2024\";\n        package test;\n\n        import \"bar.proto\";\n          import option \"bar.proto\";\n        ",
+  "error": "5:10: Import \"bar.proto\" was listed twice.\n",
+  "note": "upstream ExpectHasValidationErrors: asserts protoc's PARSER accepted it (ASSERT_EQ(\"\", error_collector_.text_)); it fails only later, in DescriptorPool validation, which this package does not perform. Must therefore be ACCEPTED."
+ },
+ {
+  "name": "ParserValidationErrorTest.DuplicateFileError",
+  "helper": "ExpectHasValidationErrors",
+  "input": "package test;",
+  "error": "0:0: A file with this name is already in the pool.\n",
+  "note": "upstream ExpectHasValidationErrors: asserts protoc's PARSER accepted it (ASSERT_EQ(\"\", error_collector_.text_)); it fails only later, in DescriptorPool validation, which this package does not perform. Must therefore be ACCEPTED."
+ },
+ {
+  "name": "ParserValidationErrorTest.MessageNameError",
+  "helper": "ExpectHasValidationErrors",
+  "input": "message Foo {}\nmessage Foo {}\n",
+  "error": "1:8: \"Foo\" is already defined.\n",
+  "note": "upstream ExpectHasValidationErrors: asserts protoc's PARSER accepted it (ASSERT_EQ(\"\", error_collector_.text_)); it fails only later, in DescriptorPool validation, which this package does not perform. Must therefore be ACCEPTED."
+ },
+ {
+  "name": "ParserValidationErrorTest.FieldNameError",
+  "helper": "ExpectHasValidationErrors",
+  "input": "message Foo {\n  optional int32 bar = 1;\n  optional int32 bar = 2;\n}\n",
+  "error": "2:17: \"bar\" is already defined in \"Foo\".\n",
+  "note": "upstream ExpectHasValidationErrors: asserts protoc's PARSER accepted it (ASSERT_EQ(\"\", error_collector_.text_)); it fails only later, in DescriptorPool validation, which this package does not perform. Must therefore be ACCEPTED."
+ },
+ {
+  "name": "ParserValidationErrorTest.FieldTypeError",
+  "helper": "ExpectHasValidationErrors",
+  "input": "message Foo {\n  optional Baz bar = 1;\n}\n",
+  "error": "1:11: \"Baz\" is not defined.\n",
+  "note": "upstream ExpectHasValidationErrors: asserts protoc's PARSER accepted it (ASSERT_EQ(\"\", error_collector_.text_)); it fails only later, in DescriptorPool validation, which this package does not perform. Must therefore be ACCEPTED."
+ },
+ {
+  "name": "ParserValidationErrorTest.FieldNumberError",
+  "helper": "ExpectHasValidationErrors",
+  "input": "message Foo {\n  optional int32 bar = 0;\n}\n",
+  "error": "1:23: Field numbers must be positive integers.\n1:23: Suggested field numbers for Foo: 1\n",
+  "note": "upstream ExpectHasValidationErrors: asserts protoc's PARSER accepted it (ASSERT_EQ(\"\", error_collector_.text_)); it fails only later, in DescriptorPool validation, which this package does not perform. Must therefore be ACCEPTED."
+ },
+ {
+  "name": "ParserValidationErrorTest.FieldExtendeeError",
+  "helper": "ExpectHasValidationErrors",
+  "input": "extend Baz { optional int32 bar = 1; }\n",
+  "error": "0:7: \"Baz\" is not defined.\n",
+  "note": "upstream ExpectHasValidationErrors: asserts protoc's PARSER accepted it (ASSERT_EQ(\"\", error_collector_.text_)); it fails only later, in DescriptorPool validation, which this package does not perform. Must therefore be ACCEPTED."
+ },
+ {
+  "name": "ParserValidationErrorTest.ExtensionJsonNameError",
+  "helper": "ExpectHasValidationErrors",
+  "input": "message TestMessage {\n  extensions 1 to 100;\n}\nextend TestMessage {\n  optional int32 foo = 12 [json_name = \"bar\"];\n}",
+  "error": "4:27: option json_name is not allowed on extension fields.\n",
+  "note": "upstream ExpectHasValidationErrors: asserts protoc's PARSER accepted it (ASSERT_EQ(\"\", error_collector_.text_)); it fails only later, in DescriptorPool validation, which this package does not perform. Must therefore be ACCEPTED."
+ },
+ {
+  "name": "ParserValidationErrorTest.FieldDefaultValueError",
+  "helper": "ExpectHasValidationErrors",
+  "input": "enum Baz { QUX = 1; }\nmessage Foo {\n  optional Baz bar = 1 [default=NO_SUCH_VALUE];\n}\n",
+  "error": "2:32: Enum type \"Baz\" has no value named \"NO_SUCH_VALUE\".\n",
+  "note": "upstream ExpectHasValidationErrors: asserts protoc's PARSER accepted it (ASSERT_EQ(\"\", error_collector_.text_)); it fails only later, in DescriptorPool validation, which this package does not perform. Must therefore be ACCEPTED."
+ },
+ {
+  "name": "ParserValidationErrorTest.FileOptionNameError",
+  "helper": "ExpectHasValidationErrors",
+  "input": "option foo = 5;",
+  "error": "0:7: Option \"foo\" unknown. Ensure that your proto definition file imports the proto which defines the option (i.e. via import option after edition 2024).\n",
+  "note": "upstream ExpectHasValidationErrors: asserts protoc's PARSER accepted it (ASSERT_EQ(\"\", error_collector_.text_)); it fails only later, in DescriptorPool validation, which this package does not perform. Must therefore be ACCEPTED."
+ },
+ {
+  "name": "ParserValidationErrorTest.FileOptionValueError",
+  "helper": "ExpectHasValidationErrors",
+  "input": "option java_outer_classname = 5;",
+  "error": "0:30: Value must be quoted string for string option \"google.protobuf.FileOptions.java_outer_classname\".\n",
+  "note": "upstream ExpectHasValidationErrors: asserts protoc's PARSER accepted it (ASSERT_EQ(\"\", error_collector_.text_)); it fails only later, in DescriptorPool validation, which this package does not perform. Must therefore be ACCEPTED."
+ },
+ {
+  "name": "ParserValidationErrorTest.FieldOptionNameError",
+  "helper": "ExpectHasValidationErrors",
+  "input": "message Foo {\n  optional bool bar = 1 [foo=1];\n}\n",
+  "error": "1:25: Option \"foo\" unknown. Ensure that your proto definition file imports the proto which defines the option (i.e. via import option after edition 2024).\n",
+  "note": "upstream ExpectHasValidationErrors: asserts protoc's PARSER accepted it (ASSERT_EQ(\"\", error_collector_.text_)); it fails only later, in DescriptorPool validation, which this package does not perform. Must therefore be ACCEPTED."
+ },
+ {
+  "name": "ParserValidationErrorTest.FieldOptionValueError",
+  "helper": "ExpectHasValidationErrors",
+  "input": "message Foo {\n  optional int32 bar = 1 [ctype=1];\n}\n",
+  "error": "1:32: Value must be identifier for enum-valued option \"google.protobuf.FieldOptions.ctype\".\n",
+  "note": "upstream ExpectHasValidationErrors: asserts protoc's PARSER accepted it (ASSERT_EQ(\"\", error_collector_.text_)); it fails only later, in DescriptorPool validation, which this package does not perform. Must therefore be ACCEPTED."
+ },
+ {
+  "name": "ParserValidationErrorTest.ExtensionRangeNumberError",
+  "helper": "ExpectHasValidationErrors",
+  "input": "message Foo {\n  extensions 0;\n}\n",
+  "error": "1:13: Extension numbers must be positive integers.\n1:13: Suggested field numbers for Foo: 1\n",
+  "note": "upstream ExpectHasValidationErrors: asserts protoc's PARSER accepted it (ASSERT_EQ(\"\", error_collector_.text_)); it fails only later, in DescriptorPool validation, which this package does not perform. Must therefore be ACCEPTED."
+ },
+ {
+  "name": "ParserValidationErrorTest.ExtensionRangeNumberOrderError",
+  "helper": "ExpectHasValidationErrors",
+  "input": "message Foo {\n  extensions 2 to 1;\n}\n",
+  "error": "1:13: Extension range end number must be greater than start number.\n",
+  "note": "upstream ExpectHasValidationErrors: asserts protoc's PARSER accepted it (ASSERT_EQ(\"\", error_collector_.text_)); it fails only later, in DescriptorPool validation, which this package does not perform. Must therefore be ACCEPTED."
+ },
+ {
+  "name": "ParserValidationErrorTest.ReservedRangeError",
+  "helper": "ExpectHasValidationErrors",
+  "input": "message Foo {\n  reserved 2 to 1;\n}\n",
+  "error": "1:11: Reserved range end number must be greater than start number.\n",
+  "note": "upstream ExpectHasValidationErrors: asserts protoc's PARSER accepted it (ASSERT_EQ(\"\", error_collector_.text_)); it fails only later, in DescriptorPool validation, which this package does not perform. Must therefore be ACCEPTED."
+ },
+ {
+  "name": "ParserValidationErrorTest.Proto3ExtensionError",
+  "helper": "ExpectHasValidationErrors",
+  "input": "syntax = 'proto3';\nmessage Foo { \n  extensions 100 to 199;\n}\nextend Foo { string foo = 101; }\n",
+  "error": "4:7: Extensions in proto3 are only allowed for defining options.\n2:13: Extension ranges are not allowed in proto3.\n",
+  "note": "upstream ExpectHasValidationErrors: asserts protoc's PARSER accepted it (ASSERT_EQ(\"\", error_collector_.text_)); it fails only later, in DescriptorPool validation, which this package does not perform. Must therefore be ACCEPTED."
+ },
+ {
+  "name": "ParserValidationErrorTest.Proto3MessageSet",
+  "helper": "ExpectHasValidationErrors",
+  "input": "syntax = 'proto3';\nmessage Foo { \n  option message_set_wire_format = true;\n}\n",
+  "error": "1:8: MessageSet is not supported in proto3.\n",
+  "note": "upstream ExpectHasValidationErrors: asserts protoc's PARSER accepted it (ASSERT_EQ(\"\", error_collector_.text_)); it fails only later, in DescriptorPool validation, which this package does not perform. Must therefore be ACCEPTED."
+ },
+ {
+  "name": "ParserValidationErrorTest.Proto3Required",
+  "helper": "ExpectHasValidationErrors",
+  "input": "syntax = 'proto3';\nmessage Foo { \n  required int32 field = 1;}\n",
+  "error": "2:11: Required fields are not allowed in proto3.\n",
+  "note": "upstream ExpectHasValidationErrors: asserts protoc's PARSER accepted it (ASSERT_EQ(\"\", error_collector_.text_)); it fails only later, in DescriptorPool validation, which this package does not perform. Must therefore be ACCEPTED."
+ },
+ {
+  "name": "ParserValidationErrorTest.Proto3Default",
+  "helper": "ExpectHasValidationErrors",
+  "input": "syntax = 'proto3';\nmessage Foo { \n  int32 field = 1 [default = 12];}\n",
+  "error": "2:29: Explicit default values are not allowed in proto3.\n",
+  "note": "upstream ExpectHasValidationErrors: asserts protoc's PARSER accepted it (ASSERT_EQ(\"\", error_collector_.text_)); it fails only later, in DescriptorPool validation, which this package does not perform. Must therefore be ACCEPTED."
+ },
+ {
+  "name": "ParserValidationErrorTest.Proto3JsonConflictError",
+  "helper": "ExpectHasValidationErrors",
+  "input": "syntax = 'proto3';\nmessage TestMessage {\n  uint32 _foo = 1;\n  uint32 Foo = 2;\n}\n",
+  "error": "3:9: The default JSON name of field \"Foo\" (\"Foo\") conflicts with the default JSON name of field \"_foo\".\n",
+  "note": "upstream ExpectHasValidationErrors: asserts protoc's PARSER accepted it (ASSERT_EQ(\"\", error_collector_.text_)); it fails only later, in DescriptorPool validation, which this package does not perform. Must therefore be ACCEPTED."
+ },
+ {
+  "name": "ParserValidationErrorTest.Proto3CustomJsonConflictWithDefaultError",
+  "helper": "ExpectHasValidationErrors",
+  "input": "syntax = 'proto3';\nmessage TestMessage {\n  uint32 foo = 1 [json_name='bar'];\n  uint32 bar = 2;\n}\n",
+  "error": "3:9: The default JSON name of field \"bar\" (\"bar\") conflicts with the custom JSON name of field \"foo\".\n",
+  "note": "upstream ExpectHasValidationErrors: asserts protoc's PARSER accepted it (ASSERT_EQ(\"\", error_collector_.text_)); it fails only later, in DescriptorPool validation, which this package does not perform. Must therefore be ACCEPTED."
+ },
+ {
+  "name": "ParserValidationErrorTest.Proto3CustomJsonConflictError",
+  "helper": "ExpectHasValidationErrors",
+  "input": "syntax = 'proto3';\nmessage TestMessage {\n  uint32 foo = 1 [json_name='baz'];\n  uint32 bar = 2 [json_name='baz'];\n}\n",
+  "error": "3:9: The custom JSON name of field \"bar\" (\"baz\") conflicts with the custom JSON name of field \"foo\".\n",
+  "note": "upstream ExpectHasValidationErrors: asserts protoc's PARSER accepted it (ASSERT_EQ(\"\", error_collector_.text_)); it fails only later, in DescriptorPool validation, which this package does not perform. Must therefore be ACCEPTED."
+ },
+ {
+  "name": "ParserValidationErrorTest.Proto2CustomJsonConflictError",
+  "helper": "ExpectHasValidationErrors",
+  "input": "syntax = 'proto2';\nmessage TestMessage {\n  optional uint32 foo = 1 [json_name='baz'];\n  optional uint32 bar = 2 [json_name='baz'];\n}\n",
+  "error": "3:18: The custom JSON name of field \"bar\" (\"baz\") conflicts with the custom JSON name of field \"foo\".\n",
+  "note": "upstream ExpectHasValidationErrors: asserts protoc's PARSER accepted it (ASSERT_EQ(\"\", error_collector_.text_)); it fails only later, in DescriptorPool validation, which this package does not perform. Must therefore be ACCEPTED."
+ },
+ {
+  "name": "ParserValidationErrorTest.EnumNameError",
+  "helper": "ExpectHasValidationErrors",
+  "input": "enum Foo {A = 1;}\nenum Foo {B = 1;}\n",
+  "error": "1:5: \"Foo\" is already defined.\n",
+  "note": "upstream ExpectHasValidationErrors: asserts protoc's PARSER accepted it (ASSERT_EQ(\"\", error_collector_.text_)); it fails only later, in DescriptorPool validation, which this package does not perform. Must therefore be ACCEPTED."
+ },
+ {
+  "name": "ParserValidationErrorTest.Proto3EnumError",
+  "helper": "ExpectHasValidationErrors",
+  "input": "syntax = 'proto3';\nenum Foo {A = 1;}\n",
+  "error": "1:14: The first enum value must be zero for open enums.\n",
+  "note": "upstream ExpectHasValidationErrors: asserts protoc's PARSER accepted it (ASSERT_EQ(\"\", error_collector_.text_)); it fails only later, in DescriptorPool validation, which this package does not perform. Must therefore be ACCEPTED."
+ },
+ {
+  "name": "ParserValidationErrorTest.EnumValueNameError",
+  "helper": "ExpectHasValidationErrors",
+  "input": "enum Foo {\n  BAR = 1;\n  BAR = 1;\n}\n",
+  "error": "2:2: \"BAR\" is already defined.\n",
+  "note": "upstream ExpectHasValidationErrors: asserts protoc's PARSER accepted it (ASSERT_EQ(\"\", error_collector_.text_)); it fails only later, in DescriptorPool validation, which this package does not perform. Must therefore be ACCEPTED."
+ },
+ {
+  "name": "ParserValidationErrorTest.EnumValueAliasError",
+  "helper": "ExpectHasValidationErrors",
+  "input": "enum Foo {\n  BAR = 1;\n  BAZ = 1;\n}\n",
+  "error": "2:8: \"BAZ\" uses the same enum value as \"BAR\". If this is intended, set 'option allow_alias = true;' to the enum definition. The next available enum value is 2.\n",
+  "note": "upstream ExpectHasValidationErrors: asserts protoc's PARSER accepted it (ASSERT_EQ(\"\", error_collector_.text_)); it fails only later, in DescriptorPool validation, which this package does not perform. Must therefore be ACCEPTED."
+ },
+ {
+  "name": "ParserValidationErrorTest.EnumReservedRangeError",
+  "helper": "ExpectHasValidationErrors",
+  "input": "enum Foo {\n  BAR = 1;\n  reserved 2 to 1;\n}\n",
+  "error": "2:11: Reserved range end number must be greater than start number.\n",
+  "note": "upstream ExpectHasValidationErrors: asserts protoc's PARSER accepted it (ASSERT_EQ(\"\", error_collector_.text_)); it fails only later, in DescriptorPool validation, which this package does not perform. Must therefore be ACCEPTED."
+ },
+ {
+  "name": "ParserValidationErrorTest.ServiceNameError",
+  "helper": "ExpectHasValidationErrors",
+  "input": "service Foo {}\nservice Foo {}\n",
+  "error": "1:8: \"Foo\" is already defined.\n",
+  "note": "upstream ExpectHasValidationErrors: asserts protoc's PARSER accepted it (ASSERT_EQ(\"\", error_collector_.text_)); it fails only later, in DescriptorPool validation, which this package does not perform. Must therefore be ACCEPTED."
+ },
+ {
+  "name": "ParserValidationErrorTest.MethodNameError",
+  "helper": "ExpectHasValidationErrors",
+  "input": "message Baz {}\nservice Foo {\n  rpc Bar(Baz) returns(Baz);\n  rpc Bar(Baz) returns(Baz);\n}\n",
+  "error": "3:6: \"Bar\" is already defined in \"Foo\".\n",
+  "note": "upstream ExpectHasValidationErrors: asserts protoc's PARSER accepted it (ASSERT_EQ(\"\", error_collector_.text_)); it fails only later, in DescriptorPool validation, which this package does not perform. Must therefore be ACCEPTED."
+ },
+ {
+  "name": "ParserValidationErrorTest.MethodInputTypeError",
+  "helper": "ExpectHasValidationErrors",
+  "input": "message Baz {}\nservice Foo {\n  rpc Bar(Qux) returns(Baz);\n}\n",
+  "error": "2:10: \"Qux\" is not defined.\n",
+  "note": "upstream ExpectHasValidationErrors: asserts protoc's PARSER accepted it (ASSERT_EQ(\"\", error_collector_.text_)); it fails only later, in DescriptorPool validation, which this package does not perform. Must therefore be ACCEPTED."
+ },
+ {
+  "name": "ParserValidationErrorTest.MethodOutputTypeError",
+  "helper": "ExpectHasValidationErrors",
+  "input": "message Baz {}\nservice Foo {\n  rpc Bar(Baz) returns(Qux);\n}\n",
+  "error": "2:23: \"Qux\" is not defined.\n",
+  "note": "upstream ExpectHasValidationErrors: asserts protoc's PARSER accepted it (ASSERT_EQ(\"\", error_collector_.text_)); it fails only later, in DescriptorPool validation, which this package does not perform. Must therefore be ACCEPTED."
+ },
+ {
+  "name": "ParserValidationErrorTest.ResolvedUndefinedError",
+  "helper": "ExpectHasValidationErrors",
+  "input": "package foo.base;\nimport \"base.proto\";\nmessage qux {\n  optional base.bar baz = 1;\n  optional .base.bar quz = 2;\n}\n",
+  "error": "3:11: \"base.bar\" is resolved to \"foo.base.bar\", which is not defined. The innermost scope is searched first in name resolution. Consider using a leading '.'(i.e., \".base.bar\") to start from the outermost scope.\n",
+  "note": "upstream ExpectHasValidationErrors: asserts protoc's PARSER accepted it (ASSERT_EQ(\"\", error_collector_.text_)); it fails only later, in DescriptorPool validation, which this package does not perform. Must therefore be ACCEPTED."
+ },
+ {
+  "name": "ParserValidationErrorTest.ResolvedUndefinedOptionError",
+  "helper": "ExpectHasValidationErrors",
+  "input": "\n        edition = \"2024\";\n        package qux.baz;\n        import option \"base2.proto\";\n        option (baz.bar).foo = 1;\n      ",
+  "error": "4:15: Option \"(baz.bar)\" is resolved to \"(qux.baz.bar)\", which is not defined. The innermost scope is searched first in name resolution. Consider using a leading '.'(i.e., \"(.baz.bar)\") to start from the outermost scope.\n",
+  "note": "upstream ExpectHasValidationErrors: asserts protoc's PARSER accepted it (ASSERT_EQ(\"\", error_collector_.text_)); it fails only later, in DescriptorPool validation, which this package does not perform. Must therefore be ACCEPTED."
+ },
+ {
+  "name": "ParseEditionsTest.ValidationError",
+  "helper": "ExpectHasValidationErrors",
+  "input": "\n        edition = \"2023\";\n        option features.field_presence = IMPLICIT;\n        option java_package = \"blah\";\n        message TestMessage {\n          string foo = 1 [default = \"hello\"];\n        }",
+  "error": "5:17: Implicit presence fields can't specify defaults.\n",
+  "note": "upstream ExpectHasValidationErrors: asserts protoc's PARSER accepted it (ASSERT_EQ(\"\", error_collector_.text_)); it fails only later, in DescriptorPool validation, which this package does not perform. Must therefore be ACCEPTED."
+ },
+ {
+  "name": "ParseEditionsTest.InvalidMerge",
+  "helper": "ExpectHasValidationErrors",
+  "input": "\n        edition = \"2023\";\n        option features.field_presence = IMPLICIT;\n        option java_package = \"blah\";\n        message TestMessage {\n          string foo = 1 [\n            default = \"hello\",\n            features.field_presence = FIELD_PRESENCE_UNKNOWN,\n            features.enum_type = ENUM_TYPE_UNKNOWN\n          ];\n        }",
+  "error": "5:17: Feature field `field_presence` must resolve to a known value, found FIELD_PRESENCE_UNKNOWN\n",
+  "note": "upstream ExpectHasValidationErrors: asserts protoc's PARSER accepted it (ASSERT_EQ(\"\", error_collector_.text_)); it fails only later, in DescriptorPool validation, which this package does not perform. Must therefore be ACCEPTED."
+ },
+ {
+  "name": "ParseEditionsTest.FeaturesWithoutEditions",
+  "helper": "ExpectHasValidationErrors",
+  "input": "\n        syntax = \"proto3\";\n        option features.field_presence = IMPLICIT;\n        message TestMessage {\n          string foo = 1 [\n            default = \"hello\",\n            features.field_presence = EXPLICIT\n          ];\n        }",
+  "error": "1:8: Features are only valid under editions.\n4:17: Features are only valid under editions.\n",
+  "note": "upstream ExpectHasValidationErrors: asserts protoc's PARSER accepted it (ASSERT_EQ(\"\", error_collector_.text_)); it fails only later, in DescriptorPool validation, which this package does not perform. Must therefore be ACCEPTED."
+ }
+]

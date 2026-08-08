@@ -69,7 +69,8 @@ protobuf runtime — no `fixed32/64`, `sint` zigzag, packed repeated scalars,
 maps, groups, or oneof wire rules.
 
 Because `@tabnas/proto` defers type resolution, a message field and an enum
-field both arrive as `TYPE_MESSAGE` + `typeName`; the codec disambiguates by
-looking the name up in the registry (enum → varint, message → length-delimited).
+field both arrive as a bare `typeName` with no `type` (protoc's parser does
+the same); the codec disambiguates by looking the name up in the registry
+(enum → varint, message → length-delimited).
 Type lookup is by simple name — a deliberate simplification, not full protobuf
 scope resolution.

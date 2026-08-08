@@ -33,6 +33,23 @@ order do not affect the comparison.
 Both discover files by directory listing: adding a `.tsv` here runs it in
 both runtimes without touching either runner.
 
+## The files
+
+`edition-2023` / `edition-2024` / `proto2` / `proto3` / `version-detect` /
+`whitespace` are the hand-written per-topic fixtures.
+`descriptor-shape.tsv` is a curated, commented tour of the descriptor
+details protoc pins down (range bounds, groups, pseudo-options, synthetic
+oneofs, visibility, …).
+
+`protobuf-suite.tsv` is **generated**: the in-scope `valid` lane of the
+vendored protoc parser corpus (`../protobuf-suite/valid.json`), one row per
+case, so Go runs the whole corpus too. Its `expected` column is this
+parser's output — that this output equals protoc's own golden is asserted
+separately, against the goldens, by
+`ts/test/protobuf-conformance.test.ts`. Together the two say: TypeScript
+matches protoc, and Go matches TypeScript. Regenerate it rather than
+hand-editing, and only after the conformance test is green.
+
 ## Rules
 
 - Prefer adding a fixture here over a one-off in-language assertion when a

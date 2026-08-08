@@ -23,6 +23,13 @@ type FieldDescriptorProto struct {
 	Type   string `json:"type,omitempty"`
 	// TypeName is set for message/enum/group field types (resolution deferred).
 	TypeName string `json:"typeName,omitempty"`
+	// Extendee is the message an `extend` member extends, as written.
+	Extendee string `json:"extendee,omitempty"`
+	// JsonName is the `json_name = "..."` pseudo-option, lifted out of Options.
+	JsonName string `json:"jsonName,omitempty"`
+	// DefaultValue is the `default = ...` pseudo-option, lifted out of Options.
+	// Always a string, as in descriptor.proto; the literal is kept as written.
+	DefaultValue string `json:"defaultValue,omitempty"`
 	// Proto3Optional marks a proto3 explicit `optional` (protoc synthesises a
 	// single-field oneof for it).
 	Proto3Optional bool `json:"proto3Optional,omitempty"`
@@ -39,11 +46,29 @@ type EnumValueDescriptorProto struct {
 	Options map[string]OptionValue `json:"options,omitempty"`
 }
 
-// Range is a half-closed [start,end] reserved/extension range.
+// Range is a numeric reserved/extension range. End is EXCLUSIVE for message
+// extension/reserved ranges and INCLUSIVE for enum reserved ranges — the same
+// asymmetry protoc has.
 type Range struct {
-	Start int `json:"start"`
-	End   int `json:"end"`
+	Start   int                    `json:"start"`
+	End     int                    `json:"end"`
+	Options map[string]OptionValue `json:"options,omitempty"`
 }
+
+// Symbol visibility, an edition-2024 feature (`export` / `local`).
+const (
+	VisibilityExport = "VISIBILITY_EXPORT"
+	VisibilityLocal  = "VISIBILITY_LOCAL"
+)
+
+// protoc's sentinels for `to max` in a range. Message field numbers stop at
+// 2^29-1, so an exclusive End is 2^29; a message_set_wire_format message may
+// use the full 32-bit space. Enum numbers are plain int32 (inclusive End).
+const (
+	MaxFieldNumberEnd = 536870912
+	MaxMessageSetEnd  = 2147483647
+	MaxEnumNumber     = 2147483647
+)
 
 // EnumDescriptorProto describes an enum definition.
 type EnumDescriptorProto struct {
@@ -51,6 +76,7 @@ type EnumDescriptorProto struct {
 	Value         []EnumValueDescriptorProto `json:"value"`
 	ReservedRange []Range                    `json:"reservedRange,omitempty"`
 	ReservedName  []string                   `json:"reservedName,omitempty"`
+	Visibility    string                     `json:"visibility,omitempty"`
 	Options       map[string]OptionValue     `json:"options,omitempty"`
 }
 
@@ -71,6 +97,7 @@ type DescriptorProto struct {
 	ExtensionRange []Range                `json:"extensionRange,omitempty"`
 	ReservedRange  []Range                `json:"reservedRange,omitempty"`
 	ReservedName   []string               `json:"reservedName,omitempty"`
+	Visibility     string                 `json:"visibility,omitempty"`
 	Options        map[string]OptionValue `json:"options,omitempty"`
 }
 
@@ -99,12 +126,14 @@ type FileDescriptorProto struct {
 	Dependency       []string                 `json:"dependency"`
 	PublicDependency []int                    `json:"publicDependency"`
 	WeakDependency   []int                    `json:"weakDependency"`
-	MessageType      []DescriptorProto        `json:"messageType"`
+	// OptionDependency holds `import option "..."` targets (edition 2024).
+	OptionDependency []string          `json:"optionDependency,omitempty"`
+	MessageType      []DescriptorProto `json:"messageType"`
 	EnumType         []EnumDescriptorProto    `json:"enumType"`
 	Service          []ServiceDescriptorProto `json:"service"`
 	Extension        []FieldDescriptorProto   `json:"extension"`
 	Options          map[string]OptionValue   `json:"options,omitempty"`
-	// Syntax is 'proto2' | 'proto3' for syntax files; absent for editions.
+	// Syntax is 'proto2' | 'proto3' for syntax files, 'editions' for editions.
 	Syntax string `json:"syntax,omitempty"`
 	// Edition is 'EDITION_2023' | 'EDITION_2024' for edition files.
 	Edition string `json:"edition,omitempty"`
