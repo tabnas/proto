@@ -30,7 +30,8 @@ ts/
   src/descriptor.ts    # output types + scalar-type table
   src/detect-version.ts    # syntax/edition detection + reconciliation
   test/                # node:test (proto, version-detect, doc-examples,
-                       #   parity over test/spec, protobuf-conformance)
+                       #   parity over test/spec, protobuf-conformance,
+                       #   version: exported VERSION == package.json)
 go/
   grammar_gen.go       # Go counterpart of embed-grammar.js (go generate)
   grammar.go           # GENERATED — do not edit
@@ -38,6 +39,7 @@ go/
   descriptor.go        # port of ts/src/descriptor.ts
   detect_version.go    # port of ts/src/detect-version.ts
   parity_test.go       # runs the same test/spec/*.tsv fixtures
+  version_test.go      # VERSION const == ts/package.json "version"
 test/
   spec/*.tsv           # shared cross-runtime fixtures (see test/AGENTS.md)
   protobuf-suite/      # vendored protoc parser_unittest corpus
