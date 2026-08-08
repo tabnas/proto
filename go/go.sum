@@ -1,4 +1,4 @@
-github.com/tabnas/abnf/go v0.3.4 h1:kFXH1Ml7Nvmgv2xcaO36ue2eyemn4yi9PkrxXa/MXKg=
-github.com/tabnas/abnf/go v0.3.4/go.mod h1:vZ5Od4OZGfNIIObZ2uc94gFO3Xv2s5M1re3/3Rfk+v4=
-github.com/tabnas/parser/go v0.6.2 h1:R3q3dSDO98rwIJvw5b2MbY3fPPNFf1EA0IQyhua1Cbc=
-github.com/tabnas/parser/go v0.6.2/go.mod h1:WrlfEVyZ1QjEIowWiyEu3K1iHj7wxuPut5zoH9Trehk=
+github.com/tabnas/abnf/go v0.4.0 h1:jMLiomj0q0JQQuvHYEvG4OhiHW55BjQ+5gqJ/3hh+u4=
+github.com/tabnas/abnf/go v0.4.0/go.mod h1:UayxfQCn8diET9C0zhgPUHOoETK0IKbAdyZl5bqbEy8=
+github.com/tabnas/parser/go v0.7.0 h1:efvYVuQan73Mf47L2W8WjLL5K6M0EAQAPB2LeImJuqo=
+github.com/tabnas/parser/go v0.7.0/go.mod h1:WrlfEVyZ1QjEIowWiyEu3K1iHj7wxuPut5zoH9Trehk=
