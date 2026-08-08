@@ -1,0 +1,1471 @@
+{
+ "valid": [
+  {
+   "name": "ParseMessageTest.SimpleMessage",
+   "helper": "ExpectParsesTo",
+   "input": "message TestMessage {\n  required int32 foo = 1;\n}\n",
+   "expectedText": "message_type {  name: \"TestMessage\"  field { name:\"foo\" label:LABEL_REQUIRED type:TYPE_INT32 number:1 }}"
+  },
+  {
+   "name": "ParseMessageTest.ImplicitSyntaxIdentifier",
+   "helper": "ExpectParsesTo",
+   "input": "message TestMessage {\n  required int32 foo = 1;\n}\n",
+   "expectedText": "message_type {  name: \"TestMessage\"  field { name:\"foo\" label:LABEL_REQUIRED type:TYPE_INT32 number:1 }}"
+  },
+  {
+   "name": "ParseMessageTest.ExplicitSyntaxIdentifier",
+   "helper": "ExpectParsesTo",
+   "input": "syntax = \"proto2\";\nmessage TestMessage {\n  required int32 foo = 1;\n}\n",
+   "expectedText": "syntax: 'proto2' message_type {  name: \"TestMessage\"  field { name:\"foo\" label:LABEL_REQUIRED type:TYPE_INT32 number:1 }}"
+  },
+  {
+   "name": "ParseMessageTest.ExplicitRequiredSyntaxIdentifier",
+   "helper": "ExpectParsesTo",
+   "input": "syntax = \"proto2\";\nmessage TestMessage {\n  required int32 foo = 1;\n}\n",
+   "expectedText": "syntax: 'proto2' message_type {  name: \"TestMessage\"  field { name:\"foo\" label:LABEL_REQUIRED type:TYPE_INT32 number:1 }}"
+  },
+  {
+   "name": "ParseMessageTest.SimpleFields",
+   "helper": "ExpectParsesTo",
+   "input": "message TestMessage {\n  required int32 foo = 15;\n  optional int32 bar = 34;\n  repeated int32 baz = 3;\n}\n",
+   "expectedText": "message_type {  name: \"TestMessage\"  field { name:\"foo\" label:LABEL_REQUIRED type:TYPE_INT32 number:15 }  field { name:\"bar\" label:LABEL_OPTIONAL type:TYPE_INT32 number:34 }  field { name:\"baz\" label:LABEL_REPEATED type:TYPE_INT32 number:3  }}"
+  },
+  {
+   "name": "ParseMessageTest.PrimitiveFieldTypes",
+   "helper": "ExpectParsesTo",
+   "input": "message TestMessage {\n  required int32    foo = 1;\n  required int64    foo = 1;\n  required uint32   foo = 1;\n  required uint64   foo = 1;\n  required sint32   foo = 1;\n  required sint64   foo = 1;\n  required fixed32  foo = 1;\n  required fixed64  foo = 1;\n  required sfixed32 foo = 1;\n  required sfixed64 foo = 1;\n  required float    foo = 1;\n  required double   foo = 1;\n  required string   foo = 1;\n  required bytes    foo = 1;\n  required bool     foo = 1;\n}\n",
+   "expectedText": "message_type {  name: \"TestMessage\"  field { name:\"foo\" label:LABEL_REQUIRED type:TYPE_INT32    number:1 }  field { name:\"foo\" label:LABEL_REQUIRED type:TYPE_INT64    number:1 }  field { name:\"foo\" label:LABEL_REQUIRED type:TYPE_UINT32   number:1 }  field { name:\"foo\" label:LABEL_REQUIRED type:TYPE_UINT64   number:1 }  field { name:\"foo\" label:LABEL_REQUIRED type:TYPE_SINT32   number:1 }  field { name:\"foo\" label:LABEL_REQUIRED type:TYPE_SINT64   number:1 }  field { name:\"foo\" label:LABEL_REQUIRED type:TYPE_FIXED32  number:1 }  field { name:\"foo\" label:LABEL_REQUIRED type:TYPE_FIXED64  number:1 }  field { name:\"foo\" label:LABEL_REQUIRED type:TYPE_SFIXED32 number:1 }  field { name:\"foo\" label:LABEL_REQUIRED type:TYPE_SFIXED64 number:1 }  field { name:\"foo\" label:LABEL_REQUIRED type:TYPE_FLOAT    number:1 }  field { name:\"foo\" label:LABEL_REQUIRED type:TYPE_DOUBLE   number:1 }  field { name:\"foo\" label:LABEL_REQUIRED type:TYPE_STRING   number:1 }  field { name:\"foo\" label:LABEL_REQUIRED type:TYPE_BYTES    number:1 }  field { name:\"foo\" label:LABEL_REQUIRED type:TYPE_BOOL     number:1 }}"
+  },
+  {
+   "name": "ParseMessageTest.FieldJsonName",
+   "helper": "ExpectParsesTo",
+   "input": "message TestMessage {\n  optional string foo = 1 [json_name = \"@type\"];\n}\n",
+   "expectedText": "message_type {  name: \"TestMessage\"  field {\n    name: \"foo\" label: LABEL_OPTIONAL type: TYPE_STRING number: 1    json_name: \"@type\"\n  }\n}\n"
+  },
+  {
+   "name": "ParseMessageTest.Varint32Unstable",
+   "helper": "ExpectParsesTo",
+   "input": "edition = \"UNSTABLE\";\nmessage NewVarintTypes {\n  varint32 value = 1;\n  }",
+   "expectedText": "message_type {\n             name: \"NewVarintTypes\"\n             field {\n               name: \"value\"\n               number: 1\n               label: LABEL_OPTIONAL\n               type: TYPE_INT32\n             }\n           }\n           syntax: \"editions\"\n           edition: EDITION_UNSTABLE"
+  },
+  {
+   "name": "ParseMessageTest.Varint64Unstable",
+   "helper": "ExpectParsesTo",
+   "input": "edition = \"UNSTABLE\";\nmessage NewVarintTypes {\n  varint64 int64_field = 1;\n}",
+   "expectedText": "message_type {\n             name: \"NewVarintTypes\"\n             field {\n               name: \"int64_field\"\n               number: 1\n               label: LABEL_OPTIONAL\n               type: TYPE_INT64\n             }\n           }\n           syntax: \"editions\"\n           edition: EDITION_UNSTABLE"
+  },
+  {
+   "name": "ParseMessageTest.Zigzag32Unstable",
+   "helper": "ExpectParsesTo",
+   "input": "edition = \"UNSTABLE\";\nmessage NewVarintTypes {\n  zigzag32 sint32_field = 1;\n}",
+   "expectedText": "message_type {\n             name: \"NewVarintTypes\"\n             field {\n               name: \"sint32_field\"\n               number: 1\n               label: LABEL_OPTIONAL\n               type: TYPE_SINT32\n             }\n           }\n           syntax: \"editions\"\n           edition: EDITION_UNSTABLE"
+  },
+  {
+   "name": "ParseMessageTest.Zigzag64Unstable",
+   "helper": "ExpectParsesTo",
+   "input": "edition = \"UNSTABLE\";\nmessage NewVarintTypes {\n  zigzag64 sint64_field = 1;\n}",
+   "expectedText": "message_type {\n             name: \"NewVarintTypes\"\n             field {\n               name: \"sint64_field\"\n               number: 1\n               label: LABEL_OPTIONAL\n               type: TYPE_SINT64\n             }\n           }\n           syntax: \"editions\"\n           edition: EDITION_UNSTABLE"
+  },
+  {
+   "name": "ParseMessageTest.Uvarint32Unstable",
+   "helper": "ExpectParsesTo",
+   "input": "edition = \"UNSTABLE\";\nmessage NewVarintTypes {\n  uvarint32 uint32_field = 1;\n}",
+   "expectedText": "message_type {\n             name: \"NewVarintTypes\"\n             field {\n               name: \"uint32_field\"\n               number: 1\n               label: LABEL_OPTIONAL\n               type: TYPE_UINT32\n             }\n           }\n           syntax: \"editions\"\n           edition: EDITION_UNSTABLE"
+  },
+  {
+   "name": "ParseMessageTest.Uvarint64Unstable",
+   "helper": "ExpectParsesTo",
+   "input": "edition = \"UNSTABLE\";\nmessage NewVarintTypes {\n  uvarint64 uint64_field = 1;\n}",
+   "expectedText": "message_type {\n             name: \"NewVarintTypes\"\n             field {\n               name: \"uint64_field\"\n               number: 1\n               label: LABEL_OPTIONAL\n               type: TYPE_UINT64\n             }\n           }\n           syntax: \"editions\"\n           edition: EDITION_UNSTABLE"
+  },
+  {
+   "name": "ParseMessageTest.Int32Unstable",
+   "helper": "ExpectParsesTo",
+   "input": "\nedition = \"UNSTABLE\";\nmessage Test {\n  int32 value = 1;\n}",
+   "expectedText": "message_type {\n             name: \"Test\"\n             field {\n               name: \"value\"\n               number: 1\n               label: LABEL_OPTIONAL\n               type: TYPE_SFIXED32\n             }\n           }\n           syntax: \"editions\"\n           edition: EDITION_UNSTABLE"
+  },
+  {
+   "name": "ParseMessageTest.Int32Edition2024",
+   "helper": "ExpectParsesTo",
+   "input": "edition = \"2024\";\nmessage Test {\n  int32 value = 1;\n}",
+   "expectedText": "message_type {\n             name: \"Test\"\n             field {\n               name: \"value\"\n               number: 1\n               label: LABEL_OPTIONAL\n               type: TYPE_INT32\n             }\n           }\n           syntax: \"editions\"\n           edition: EDITION_2024"
+  },
+  {
+   "name": "ParseMessageTest.UInt32Unstable",
+   "helper": "ExpectParsesTo",
+   "input": "edition = \"UNSTABLE\";\nmessage Test {\n  uint32 value = 1;\n}",
+   "expectedText": "message_type {\n             name: \"Test\"\n             field {\n               name: \"value\"\n               number: 1\n               label: LABEL_OPTIONAL\n               type: TYPE_FIXED32\n             }\n           }\n           syntax: \"editions\"\n           edition: EDITION_UNSTABLE"
+  },
+  {
+   "name": "ParseMessageTest.UInt32Edition2024",
+   "helper": "ExpectParsesTo",
+   "input": "edition = \"2024\";\nmessage Test {\n  uint32 value = 1;\n}",
+   "expectedText": "message_type {\n             name: \"Test\"\n             field {\n               name: \"value\"\n               number: 1\n               label: LABEL_OPTIONAL\n               type: TYPE_UINT32\n             }\n           }\n           syntax: \"editions\"\n           edition: EDITION_2024"
+  },
+  {
+   "name": "ParseMessageTest.Int64Unstable",
+   "helper": "ExpectParsesTo",
+   "input": "edition = \"UNSTABLE\";\nmessage Test {\n  int64 value = 1;\n}",
+   "expectedText": "message_type {\n             name: \"Test\"\n             field {\n               name: \"value\"\n               number: 1\n               label: LABEL_OPTIONAL\n               type: TYPE_SFIXED64\n             }\n           }\n           syntax: \"editions\"\n           edition: EDITION_UNSTABLE"
+  },
+  {
+   "name": "ParseMessageTest.Int64Edition2024",
+   "helper": "ExpectParsesTo",
+   "input": "edition = \"2024\";\nmessage Test {\n  int64 value = 1;\n}",
+   "expectedText": "message_type {\n             name: \"Test\"\n             field {\n               name: \"value\"\n               number: 1\n               label: LABEL_OPTIONAL\n               type: TYPE_INT64\n             }\n           }\n           syntax: \"editions\"\n           edition: EDITION_2024"
+  },
+  {
+   "name": "ParseMessageTest.UInt64Unstable",
+   "helper": "ExpectParsesTo",
+   "input": "edition = \"UNSTABLE\";\nmessage Test {\n  uint64 value = 1;\n}",
+   "expectedText": "message_type {\n             name: \"Test\"\n             field {\n               name: \"value\"\n               number: 1\n               label: LABEL_OPTIONAL\n               type: TYPE_FIXED64\n             }\n           }\n           syntax: \"editions\"\n           edition: EDITION_UNSTABLE"
+  },
+  {
+   "name": "ParseMessageTest.UInt64Edition2024",
+   "helper": "ExpectParsesTo",
+   "input": "edition = \"2024\";\nmessage Test {\n  uint64 value = 1;\n}",
+   "expectedText": "message_type {\n             name: \"Test\"\n             field {\n               name: \"value\"\n               number: 1\n               label: LABEL_OPTIONAL\n               type: TYPE_UINT64\n             }\n           }\n           syntax: \"editions\"\n           edition: EDITION_2024"
+  },
+  {
+   "name": "ParseMessageTest.Fixed32Edition2024",
+   "helper": "ExpectParsesTo",
+   "input": "edition = \"2024\";\nmessage Test {\n  fixed32 value = 1;\n}",
+   "expectedText": "message_type {\n             name: \"Test\"\n             field {\n               name: \"value\"\n               number: 1\n               label: LABEL_OPTIONAL\n               type: TYPE_FIXED32\n             }\n           }\n           syntax: \"editions\"\n           edition: EDITION_2024"
+  },
+  {
+   "name": "ParseMessageTest.Fixed64Edition2024",
+   "helper": "ExpectParsesTo",
+   "input": "edition = \"2024\";\nmessage Test {\n  fixed64 value = 1;\n}",
+   "expectedText": "message_type {\n             name: \"Test\"\n             field {\n               name: \"value\"\n               number: 1\n               label: LABEL_OPTIONAL\n               type: TYPE_FIXED64\n             }\n           }\n           syntax: \"editions\"\n           edition: EDITION_2024"
+  },
+  {
+   "name": "ParseMessageTest.Sfixed32Edition2024",
+   "helper": "ExpectParsesTo",
+   "input": "edition = \"2024\";\nmessage Test {\n  sfixed32 value = 1;\n}",
+   "expectedText": "message_type {\n             name: \"Test\"\n             field {\n               name: \"value\"\n               number: 1\n               label: LABEL_OPTIONAL\n               type: TYPE_SFIXED32\n             }\n           }\n           syntax: \"editions\"\n           edition: EDITION_2024"
+  },
+  {
+   "name": "ParseMessageTest.Sfixed64Edition2024",
+   "helper": "ExpectParsesTo",
+   "input": "edition = \"2024\";\nmessage Test {\n  sfixed64 value = 1;\n}",
+   "expectedText": "message_type {\n             name: \"Test\"\n             field {\n               name: \"value\"\n               number: 1\n               label: LABEL_OPTIONAL\n               type: TYPE_SFIXED64\n             }\n           }\n           syntax: \"editions\"\n           edition: EDITION_2024"
+  },
+  {
+   "name": "ParseMessageTest.Sint32Edition2024",
+   "helper": "ExpectParsesTo",
+   "input": "edition = \"2024\";\nmessage Test {\n  sint32 value = 1;\n}",
+   "expectedText": "message_type {\n             name: \"Test\"\n             field {\n               name: \"value\"\n               number: 1\n               label: LABEL_OPTIONAL\n               type: TYPE_SINT32\n             }\n           }\n           syntax: \"editions\"\n           edition: EDITION_2024"
+  },
+  {
+   "name": "ParseMessageTest.Sint64Edition2024",
+   "helper": "ExpectParsesTo",
+   "input": "edition = \"2024\";\nmessage Test {\n  sint64 value = 1;\n}",
+   "expectedText": "message_type {\n             name: \"Test\"\n             field {\n               name: \"value\"\n               number: 1\n               label: LABEL_OPTIONAL\n               type: TYPE_SINT64\n             }\n           }\n           syntax: \"editions\"\n           edition: EDITION_2024"
+  },
+  {
+   "name": "ParseMessageTest.FieldOptions",
+   "helper": "ExpectParsesTo",
+   "input": "message TestMessage {\n  optional string foo = 1\n      [ctype=CORD, (foo)=7, foo.(.bar.baz).qux.quux.(corge)=-33, \n       (quux)=\"x y\", (baz.qux)=hey];\n}\n",
+   "expectedText": "message_type {  name: \"TestMessage\"  field { name: \"foo\" label: LABEL_OPTIONAL type: TYPE_STRING number: 1          options { uninterpreted_option: { name { name_part: \"ctype\"                                                    is_extension: false }                                             identifier_value: \"CORD\"  }                    uninterpreted_option: { name { name_part: \"foo\"                                                    is_extension: true }                                             positive_int_value: 7  }                    uninterpreted_option: { name { name_part: \"foo\"                                                    is_extension: false }                                             name { name_part: \".bar.baz\"                                                   is_extension: true }                                             name { name_part: \"qux\"                                                    is_extension: false }                                             name { name_part: \"quux\"                                                    is_extension: false }                                             name { name_part: \"corge\"                                                    is_extension: true }                                             negative_int_value: -33 }                    uninterpreted_option: { name { name_part: \"quux\"                                                    is_extension: true }                                             string_value: \"x y\" }                    uninterpreted_option: { name { name_part: \"baz.qux\"                                                    is_extension: true }                                             identifier_value: \"hey\" }          }  }}"
+  },
+  {
+   "name": "ParseMessageTest.FieldOptionsSupportLargeDecimalLiteral",
+   "helper": "ExpectParsesTo",
+   "input": "import \"google/protobuf/descriptor.proto\";\nextend google.protobuf.FieldOptions {\n  optional double f = 10101;\n}\nmessage TestMessage {\n  optional double a = 1 [default = 18446744073709551616];\n  optional double b = 2 [default = -18446744073709551616];\n  optional double c = 3 [(f) = 18446744073709551616];\n  optional double d = 4 [(f) = -18446744073709551616];\n}\n",
+   "expectedText": "dependency: \"google/protobuf/descriptor.proto\"extension {  name: \"f\" label: LABEL_OPTIONAL type: TYPE_DOUBLE number: 10101  extendee: \"google.protobuf.FieldOptions\"}message_type {  name: \"TestMessage\"  field {    name: \"a\" label: LABEL_OPTIONAL type: TYPE_DOUBLE number: 1    default_value: \"1.8446744073709552e+19\"  }  field {    name: \"b\" label: LABEL_OPTIONAL type: TYPE_DOUBLE number: 2    default_value: \"-1.8446744073709552e+19\"  }  field {    name: \"c\" label: LABEL_OPTIONAL type: TYPE_DOUBLE number: 3    options{      uninterpreted_option{        name{ name_part: \"f\" is_extension: true }        double_value: 1.8446744073709552e+19      }    }  }  field {    name: \"d\" label: LABEL_OPTIONAL type: TYPE_DOUBLE number: 4    options{      uninterpreted_option{        name{ name_part: \"f\" is_extension: true }        double_value: -1.8446744073709552e+19      }    }  }}"
+  },
+  {
+   "name": "ParseMessageTest.FieldOptionsSupportInfAndNan",
+   "helper": "ExpectParsesTo",
+   "input": "import \"google/protobuf/descriptor.proto\";\nextend google.protobuf.FieldOptions {\n  optional double f = 10101;\n}\nmessage TestMessage {\n  optional double a = 1 [(f) = inf];\n  optional double b = 2 [(f) = -inf];\n  optional double c = 3 [(f) = nan];\n  optional double d = 4 [(f) = -nan];\n}\n",
+   "expectedText": "dependency: \"google/protobuf/descriptor.proto\"extension {  name: \"f\" label: LABEL_OPTIONAL type: TYPE_DOUBLE number: 10101  extendee: \"google.protobuf.FieldOptions\"}message_type {  name: \"TestMessage\"  field {    name: \"a\" label: LABEL_OPTIONAL type: TYPE_DOUBLE number: 1    options{      uninterpreted_option{        name{ name_part: \"f\" is_extension: true }        identifier_value: \"inf\"      }    }  }  field {    name: \"b\" label: LABEL_OPTIONAL type: TYPE_DOUBLE number: 2    options{      uninterpreted_option{        name{ name_part: \"f\" is_extension: true }        double_value: -infinity      }    }  }  field {    name: \"c\" label: LABEL_OPTIONAL type: TYPE_DOUBLE number: 3    options{      uninterpreted_option{        name{ name_part: \"f\" is_extension: true }        identifier_value: \"nan\"      }    }  }  field {    name: \"d\" label: LABEL_OPTIONAL type: TYPE_DOUBLE number: 4    options{      uninterpreted_option{        name{ name_part: \"f\" is_extension: true }        double_value: nan      }    }  }}"
+  },
+  {
+   "name": "ParseMessageTest.Oneof",
+   "helper": "ExpectParsesTo",
+   "input": "message TestMessage {\n  oneof foo {\n    int32 a = 1;\n    string b = 2;\n    TestMessage c = 3;\n    group D = 4 { optional int32 i = 5; }\n  }\n}\n",
+   "expectedText": "message_type {  name: \"TestMessage\"  field { name:\"a\" label:LABEL_OPTIONAL type:TYPE_INT32 number:1           oneof_index:0 }  field { name:\"b\" label:LABEL_OPTIONAL type:TYPE_STRING number:2           oneof_index:0 }  field { name:\"c\" label:LABEL_OPTIONAL type_name:\"TestMessage\"           number:3 oneof_index:0 }  field { name:\"d\" label:LABEL_OPTIONAL type:TYPE_GROUP           type_name:\"D\" number:4 oneof_index:0 }  oneof_decl {    name: \"foo\"  }  nested_type {    name: \"D\"    field { name:\"i\" label:LABEL_OPTIONAL type:TYPE_INT32 number:5 }  }}"
+  },
+  {
+   "name": "ParseMessageTest.MultipleOneofs",
+   "helper": "ExpectParsesTo",
+   "input": "message TestMessage {\n  oneof foo {\n    int32 a = 1;\n    string b = 2;\n  }\n  oneof bar {\n    int32 c = 3;\n    string d = 4;\n  }\n}\n",
+   "expectedText": "message_type {  name: \"TestMessage\"  field { name:\"a\" label:LABEL_OPTIONAL type:TYPE_INT32 number:1           oneof_index:0 }  field { name:\"b\" label:LABEL_OPTIONAL type:TYPE_STRING number:2           oneof_index:0 }  field { name:\"c\" label:LABEL_OPTIONAL type:TYPE_INT32 number:3           oneof_index:1 }  field { name:\"d\" label:LABEL_OPTIONAL type:TYPE_STRING number:4           oneof_index:1 }  oneof_decl {    name: \"foo\"  }  oneof_decl {    name: \"bar\"  }}"
+  },
+  {
+   "name": "ParseMessageTest.Maps",
+   "helper": "ExpectParsesTo",
+   "input": "message TestMessage {\n  map<int32, string> primitive_type_map = 1;\n  map<KeyType, ValueType> composite_type_map = 2;\n}\n",
+   "expectedText": "message_type {  name: \"TestMessage\"  nested_type {    name: \"PrimitiveTypeMapEntry\"    field {        name: \"key\" number: 1 label:LABEL_OPTIONAL       type:TYPE_INT32    }    field {        name: \"value\" number: 2 label:LABEL_OPTIONAL       type:TYPE_STRING    }    options { map_entry: true }  }  nested_type {    name: \"CompositeTypeMapEntry\"    field {        name: \"key\" number: 1 label:LABEL_OPTIONAL       type_name: \"KeyType\"    }    field {        name: \"value\" number: 2 label:LABEL_OPTIONAL       type_name: \"ValueType\"    }    options { map_entry: true }  }  field {    name: \"primitive_type_map\"    label: LABEL_REPEATED    type_name: \"PrimitiveTypeMapEntry\"    number: 1  }  field {    name: \"composite_type_map\"    label: LABEL_REPEATED    type_name: \"CompositeTypeMapEntry\"    number: 2  }}"
+  },
+  {
+   "name": "ParseMessageTest.Group",
+   "helper": "ExpectParsesTo",
+   "input": "message TestMessage {\n  optional group TestGroup = 1 {};\n}\n",
+   "expectedText": "message_type {  name: \"TestMessage\"  nested_type { name: \"TestGroup\" }  field { name:\"testgroup\" label:LABEL_OPTIONAL number:1          type:TYPE_GROUP type_name: \"TestGroup\" }}"
+  },
+  {
+   "name": "ParseMessageTest.NestedMessage",
+   "helper": "ExpectParsesTo",
+   "input": "message TestMessage {\n  message Nested {}\n  optional Nested test_nested = 1;\n}\n",
+   "expectedText": "message_type {  name: \"TestMessage\"  nested_type {     name: \"Nested\"  }  field { name:\"test_nested\" label:LABEL_OPTIONAL number:1          type_name: \"Nested\" }}"
+  },
+  {
+   "name": "ParseMessageTest.NestedEnum",
+   "helper": "ExpectParsesTo",
+   "input": "message TestMessage {\n  enum NestedEnum {}\n  optional NestedEnum test_enum = 1;\n}\n",
+   "expectedText": "message_type {  name: \"TestMessage\"  enum_type {    name: \"NestedEnum\"  }  field { name:\"test_enum\" label:LABEL_OPTIONAL number:1          type_name: \"NestedEnum\" }}"
+  },
+  {
+   "name": "ParseMessageTest.ReservedRange",
+   "helper": "ExpectParsesTo",
+   "input": "message TestMessage {\n  required int32 foo = 1;\n  reserved 2, 15, 9 to 11, 3, 20 to max;\n}\n",
+   "expectedText": "message_type {  name: \"TestMessage\"  field { name:\"foo\" label:LABEL_REQUIRED type:TYPE_INT32 number:1 }  reserved_range { start:2   end:3         }  reserved_range { start:15  end:16        }  reserved_range { start:9   end:12        }  reserved_range { start:3   end:4         }  reserved_range { start:20  end:536870912 }}"
+  },
+  {
+   "name": "ParseMessageTest.ReservedRangeOnMessageSet",
+   "helper": "ExpectParsesTo",
+   "input": "message TestMessage {\n  option message_set_wire_format = true;\n  reserved 20 to max;\n}\n",
+   "expectedText": "message_type {  name: \"TestMessage\"  options {    uninterpreted_option {      name {        name_part: \"message_set_wire_format\"        is_extension: false      }      identifier_value: \"true\"    }  }  reserved_range { start:20  end:2147483647 }}"
+  },
+  {
+   "name": "ParseMessageTest.ReservedNames",
+   "helper": "ExpectParsesTo",
+   "input": "message TestMessage {\n  reserved \"foo\", \"bar\";\n}\n",
+   "expectedText": "message_type {  name: \"TestMessage\"  reserved_name: \"foo\"  reserved_name: \"bar\"}"
+  },
+  {
+   "name": "ParseMessageTest.ReservedIdentifiers",
+   "helper": "ExpectParsesTo",
+   "input": "edition = \"2023\";\nmessage TestMessage {\n  reserved foo, bar;\n}\n",
+   "expectedText": "syntax: \"editions\" edition: EDITION_2023 message_type {  name: \"TestMessage\"  reserved_name: \"foo\"  reserved_name: \"bar\"}"
+  },
+  {
+   "name": "ParseMessageTest.ExtensionRange",
+   "helper": "ExpectParsesTo",
+   "input": "message TestMessage {\n  extensions 10 to 19;\n  extensions 30 to max;\n}\n",
+   "expectedText": "message_type {  name: \"TestMessage\"  extension_range { start:10 end:20        }  extension_range { start:30 end:536870912 }}"
+  },
+  {
+   "name": "ParseMessageTest.ExtensionRangeWithOptions",
+   "helper": "ExpectParsesTo",
+   "input": "message TestMessage {\n  extensions 10 to 19 [(i) = 5];\n}\n",
+   "expectedText": "message_type {  name: \"TestMessage\"  extension_range {    start:10    end:20    options {      uninterpreted_option {        name {          name_part: \"i\"          is_extension: true        }        positive_int_value: 5      }    }  }}"
+  },
+  {
+   "name": "ParseMessageTest.CompoundExtensionRange",
+   "helper": "ExpectParsesTo",
+   "input": "message TestMessage {\n  extensions 2, 15, 9 to 11, 100 to max, 3;\n}\n",
+   "expectedText": "message_type {  name: \"TestMessage\"  extension_range { start:2   end:3         }  extension_range { start:15  end:16        }  extension_range { start:9   end:12        }  extension_range { start:100 end:536870912 }  extension_range { start:3   end:4         }}"
+  },
+  {
+   "name": "ParseMessageTest.CompoundExtensionRangeWithOptions",
+   "helper": "ExpectParsesTo",
+   "input": "message TestMessage {\n  extensions 2, 15, 9 to 11, 100 to max, 3 [(i) = 5];\n}\n",
+   "expectedText": "message_type {  name: \"TestMessage\"  extension_range {    start:2    end:3    options {      uninterpreted_option {        name {          name_part: \"i\"          is_extension: true        }        positive_int_value: 5      }    }  }  extension_range {    start:15    end:16    options {      uninterpreted_option {        name {          name_part: \"i\"          is_extension: true        }        positive_int_value: 5      }    }  }  extension_range {    start:9    end:12    options {      uninterpreted_option {        name {          name_part: \"i\"          is_extension: true        }        positive_int_value: 5      }    }  }  extension_range {    start:100    end:536870912    options {      uninterpreted_option {        name {          name_part: \"i\"          is_extension: true        }        positive_int_value: 5      }    }  }  extension_range {    start:3    end:4    options {      uninterpreted_option {        name {          name_part: \"i\"          is_extension: true        }        positive_int_value: 5      }    }  }}"
+  },
+  {
+   "name": "ParseMessageTest.LargerMaxForMessageSetWireFormatMessages",
+   "helper": "ExpectParsesTo",
+   "input": "message TestMessage {\n  extensions 4 to max;\n  option message_set_wire_format = true;\n}\n",
+   "expectedText": "message_type {  name: \"TestMessage\"    extension_range { start:4 end: 0x7fffffff }  options {\n    uninterpreted_option { \n      name {\n        name_part: \"message_set_wire_format\"\n        is_extension: false\n      }\n      identifier_value: \"true\"\n    }\n  }\n}"
+  },
+  {
+   "name": "ParseMessageTest.Extensions",
+   "helper": "ExpectParsesTo",
+   "input": "extend Extendee1 { optional int32 foo = 12; }\nextend Extendee2 { repeated TestMessage bar = 22; }\n",
+   "expectedText": "extension { name:\"foo\" label:LABEL_OPTIONAL type:TYPE_INT32 number:12            extendee: \"Extendee1\" } extension { name:\"bar\" label:LABEL_REPEATED number:22            type_name:\"TestMessage\" extendee: \"Extendee2\" }"
+  },
+  {
+   "name": "ParseMessageTest.ExtensionsInMessageScope",
+   "helper": "ExpectParsesTo",
+   "input": "message TestMessage {\n  extend Extendee1 { optional int32 foo = 12; }\n  extend Extendee2 { repeated TestMessage bar = 22; }\n}\n",
+   "expectedText": "message_type {  name: \"TestMessage\"  extension { name:\"foo\" label:LABEL_OPTIONAL type:TYPE_INT32 number:12              extendee: \"Extendee1\" }  extension { name:\"bar\" label:LABEL_REPEATED number:22              type_name:\"TestMessage\" extendee: \"Extendee2\" }}"
+  },
+  {
+   "name": "ParseMessageTest.MultipleExtensionsOneExtendee",
+   "helper": "ExpectParsesTo",
+   "input": "extend Extendee1 {\n  optional int32 foo = 12;\n  repeated TestMessage bar = 22;\n}\n",
+   "expectedText": "extension { name:\"foo\" label:LABEL_OPTIONAL type:TYPE_INT32 number:12            extendee: \"Extendee1\" } extension { name:\"bar\" label:LABEL_REPEATED number:22            type_name:\"TestMessage\" extendee: \"Extendee1\" }"
+  },
+  {
+   "name": "ParseMessageTest.OptionalLabelProto3",
+   "helper": "ExpectParsesTo",
+   "input": "syntax = \"proto3\";\nmessage TestMessage {\n  int32 foo = 1;\n}\n",
+   "expectedText": "syntax: \"proto3\" message_type {  name: \"TestMessage\"  field { name:\"foo\" label:LABEL_OPTIONAL type:TYPE_INT32 number:1 } }"
+  },
+  {
+   "name": "ParseMessageTest.ExplicitOptionalLabelProto3",
+   "helper": "ExpectParsesTo",
+   "input": "syntax = 'proto3';\nmessage TestMessage {\n  optional int32 foo = 1;\n}\n",
+   "expectedText": "syntax: \"proto3\" message_type {  name: \"TestMessage\"  field { name:\"foo\" label:LABEL_OPTIONAL type:TYPE_INT32 number:1           proto3_optional: true oneof_index: 0 }   oneof_decl { name:\"_foo\" } }"
+  },
+  {
+   "name": "ParseMessageTest.ExplicitOptionalLabelProto3",
+   "helper": "ExpectParsesTo",
+   "input": "syntax = 'proto3';\nmessage TestMessage {\n  optional int32 foo = 1;\n  oneof _foo {\n    int32 __foo = 2;\n  }\n}\n",
+   "expectedText": "syntax: \"proto3\" message_type {  name: \"TestMessage\"  field { name:\"foo\" label:LABEL_OPTIONAL type:TYPE_INT32 number:1           proto3_optional: true oneof_index: 1 }   field { name:\"__foo\" label:LABEL_OPTIONAL type:TYPE_INT32 number:2           oneof_index: 0 }   oneof_decl { name:\"_foo\" }   oneof_decl { name:\"X_foo\" } }"
+  },
+  {
+   "name": "ParseEnumTest.SimpleEnum",
+   "helper": "ExpectParsesTo",
+   "input": "enum TestEnum {\n  FOO = 0;\n}\n",
+   "expectedText": "enum_type {  name: \"TestEnum\"  value { name:\"FOO\" number:0 }}"
+  },
+  {
+   "name": "ParseEnumTest.Values",
+   "helper": "ExpectParsesTo",
+   "input": "enum TestEnum {\n  FOO = 13;\n  BAR = -10;\n  BAZ = 500;\n  HEX_MAX = 0x7FFFFFFF;\n  HEX_MIN = -0x80000000;\n  INT_MAX = 2147483647;\n  INT_MIN = -2147483648;\n}\n",
+   "expectedText": "enum_type {  name: \"TestEnum\"  value { name:\"FOO\" number:13 }  value { name:\"BAR\" number:-10 }  value { name:\"BAZ\" number:500 }  value { name:\"HEX_MAX\" number:2147483647 }  value { name:\"HEX_MIN\" number:-2147483648 }  value { name:\"INT_MAX\" number:2147483647 }  value { name:\"INT_MIN\" number:-2147483648 }}"
+  },
+  {
+   "name": "ParseEnumTest.ValueOptions",
+   "helper": "ExpectParsesTo",
+   "input": "enum TestEnum {\n  FOO = 13;\n  BAR = -10 [ (something.text) = 'abc' ];\n  BAZ = 500 [ (something.text) = 'def', other = 1 ];\n}\n",
+   "expectedText": "enum_type {  name: \"TestEnum\"  value { name: \"FOO\" number: 13 }  value { name: \"BAR\" number: -10     options {       uninterpreted_option {         name { name_part: \"something.text\" is_extension: true }         string_value: \"abc\"       }     }   }   value { name: \"BAZ\" number: 500     options {       uninterpreted_option {         name { name_part: \"something.text\" is_extension: true }         string_value: \"def\"       }       uninterpreted_option {         name { name_part: \"other\" is_extension: false }         positive_int_value: 1       }     }   } }"
+  },
+  {
+   "name": "ParseEnumTest.ReservedRange",
+   "helper": "ExpectParsesTo",
+   "input": "enum TestEnum {\n  FOO = 0;\n  reserved -2147483648, -6 to -4, -1 to 1, 2, 15, 9 to 11, 3, 20 to max;\n}\n",
+   "expectedText": "enum_type {  name: \"TestEnum\"  value { name:\"FOO\" number:0 }  reserved_range { start:-2147483648  end:-2147483648 }  reserved_range { start:-6           end:-4          }  reserved_range { start:-1           end:1           }  reserved_range { start:2            end:2           }  reserved_range { start:15           end:15          }  reserved_range { start:9            end:11          }  reserved_range { start:3            end:3           }  reserved_range { start:20           end:2147483647  }}"
+  },
+  {
+   "name": "ParseEnumTest.ReservedNames",
+   "helper": "ExpectParsesTo",
+   "input": "enum TestEnum {\n  FOO = 0;\n  reserved \"foo\", \"bar\";\n}\n",
+   "expectedText": "enum_type {  name: \"TestEnum\"  value { name:\"FOO\" number:0 }  reserved_name: \"foo\"  reserved_name: \"bar\"}"
+  },
+  {
+   "name": "ParseEnumTest.ReservedIdentifiers",
+   "helper": "ExpectParsesTo",
+   "input": "edition = \"2023\";\nenum TestEnum {\n  FOO = 0;\n  reserved foo, bar;\n}\n",
+   "expectedText": "syntax: \"editions\" edition: EDITION_2023 enum_type {  name: \"TestEnum\"  value { name:\"FOO\" number:0 }  reserved_name: \"foo\"  reserved_name: \"bar\"}"
+  },
+  {
+   "name": "ParseServiceTest.SimpleService",
+   "helper": "ExpectParsesTo",
+   "input": "service TestService {\n  rpc Foo(In) returns (Out);\n}\n",
+   "expectedText": "service {  name: \"TestService\"  method { name:\"Foo\" input_type:\"In\" output_type:\"Out\" }}"
+  },
+  {
+   "name": "ParseServiceTest.MethodsAndStreams",
+   "helper": "ExpectParsesTo",
+   "input": "service TestService {\n  rpc Foo(In1) returns (Out1);\n  rpc Bar(In2) returns (Out2);\n  rpc Baz(In3) returns (Out3);\n}\n",
+   "expectedText": "service {  name: \"TestService\"  method { name:\"Foo\" input_type:\"In1\" output_type:\"Out1\" }  method { name:\"Bar\" input_type:\"In2\" output_type:\"Out2\" }  method { name:\"Baz\" input_type:\"In3\" output_type:\"Out3\" }}"
+  },
+  {
+   "name": "ParseImportTest.ParseImport",
+   "helper": "ExpectParsesTo",
+   "input": "import \"foo/bar/baz.proto\";\n",
+   "expectedText": "dependency: \"foo/bar/baz.proto\""
+  },
+  {
+   "name": "ParseImportTest.ParseMultipleImports",
+   "helper": "ExpectParsesTo",
+   "input": "import \"foo.proto\";\nimport \"bar.proto\";\nimport \"baz.proto\";\n",
+   "expectedText": "dependency: \"foo.proto\"dependency: \"bar.proto\"dependency: \"baz.proto\""
+  },
+  {
+   "name": "ParseImportTest.ParsePublicImports",
+   "helper": "ExpectParsesTo",
+   "input": "import \"foo.proto\";\nimport public \"bar.proto\";\nimport \"baz.proto\";\nimport public \"qux.proto\";\n",
+   "expectedText": "dependency: \"foo.proto\"dependency: \"bar.proto\"dependency: \"baz.proto\"dependency: \"qux.proto\"public_dependency: 1 public_dependency: 3 "
+  },
+  {
+   "name": "ParseImportTest.ParseOptionImports",
+   "helper": "ExpectParsesTo",
+   "input": "\n        edition = \"2024\";\n        import \"foo.proto\";\n        import \"bar.proto\";\n        import option \"baz.proto\";\n        import option \"qux.proto\";\n      ",
+   "expectedText": "\n        syntax: \"editions\"\n        edition: EDITION_2024\n        dependency: \"foo.proto\"\n        dependency: \"bar.proto\"\n        option_dependency: \"baz.proto\"\n        option_dependency: \"qux.proto\"\n      "
+  },
+  {
+   "name": "ParseImportTest.ParseOptionAndPublicImports",
+   "helper": "ExpectParsesTo",
+   "input": "\n        edition = \"2024\";\n        import \"foo.proto\";\n        import public \"bar.proto\";\n        import option \"baz.proto\";\n        import option \"qux.proto\";\n      ",
+   "expectedText": "\n        syntax: \"editions\"\n        edition: EDITION_2024\n        dependency: \"foo.proto\"\n        dependency: \"bar.proto\"\n        public_dependency: 1\n        option_dependency: \"baz.proto\"\n        option_dependency: \"qux.proto\"\n      "
+  },
+  {
+   "name": "ParseMiscTest.ParsePackage",
+   "helper": "ExpectParsesTo",
+   "input": "package foo.bar.baz;\n",
+   "expectedText": "package: \"foo.bar.baz\""
+  },
+  {
+   "name": "ParseMiscTest.ParsePackageWithSpaces",
+   "helper": "ExpectParsesTo",
+   "input": "package foo   .   bar.  \n  baz;\n",
+   "expectedText": "package: \"foo.bar.baz\""
+  },
+  {
+   "name": "ParseMiscTest.ParseFileOptions",
+   "helper": "ExpectParsesTo",
+   "input": "option java_package = \"com.google.foo\";\noption optimize_for = CODE_SIZE;",
+   "expectedText": "options {uninterpreted_option { name { name_part: \"java_package\"                               is_extension: false }                       string_value: \"com.google.foo\"} uninterpreted_option { name { name_part: \"optimize_for\"                               is_extension: false }                       identifier_value: \"CODE_SIZE\" } }"
+  },
+  {
+   "name": "ParserValidationErrorTest.ImportOptionUnloadedNoError",
+   "helper": "ExpectParsesTo",
+   "input": "\n        edition = \"2024\";\n        package test;\n\n        import option \"unloaded.proto\";\n        option (file_opt1) = 1;\n      ",
+   "expectedText": "\n        syntax: \"editions\"\n        edition: EDITION_2024\n        option_dependency: \"unloaded.proto\"\n        package: \"test\"\n        options {\n          uninterpreted_option {\n            name { name_part: \"file_opt1\" is_extension: true }\n            positive_int_value: 1\n          }\n        }\n      "
+  },
+  {
+   "name": "ParserValidationErrorTest.Proto2JsonConflictError",
+   "helper": "ExpectParsesTo",
+   "input": "syntax = 'proto2';\nmessage TestMessage {\n  optional uint32 _foo = 1;\n  optional uint32 Foo = 2;\n}\n",
+   "expectedText": "syntax: 'proto2'\nmessage_type {\n  name: 'TestMessage'\n  field {\n    label: LABEL_OPTIONAL type: TYPE_UINT32 name: '_foo' number: 1\n  }\n  field {\n    label: LABEL_OPTIONAL type: TYPE_UINT32 name: 'Foo' number: 2\n  }\n}\n"
+  },
+  {
+   "name": "ParserValidationErrorTest.Proto2CustomJsonConflictWithDefaultError",
+   "helper": "ExpectParsesTo",
+   "input": "syntax = 'proto2';\nmessage TestMessage {\n  optional uint32 foo = 1 [json_name='bar'];\n  optional uint32 bar = 2;\n}\n",
+   "expectedText": "syntax: 'proto2'\nmessage_type {\n  name: 'TestMessage'\n  field {\n    label: LABEL_OPTIONAL type: TYPE_UINT32 name: 'foo' number: 1 json_name: 'bar'\n  }\n  field {\n    label: LABEL_OPTIONAL type: TYPE_UINT32 name: 'bar' number: 2\n  }\n}\n"
+  },
+  {
+   "name": "ParserValidationErrorTest.Proto3JsonConflictLegacy",
+   "helper": "ExpectParsesTo",
+   "input": "syntax = 'proto3';\nmessage TestMessage {\n  option deprecated_legacy_json_field_conflicts = true;\n  uint32 fooBar = 1;\n  uint32 foo_bar = 2;\n}\n",
+   "expectedText": "syntax: 'proto3'\nmessage_type {\n  name: 'TestMessage'\n  field {\n    label: LABEL_OPTIONAL type: TYPE_UINT32 name: 'fooBar' number: 1\n  }\n  field {\n    label: LABEL_OPTIONAL type: TYPE_UINT32 name: 'foo_bar' number: 2\n  }\n  options {\n    uninterpreted_option {\n      name {\n        name_part: 'deprecated_legacy_json_field_conflicts'\n        is_extension: false\n      }\n      identifier_value: 'true'\n    }\n  }\n}\n"
+  },
+  {
+   "name": "ParserValidationErrorTest.Proto2JsonConflictLegacy",
+   "helper": "ExpectParsesTo",
+   "input": "syntax = 'proto2';\nmessage TestMessage {\n  option deprecated_legacy_json_field_conflicts = true;\n  optional uint32 fooBar = 1;\n  optional uint32 foo_bar = 2;\n}\n",
+   "expectedText": "syntax: 'proto2'\nmessage_type {\n  name: 'TestMessage'\n  field {\n    label: LABEL_OPTIONAL type: TYPE_UINT32 name: 'fooBar' number: 1\n  }\n  field {\n    label: LABEL_OPTIONAL type: TYPE_UINT32 name: 'foo_bar' number: 2\n  }\n  options {\n    uninterpreted_option {\n      name {\n        name_part: 'deprecated_legacy_json_field_conflicts'\n        is_extension: false\n      }\n      identifier_value: 'true'\n    }\n  }\n}\n"
+  },
+  {
+   "name": "ParseEditionsTest.Editions",
+   "helper": "ExpectParsesTo",
+   "input": "\n        edition = \"2023\";\n        message A {\n          int32 b = 1;\n        }",
+   "expectedText": "message_type \t {  name: \"A\"  field {    name: \"b\"    number: 1    label: LABEL_OPTIONAL    type: TYPE_INT32  }}syntax: \"editions\"edition: EDITION_2023\n"
+  },
+  {
+   "name": "ParseEditionsTest.TestEdition",
+   "helper": "ExpectParsesTo",
+   "input": "\n        edition = \"99998_TEST_ONLY\";\n      ",
+   "expectedText": "syntax: \"editions\"edition: EDITION_99998_TEST_ONLY\n"
+  },
+  {
+   "name": "ParseEditionsTest.ExtensionsParse",
+   "helper": "ExpectParsesTo",
+   "input": "\n        edition = '2023';\n        message Foo {\n          extensions 100 to 199;\n        }\n        extend Foo { string foo = 101; }",
+   "expectedText": "message_type \t {  name: \"Foo\"  extension_range {    start: 100    end: 200  }}extension {  name: \"foo\"  extendee: \"Foo\"  number: 101  label: LABEL_OPTIONAL  type: TYPE_STRING}syntax: \"editions\"edition: EDITION_2023\n"
+  },
+  {
+   "name": "ParseEditionsTest.MapFeatures",
+   "helper": "ExpectParsesTo",
+   "input": "\n        edition = '2023';\n        message Foo {\n          map<string, int> map_field = 1 [\n            features.my_feature = SOMETHING\n          ];\n        }",
+   "expectedText": "message_type {\n             name: \"Foo\"\n             field {\n               name: \"map_field\"\n               number: 1\n               label: LABEL_REPEATED\n               type_name: \"MapFieldEntry\"\n               options {\n                 uninterpreted_option {\n                   name { name_part: \"features\" is_extension: false }\n                   name { name_part: \"my_feature\" is_extension: false }\n                   identifier_value: \"SOMETHING\"\n                 }\n               }\n             }\n             nested_type {\n               name: \"MapFieldEntry\"\n               field {\n                 name: \"key\"\n                 number: 1\n                 label: LABEL_OPTIONAL\n                 type: TYPE_STRING\n                 options {\n                   uninterpreted_option {\n                     name { name_part: \"features\" is_extension: false }\n                     name { name_part: \"my_feature\" is_extension: false }\n                     identifier_value: \"SOMETHING\"\n                   }\n                 }\n               }\n               field {\n                 name: \"value\"\n                 number: 2\n                 label: LABEL_OPTIONAL\n                 type_name: \"int\"\n                 options {\n                   uninterpreted_option {\n                     name { name_part: \"features\" is_extension: false }\n                     name { name_part: \"my_feature\" is_extension: false }\n                     identifier_value: \"SOMETHING\"\n                   }\n                 }\n               }\n               options { map_entry: true }\n             }\n           }\n           syntax: \"editions\"\n           edition: EDITION_2023"
+  },
+  {
+   "name": "ParseVisibilityTest.Edition2024NonStrictExportMessage",
+   "helper": "ExpectParsesTo",
+   "input": "\n        edition = \"2024\";\n        export message A {\n          local enum NestedEnum {\n            A_VAL = 0;\n          }\n          export message NestedMessage {\n          }\n        }",
+   "expectedText": "message_type {\n             name: \"A\"\n             enum_type {\n               name: \"NestedEnum\"\n               value { name: \"A_VAL\" number: 0 }\n               visibility: VISIBILITY_LOCAL\n             }\n             nested_type { name: \"NestedMessage\" visibility: VISIBILITY_EXPORT }\n             visibility: VISIBILITY_EXPORT\n           }\n           syntax: \"editions\"\n           edition: EDITION_2024\n      "
+  },
+  {
+   "name": "ParseVisibilityTest.Edition2024NonStrictLocalMessage",
+   "helper": "ExpectParsesTo",
+   "input": "\n        edition = \"2024\";\n        local message B {\n          export enum NestedEnum {\n            B_VAL = 0;\n          }\n          local message NestedMessage {\n          }\n        }\n        ",
+   "expectedText": "message_type {\n             name: \"B\"\n             enum_type {\n               name: \"NestedEnum\"\n               value { name: \"B_VAL\" number: 0 }\n               visibility: VISIBILITY_EXPORT\n             }\n             nested_type { name: \"NestedMessage\" visibility: VISIBILITY_LOCAL }\n             visibility: VISIBILITY_LOCAL\n           }\n           syntax: \"editions\"\n           edition: EDITION_2024\n      "
+  },
+  {
+   "name": "ParseVisibilityTest.Edition2024NonStrictExportEnum",
+   "helper": "ExpectParsesTo",
+   "input": "\n        edition = \"2024\";\n        export enum C {\n          C_VAL = 0;\n        }\n        ",
+   "expectedText": "enum_type {\n             name: \"C\"\n             visibility: VISIBILITY_EXPORT\n             value { name: \"C_VAL\" number: 0 }\n           }\n           syntax: \"editions\"\n           edition: EDITION_2024\n      "
+  },
+  {
+   "name": "ParseVisibilityTest.Edition2024NonStrictLocalEnum",
+   "helper": "ExpectParsesTo",
+   "input": "\n        edition = \"2024\";\n        local enum D {\n          D_VAL = 0;\n        }\n        ",
+   "expectedText": "enum_type {\n             name: \"D\"\n             visibility: VISIBILITY_LOCAL\n             value { name: \"D_VAL\" number: 0 }\n           }\n           syntax: \"editions\"\n           edition: EDITION_2024\n      "
+  },
+  {
+   "name": "ParseVisibilityTest.Edition2023NestedKeywordName",
+   "helper": "ExpectParsesTo",
+   "input": "\n        edition = \"2023\";\n        message MySimpleMessage {\n          local.pkg_name.SomeMessage msg = 1;\n          export.other_pkg_name.SomeMessage other_msg = 2;\n        }\n        ",
+   "expectedText": "\n        message_type {\n          name: \"MySimpleMessage\"\n          field {\n            name: \"msg\"\n            number: 1\n            label: LABEL_OPTIONAL\n            type_name: \"local.pkg_name.SomeMessage\"\n          }\n          field {\n            name: \"other_msg\"\n            number: 2\n            label: LABEL_OPTIONAL\n            type_name: \"export.other_pkg_name.SomeMessage\"\n          }\n        }\n        syntax: \"editions\"\n        edition: EDITION_2023\n      "
+  },
+  {
+   "name": "ParseVisibilityTest.Edition2024NestedKeywordName",
+   "helper": "ExpectParsesTo",
+   "input": "\n        edition = \"2024\";\n        message MySimpleMessage {\n          .local.pkg_name.SomeMessage msg = 1;\n          .export.other_pkg_name.SomeMessage other_msg = 2;\n        }\n        ",
+   "expectedText": "\n        message_type {\n          name: \"MySimpleMessage\"\n          field {\n            name: \"msg\"\n            number: 1\n            label: LABEL_OPTIONAL\n            type_name: \".local.pkg_name.SomeMessage\"\n          }\n          field {\n            name: \"other_msg\"\n            number: 2\n            label: LABEL_OPTIONAL\n            type_name: \".export.other_pkg_name.SomeMessage\"\n          }\n        }\n        syntax: \"editions\"\n        edition: EDITION_2024\n      "
+  }
+ ],
+ "invalid": [
+  {
+   "name": "ParseMessageTest.MaxIntExtensionDoesNotOverflow",
+   "helper": "ExpectHasErrors",
+   "input": "\n        syntax = \"proto2\";\n        message TestMessage {\n          extensions 2147483647;\n        }\n      ",
+   "error": "3:31: Field number out of bounds.\n"
+  },
+  {
+   "name": "ParseMessageTest.MaxIntExtensionDoesNotOverflow",
+   "helper": "ExpectHasErrors",
+   "input": "\n        syntax = \"proto2\";\n        message TestMessage {\n          extensions 1 to 2147483647;\n        }\n      ",
+   "error": "3:36: Field number out of bounds.\n"
+  },
+  {
+   "name": "ParseMessageTest.MaxIntExtensionDoesNotOverflow",
+   "helper": "ExpectHasErrors",
+   "input": "\n        syntax = \"proto2\";\n        message TestMessage {\n          extensions 2147483647 to 2147483647;\n        }\n      ",
+   "error": "3:32: Field number out of bounds.\n"
+  },
+  {
+   "name": "ParseImportTest.ParseOptionImportBeforeImportBadOrder",
+   "helper": "ExpectHasErrors",
+   "input": "\n        edition = \"2024\";\n        import option \"baz.proto\";\n        import \"foo.proto\";\n      ",
+   "error": "3:15: imports should precede any option imports to ensure proto files can roundtrip.\n"
+  },
+  {
+   "name": "ParseImportTest.ParseOptionImportBeforePublicImportBadOrder",
+   "helper": "ExpectHasErrors",
+   "input": "\n        edition = \"2024\";\n        import option \"baz.proto\";\n        import public \"bar.proto\";\n      ",
+   "error": "3:15: imports should precede any option imports to ensure proto files can roundtrip.\n"
+  },
+  {
+   "name": "ParseImportTest.ParseOptionImportBeforeMultipleImportsBadOrder",
+   "helper": "ExpectHasErrors",
+   "input": "\n        edition = \"2024\";\n        import option \"baz.proto\";\n        import \"foo.proto\";\n        import public \"bar.proto\";\n      ",
+   "error": "3:15: imports should precede any option imports to ensure proto files can roundtrip.\n4:15: imports should precede any option imports to ensure proto files can roundtrip.\n"
+  },
+  {
+   "name": "ParseErrorTest.SimpleSyntaxError",
+   "helper": "ExpectHasErrors",
+   "input": "message TestMessage @#$ { blah }",
+   "error": "0:20: Expected \"{\".\n"
+  },
+  {
+   "name": "ParseErrorTest.ExpectedTopLevel",
+   "helper": "ExpectHasErrors",
+   "input": "blah;",
+   "error": "0:0: Expected top-level statement (e.g. \"message\").\n"
+  },
+  {
+   "name": "ParseErrorTest.UnmatchedCloseBrace",
+   "helper": "ExpectHasErrors",
+   "input": "}",
+   "error": "0:0: Expected top-level statement (e.g. \"message\").\n0:0: Unmatched \"}\".\n"
+  },
+  {
+   "name": "ParseErrorTest.MessageMissingName",
+   "helper": "ExpectHasErrors",
+   "input": "message {}",
+   "error": "0:8: Expected message name.\n"
+  },
+  {
+   "name": "ParseErrorTest.MessageMissingBody",
+   "helper": "ExpectHasErrors",
+   "input": "message TestMessage;",
+   "error": "0:19: Expected \"{\".\n"
+  },
+  {
+   "name": "ParseErrorTest.EofInMessage",
+   "helper": "ExpectHasErrors",
+   "input": "message TestMessage {",
+   "error": "0:21: Reached end of input in message definition (missing '}').\n"
+  },
+  {
+   "name": "ParseErrorTest.MissingFieldNumber",
+   "helper": "ExpectHasErrors",
+   "input": "message TestMessage {\n  optional int32 foo;\n}\n",
+   "error": "1:20: Missing field number.\n"
+  },
+  {
+   "name": "ParseErrorTest.ExpectedFieldNumber",
+   "helper": "ExpectHasErrors",
+   "input": "message TestMessage {\n  optional int32 foo = ;\n}\n",
+   "error": "1:23: Expected field number.\n"
+  },
+  {
+   "name": "ParseErrorTest.FieldNumberOutOfRange",
+   "helper": "ExpectHasErrors",
+   "input": "message TestMessage {\n  optional int32 foo = 0x100000000;\n}\n",
+   "error": "1:23: Integer out of range.\n"
+  },
+  {
+   "name": "ParseErrorTest.MissingLabel",
+   "helper": "ExpectHasErrors",
+   "input": "message TestMessage {\n  int32 foo = 1;\n}\n",
+   "error": "1:2: Expected \"required\", \"optional\", or \"repeated\".\n"
+  },
+  {
+   "name": "ParseErrorTest.ExpectedOptionName",
+   "helper": "ExpectHasErrors",
+   "input": "message TestMessage {\n  optional uint32 foo = 1 [];\n}\n",
+   "error": "1:27: Expected identifier.\n"
+  },
+  {
+   "name": "ParseErrorTest.NonExtensionOptionNameBeginningWithDot",
+   "helper": "ExpectHasErrors",
+   "input": "message TestMessage {\n  optional uint32 foo = 1 [.foo=1];\n}\n",
+   "error": "1:27: Expected identifier.\n"
+  },
+  {
+   "name": "ParseErrorTest.DefaultValueTypeMismatch",
+   "helper": "ExpectHasErrors",
+   "input": "message TestMessage {\n  optional uint32 foo = 1 [default=true];\n}\n",
+   "error": "1:35: Expected integer for field default value.\n"
+  },
+  {
+   "name": "ParseErrorTest.DefaultValueNotBoolean",
+   "helper": "ExpectHasErrors",
+   "input": "message TestMessage {\n  optional bool foo = 1 [default=blah];\n}\n",
+   "error": "1:33: Expected \"true\" or \"false\".\n"
+  },
+  {
+   "name": "ParseErrorTest.DefaultValueNotString",
+   "helper": "ExpectHasErrors",
+   "input": "message TestMessage {\n  optional string foo = 1 [default=1];\n}\n",
+   "error": "1:35: Expected string for field default value.\n"
+  },
+  {
+   "name": "ParseErrorTest.DefaultValueUnsignedNegative",
+   "helper": "ExpectHasErrors",
+   "input": "message TestMessage {\n  optional uint32 foo = 1 [default=-1];\n}\n",
+   "error": "1:36: Unsigned field can't have negative default value.\n"
+  },
+  {
+   "name": "ParseErrorTest.DefaultValueTooLarge",
+   "helper": "ExpectHasErrors",
+   "input": "message TestMessage {\n  optional int32  foo = 1 [default= 0x80000000];\n  optional int32  foo = 1 [default=-0x80000001];\n  optional uint32 foo = 1 [default= 0x100000000];\n  optional int64  foo = 1 [default= 0x80000000000000000];\n  optional int64  foo = 1 [default=-0x80000000000000001];\n  optional uint64 foo = 1 [default= 0x100000000000000000];\n}\n",
+   "error": "1:36: Integer out of range.\n2:36: Integer out of range.\n3:36: Integer out of range.\n4:36: Integer out of range.\n5:36: Integer out of range.\n6:36: Integer out of range.\n"
+  },
+  {
+   "name": "ParseErrorTest.JsonNameNotString",
+   "helper": "ExpectHasErrors",
+   "input": "message TestMessage {\n  optional string foo = 1 [json_name=1];\n}\n",
+   "error": "1:37: Expected string for JSON name.\n"
+  },
+  {
+   "name": "ParseErrorTest.DuplicateJsonName",
+   "helper": "ExpectHasErrors",
+   "input": "message TestMessage {\n  optional uint32 foo = 1 [json_name=\"a\",json_name=\"b\"];\n}\n",
+   "error": "1:41: Already set option \"json_name\".\n"
+  },
+  {
+   "name": "ParseErrorTest.MsgReservedIdentifierOnlyInEditions",
+   "helper": "ExpectHasErrors",
+   "input": "message TestMessage {\n  reserved foo, bar;\n}\n",
+   "error": "1:11: Reserved names must be string literals. (Only editions supports identifiers.)\n"
+  },
+  {
+   "name": "ParseErrorTest.MsgReservedNameStringNotInEditions",
+   "helper": "ExpectHasErrors",
+   "input": "edition = \"2023\";\nmessage TestMessage {\n  reserved \"foo\", \"bar\";\n}\n",
+   "error": "2:11: Reserved names must be identifiers in editions, not string literals.\n"
+  },
+  {
+   "name": "ParseErrorTest.EnumReservedIdentifierOnlyInEditions",
+   "helper": "ExpectHasErrors",
+   "input": "enum TestEnum {\n  FOO = 0;\n  reserved foo, bar;\n}\n",
+   "error": "2:11: Reserved names must be string literals. (Only editions supports identifiers.)\n"
+  },
+  {
+   "name": "ParseErrorTest.EnumReservedNameStringNotInEditions",
+   "helper": "ExpectHasErrors",
+   "input": "edition = \"2023\";\nenum TestEnum {\n  FOO = 0;\n  reserved \"foo\", \"bar\";\n}\n",
+   "error": "3:11: Reserved names must be identifiers in editions, not string literals.\n"
+  },
+  {
+   "name": "ParseErrorTest.EnumValueOutOfRange",
+   "helper": "ExpectHasErrors",
+   "input": "enum TestEnum {\n  HEX_TOO_BIG   =  0x80000000;\n  HEX_TOO_SMALL = -0x80000001;\n  INT_TOO_BIG   =  2147483648;\n  INT_TOO_SMALL = -2147483649;\n}\n",
+   "error": "1:19: Integer out of range.\n2:19: Integer out of range.\n3:19: Integer out of range.\n4:19: Integer out of range.\n"
+  },
+  {
+   "name": "ParseErrorTest.EnumAllowAliasFalse",
+   "helper": "ExpectHasErrors",
+   "input": "enum Foo {\n  option allow_alias = false;\n  BAR = 1;\n  BAZ = 2;\n}\n",
+   "error": "5:0: \"Foo\" declares 'option allow_alias = false;' which has no effect. Please remove the declaration.\n"
+  },
+  {
+   "name": "ParseErrorTest.UnnecessaryEnumAllowAlias",
+   "helper": "ExpectHasErrors",
+   "input": "enum Foo {\n  option allow_alias = true;\n  BAR = 1;\n  BAZ = 2;\n}\n",
+   "error": "5:0: \"Foo\" declares support for enum aliases but no enum values share field numbers. Please remove the unnecessary 'option allow_alias = true;' declaration.\n"
+  },
+  {
+   "name": "ParseErrorTest.DefaultValueMissing",
+   "helper": "ExpectHasErrors",
+   "input": "message TestMessage {\n  optional uint32 foo = 1 [default=];\n}\n",
+   "error": "1:35: Expected integer for field default value.\n"
+  },
+  {
+   "name": "ParseErrorTest.DefaultValueForGroup",
+   "helper": "ExpectHasErrors",
+   "input": "message TestMessage {\n  optional group Foo = 1 [default=blah] {}\n}\n",
+   "error": "1:34: Messages can't have default values.\n"
+  },
+  {
+   "name": "ParseErrorTest.DuplicateDefaultValue",
+   "helper": "ExpectHasErrors",
+   "input": "message TestMessage {\n  optional uint32 foo = 1 [default=1,default=2];\n}\n",
+   "error": "1:37: Already set option \"default\".\n"
+  },
+  {
+   "name": "ParseErrorTest.MissingOneofName",
+   "helper": "ExpectHasErrors",
+   "input": "message TestMessage {\n  oneof {\n    int32 bar = 1;\n  }\n}\n",
+   "error": "1:8: Expected oneof name.\n"
+  },
+  {
+   "name": "ParseErrorTest.LabelInOneof",
+   "helper": "ExpectHasErrors",
+   "input": "message TestMessage {\n  oneof foo {\n    optional int32 bar = 1;\n  }\n}\n",
+   "error": "2:4: Fields in oneofs must not have labels (required / optional / repeated).\n"
+  },
+  {
+   "name": "ParseErrorTest.MapInOneof",
+   "helper": "ExpectHasErrors",
+   "input": "message TestMessage {\n  oneof foo {\n    map<int32, int32> foo_map = 1;\n    map message_field = 2;\n  }\n}\n",
+   "error": "2:7: Map fields are not allowed in oneofs.\n"
+  },
+  {
+   "name": "ParseErrorTest.LabelForMap",
+   "helper": "ExpectHasErrors",
+   "input": "message TestMessage {\n  optional map<int32, int32> int_map = 1;\n  required map<int32, int32> int_map2 = 2;\n  repeated map<int32, int32> int_map3 = 3;\n  optional map map_message = 4;\n}\n",
+   "error": "1:14: Field labels (required/optional/repeated) are not allowed on map fields.\n2:14: Field labels (required/optional/repeated) are not allowed on map fields.\n3:14: Field labels (required/optional/repeated) are not allowed on map fields.\n"
+  },
+  {
+   "name": "ParseErrorTest.MalformedMaps",
+   "helper": "ExpectHasErrors",
+   "input": "message TestMessage {\n  map map_message = 1;\n  map<string> str_map = 2;\n  map<string,> str_map2 = 3;\n  map<,string> str_map3 = 4;\n  map<> empty_map = 5;\n  map<string,string str_map6 = 6;\n}extend SomeMessage {\n  map<int32, int32> int_map = 1;\n}",
+   "error": "1:6: Expected \"required\", \"optional\", or \"repeated\".\n2:12: Expected \",\".\n3:13: Expected type name.\n4:6: Expected type name.\n5:6: Expected type name.\n6:20: Expected \">\".\n8:5: Map fields are not allowed to be extensions.\n"
+  },
+  {
+   "name": "ParseErrorTest.GroupNotCapitalized",
+   "helper": "ExpectHasErrors",
+   "input": "message TestMessage {\n  optional group foo = 1 {}\n}\n",
+   "error": "1:17: Group names must start with a capital letter.\n"
+  },
+  {
+   "name": "ParseErrorTest.GroupMissingBody",
+   "helper": "ExpectHasErrors",
+   "input": "message TestMessage {\n  optional group Foo = 1;\n}\n",
+   "error": "1:24: Missing group body.\n"
+  },
+  {
+   "name": "ParseErrorTest.ExtendingPrimitive",
+   "helper": "ExpectHasErrors",
+   "input": "extend int32 { optional string foo = 4; }\n",
+   "error": "0:7: Expected message type.\n"
+  },
+  {
+   "name": "ParseErrorTest.ErrorInExtension",
+   "helper": "ExpectHasErrors",
+   "input": "message Foo { extensions 100 to 199; }\nextend Foo { optional string foo; }\n",
+   "error": "1:32: Missing field number.\n"
+  },
+  {
+   "name": "ParseErrorTest.MultipleParseErrors",
+   "helper": "ExpectHasErrors",
+   "input": "message TestMessage {\n  optional int32 foo;\n  !invalid statement ending in a block { blah blah { blah } blah }\n  optional int32 bar = 3 {}\n}\n",
+   "error": "1:20: Missing field number.\n2:2: Expected \"required\", \"optional\", or \"repeated\".\n2:2: Expected type name.\n3:25: Expected \";\".\n"
+  },
+  {
+   "name": "ParseErrorTest.EofInAggregateValue",
+   "helper": "ExpectHasErrors",
+   "input": "option (fileopt) = { i:100\n",
+   "error": "1:0: Unexpected end of stream while parsing aggregate value.\n"
+  },
+  {
+   "name": "ParseErrorTest.EofInEnum",
+   "helper": "ExpectHasErrors",
+   "input": "enum TestEnum {",
+   "error": "0:15: Reached end of input in enum definition (missing '}').\n"
+  },
+  {
+   "name": "ParseErrorTest.EnumValueMissingNumber",
+   "helper": "ExpectHasErrors",
+   "input": "enum TestEnum {\n  FOO;\n}\n",
+   "error": "1:5: Missing numeric value for enum constant.\n"
+  },
+  {
+   "name": "ParseErrorTest.EnumReservedStandaloneMaxNotAllowed",
+   "helper": "ExpectHasErrors",
+   "input": "enum TestEnum {\n  FOO = 1;\n  reserved max;\n}\n",
+   "error": "2:11: Reserved names must be string literals. (Only editions supports identifiers.)\n"
+  },
+  {
+   "name": "ParseErrorTest.EnumReservedMixNameAndNumber",
+   "helper": "ExpectHasErrors",
+   "input": "enum TestEnum {\n  FOO = 1;\n  reserved 10, \"foo\";\n}\n",
+   "error": "2:15: Expected enum number range.\n"
+  },
+  {
+   "name": "ParseErrorTest.EnumReservedMixNameAndNumberEditions",
+   "helper": "ExpectHasErrors",
+   "input": "edition = \"2023\";\nenum TestEnum {\n  FOO = 1;\n  reserved 10, foo;\n}\n",
+   "error": "3:15: Expected enum number range.\n"
+  },
+  {
+   "name": "ParseErrorTest.EnumReservedPositiveNumberOutOfRange",
+   "helper": "ExpectHasErrors",
+   "input": "enum TestEnum {\nFOO = 1;\n  reserved 2147483648;\n}\n",
+   "error": "2:11: Integer out of range.\n"
+  },
+  {
+   "name": "ParseErrorTest.EnumReservedNegativeNumberOutOfRange",
+   "helper": "ExpectHasErrors",
+   "input": "enum TestEnum {\nFOO = 1;\n  reserved -2147483649;\n}\n",
+   "error": "2:12: Integer out of range.\n"
+  },
+  {
+   "name": "ParseErrorTest.EnumReservedMissingQuotes",
+   "helper": "ExpectHasErrors",
+   "input": "enum TestEnum {\n  FOO = 1;\n  reserved foo;\n}\n",
+   "error": "2:11: Reserved names must be string literals. (Only editions supports identifiers.)\n"
+  },
+  {
+   "name": "ParseErrorTest.ReservedStandaloneMaxNotAllowed",
+   "helper": "ExpectHasErrors",
+   "input": "message Foo {\n  reserved max;\n}\n",
+   "error": "1:11: Reserved names must be string literals. (Only editions supports identifiers.)\n"
+  },
+  {
+   "name": "ParseErrorTest.ReservedMixNameAndNumber",
+   "helper": "ExpectHasErrors",
+   "input": "message Foo {\n  reserved 10, \"foo\";\n}\n",
+   "error": "1:15: Expected field number range.\n"
+  },
+  {
+   "name": "ParseErrorTest.ReservedMixNameAndNumberEditions",
+   "helper": "ExpectHasErrors",
+   "input": "edition = \"2023\";\nmessage Foo {\n  reserved 10, foo;\n}\n",
+   "error": "2:15: Expected field number range.\n"
+  },
+  {
+   "name": "ParseErrorTest.ReservedMissingQuotes",
+   "helper": "ExpectHasErrors",
+   "input": "message Foo {\n  reserved foo;\n}\n",
+   "error": "1:11: Reserved names must be string literals. (Only editions supports identifiers.)\n"
+  },
+  {
+   "name": "ParseErrorTest.ReservedNegativeNumber",
+   "helper": "ExpectHasErrors",
+   "input": "message Foo {\n  reserved -10;\n}\n",
+   "error": "1:11: Expected field name or number range.\n"
+  },
+  {
+   "name": "ParseErrorTest.ReservedNumberOutOfRange",
+   "helper": "ExpectHasErrors",
+   "input": "message Foo {\n  reserved 2147483648;\n}\n",
+   "error": "1:11: Integer out of range.\n"
+  },
+  {
+   "name": "ParseErrorTest.EofInService",
+   "helper": "ExpectHasErrors",
+   "input": "service TestService {",
+   "error": "0:21: Reached end of input in service definition (missing '}').\n"
+  },
+  {
+   "name": "ParseErrorTest.ServiceMethodPrimitiveParams",
+   "helper": "ExpectHasErrors",
+   "input": "service TestService {\n  rpc Foo(int32) returns (string);\n}\n",
+   "error": "1:10: Expected message type.\n1:26: Expected message type.\n"
+  },
+  {
+   "name": "ParseErrorTest.EofInMethodOptions",
+   "helper": "ExpectHasErrors",
+   "input": "service TestService {\n  rpc Foo(Bar) returns(Bar) {",
+   "error": "1:29: Reached end of input in method options (missing '}').\n1:29: Reached end of input in service definition (missing '}').\n"
+  },
+  {
+   "name": "ParseErrorTest.PrimitiveMethodInput",
+   "helper": "ExpectHasErrors",
+   "input": "service TestService {\n  rpc Foo(int32) returns(Bar);\n}\n",
+   "error": "1:10: Expected message type.\n"
+  },
+  {
+   "name": "ParseErrorTest.MethodOptionTypeError",
+   "helper": "ExpectHasErrors",
+   "input": "message Baz {}\nservice Foo {\n  rpc Bar(Baz) returns(Baz) { option invalid syntax; }\n}\n",
+   "error": "2:45: Expected \"=\".\n"
+  },
+  {
+   "name": "ParseErrorTest.ImportNotQuoted",
+   "helper": "ExpectHasErrors",
+   "input": "import foo;\n",
+   "error": "0:7: Expected a string naming the file to import.\n"
+  },
+  {
+   "name": "ParseErrorTest.MultiplePackagesInFile",
+   "helper": "ExpectHasErrors",
+   "input": "package foo;\npackage bar;\n",
+   "error": "1:0: Multiple package definitions.\n"
+  },
+  {
+   "name": "ParseErrorTest.OptionImportBefore2024",
+   "helper": "ExpectHasErrors",
+   "input": "\n        edition = \"2023\";\n        import option \"foo.proto\";\n      ",
+   "error": "2:15: option import is not supported before edition 2024.\n"
+  },
+  {
+   "name": "ParseErrorTest.WeakImportAfter2024",
+   "helper": "ExpectHasErrors",
+   "input": "\n        edition = \"2024\";\n        import weak \"foo.proto\";\n      ",
+   "error": "2:15: weak import is not supported in edition 2024 and above. Consider using option import instead.\n"
+  },
+  {
+   "name": "ParserValidationErrorTest.FieldDefaultIntegerOutOfRange",
+   "helper": "ExpectHasErrors",
+   "input": "message Foo {\n  optional double bar = 1 [default = 0x10000000000000000];\n}\n",
+   "error": "1:37: Integer out of range.\n"
+  },
+  {
+   "name": "ParserValidationErrorTest.FieldOptionOutOfRange",
+   "helper": "ExpectHasErrors",
+   "input": "message Foo {\n  optional double bar = 1 [foo = 0x10000000000000000];\n}\n",
+   "error": "1:33: Integer out of range.\n"
+  },
+  {
+   "name": "ParserValidationErrorTest.ExplicitlyMapEntryError",
+   "helper": "ExpectHasErrors",
+   "input": "message Foo {\n  message ValueEntry {\n    option map_entry = true;\n    optional int32 key = 1;\n    optional int32 value = 2;\n    extensions 99 to 999;\n  }\n}",
+   "error": "2:11: map_entry should not be set explicitly. Use map<KeyType, ValueType> instead.\n"
+  },
+  {
+   "name": "ParseEditionsTest.MixedSyntaxAndEdition",
+   "helper": "ExpectHasErrors",
+   "input": "\n        syntax = \"proto2\";\n        edition = \"2023\";\n        message A {\n          optional int32 b = 1;\n        }",
+   "error": "2:8: Expected top-level statement (e.g. \"message\").\n"
+  },
+  {
+   "name": "ParseEditionsTest.MixedEditionAndSyntax",
+   "helper": "ExpectHasErrors",
+   "input": "\n        edition = \"2023\";\n        syntax = \"proto2\";\n        message A {\n          int32 b = 1;\n        }",
+   "error": "2:8: Expected top-level statement (e.g. \"message\").\n"
+  },
+  {
+   "name": "ParseEditionsTest.OptionalKeywordBanned",
+   "helper": "ExpectHasErrors",
+   "input": "\n        edition = \"2023\";\n        message A {\n          optional int32 b = 1;\n        }",
+   "error": "3:10: Label \"optional\" is not supported in editions. By default, all singular fields have presence unless features.field_presence is set.\n"
+  },
+  {
+   "name": "ParseEditionsTest.RequiredKeywordBanned",
+   "helper": "ExpectHasErrors",
+   "input": "\n        edition = \"2023\";\n        message A {\n          required int32 b = 1;\n        }",
+   "error": "3:10: Label \"required\" is not supported in editions, use features.field_presence = LEGACY_REQUIRED.\n"
+  },
+  {
+   "name": "ParseEditionsTest.GroupsBanned",
+   "helper": "ExpectHasErrors",
+   "input": "\n        edition = \"2023\";\n        message TestMessage {\n          group TestGroup = 1 {};\n        }",
+   "error": "3:10: Group syntax is no longer supported in editions. To get group behavior you can specify features.message_encoding = DELIMITED on a message field.\n"
+  },
+  {
+   "name": "ParseVisibilityTest.Edition2023",
+   "helper": "ExpectHasErrors",
+   "input": "\n        edition = \"2023\";\n        export message A {\n          int32 b = 1;\n        }",
+   "error": "2:8: Expected top-level statement (e.g. \"message\").\n"
+  },
+  {
+   "name": "ParseVisibilityTest.Edition2024NoServiceVisibility",
+   "helper": "ExpectHasErrors",
+   "input": "\n        edition = \"2024\";\n        local service Foo {\n        }\n        ",
+   "error": "2:14: 'local' and 'export' visibility modifiers are valid only on 'message' and 'enum'\n"
+  },
+  {
+   "name": "ParseVisibilityTest.Edition2024NoextendVisibility",
+   "helper": "ExpectHasErrors",
+   "input": "\n        edition = \"2024\";\n        export extend Foo {\n          optional string yes = 12;\n        }\n        ",
+   "error": "2:15: 'local' and 'export' visibility modifiers are valid only on 'message' and 'enum'\n"
+  },
+  {
+   "name": "ParseMessageTest.Fixed32UnstableFails",
+   "helper": "ExpectHasEarlyExitErrors",
+   "input": "edition = \"UNSTABLE\";\nmessage Test {\n  fixed32 value = 1;\n}",
+   "error": "Type 'fixed32' is obsolete in unstable editions, use 'uint32' instead.\n"
+  },
+  {
+   "name": "ParseMessageTest.Fixed64UnstableFails",
+   "helper": "ExpectHasEarlyExitErrors",
+   "input": "edition = \"UNSTABLE\";\nmessage Test {\n  fixed64 value = 1;\n}",
+   "error": "Type 'fixed64' is obsolete in unstable editions, use 'uint64' instead.\n"
+  },
+  {
+   "name": "ParseMessageTest.Sfixed32UnstableFails",
+   "helper": "ExpectHasEarlyExitErrors",
+   "input": "edition = \"UNSTABLE\";\nmessage Test {\n  sfixed32 value = 1;\n}",
+   "error": "Type 'sfixed32' is obsolete in unstable editions, use 'int32' instead.\n"
+  },
+  {
+   "name": "ParseMessageTest.Sfixed64UnstableFails",
+   "helper": "ExpectHasEarlyExitErrors",
+   "input": "edition = \"UNSTABLE\";\nmessage Test {\n  sfixed64 value = 1;\n}",
+   "error": "Type 'sfixed64' is obsolete in unstable editions, use 'int64' instead.\n"
+  },
+  {
+   "name": "ParseMessageTest.Sint32UnstableFails",
+   "helper": "ExpectHasEarlyExitErrors",
+   "input": "edition = \"UNSTABLE\";\nmessage Test {\n  sint32 value = 1;\n}",
+   "error": "Type 'sint32' is obsolete in unstable editions, use 'zigzag32' instead.\n"
+  },
+  {
+   "name": "ParseMessageTest.Sint64UnstableFails",
+   "helper": "ExpectHasEarlyExitErrors",
+   "input": "edition = \"UNSTABLE\";\nmessage Test {\n  sint64 value = 1;\n}",
+   "error": "Type 'sint64' is obsolete in unstable editions, use 'zigzag64' instead.\n"
+  },
+  {
+   "name": "ParseMessageTest.CanHandleErrorOnFirstToken",
+   "helper": "ExpectHasEarlyExitErrors",
+   "input": "/",
+   "error": "0:0: Expected top-level statement (e.g. \"message\").\n"
+  },
+  {
+   "name": "ParseMessageTest.CanHandleErrorOnFirstToken",
+   "helper": "ExpectHasEarlyExitErrors",
+   "input": "/",
+   "error": "0:0: Expected top-level statement (e.g. \"message\").\n0:0: File must begin with an edition or syntax statement, e.g. 'edition = \"2023\";'.\n"
+  },
+  {
+   "name": "ParseErrorTest.MissingSyntaxIdentifier",
+   "helper": "ExpectHasEarlyExitErrors",
+   "input": "message TestMessage {}",
+   "error": "0:0: File must begin with an edition or syntax statement, e.g. 'edition = \"2023\";'.\n"
+  },
+  {
+   "name": "ParseErrorTest.UnknownSyntaxIdentifier",
+   "helper": "ExpectHasEarlyExitErrors",
+   "input": "syntax = \"no_such_syntax\";",
+   "error": "0:9: Unrecognized syntax identifier \"no_such_syntax\".  This parser only recognizes \"proto2\" and \"proto3\".\n"
+  },
+  {
+   "name": "ParseEditionsTest.EmptyEdition",
+   "helper": "ExpectHasEarlyExitErrors",
+   "input": "\n        edition = \"\";\n        message A {\n          optional int32 b = 1;\n        }",
+   "error": "1:18: Unknown edition \"\".\n"
+  },
+  {
+   "name": "ParseEditionsTest.InvalidEdition",
+   "helper": "ExpectHasEarlyExitErrors",
+   "input": "\n        edition = \"2023_INVALID\";\n        message A {\n          optional int32 b = 1;\n        }",
+   "error": "1:18: Unknown edition \"2023_INVALID\".\n"
+  },
+  {
+   "name": "ParseEditionsTest.UnknownEdition",
+   "helper": "ExpectHasEarlyExitErrors",
+   "input": "\n        edition = \"UNKNOWN\";\n        message A {\n          optional int32 b = 1;\n        }",
+   "error": "1:18: Unknown edition \"UNKNOWN\".\n"
+  },
+  {
+   "name": "ParseEditionsTest.LegacyProto2Edition",
+   "helper": "ExpectHasEarlyExitErrors",
+   "input": "\n        edition = \"PROTO2\";\n        message A {\n          optional int32 b = 1;\n        }",
+   "error": "1:18: Unknown edition \"PROTO2\".\n"
+  },
+  {
+   "name": "ParseEditionsTest.LegacyProto3Edition",
+   "helper": "ExpectHasEarlyExitErrors",
+   "input": "\n        edition = \"PROTO3\";\n        message A {\n          optional int32 b = 1;\n        }",
+   "error": "1:18: Unknown edition \"PROTO3\".\n"
+  },
+  {
+   "name": "ParseEditionsTest.SyntaxEditions",
+   "helper": "ExpectHasEarlyExitErrors",
+   "input": "\n        syntax = \"editions\";\n        message A {\n          optional int32 b = 1;\n        }",
+   "error": "1:17: Unrecognized syntax identifier \"editions\".  This parser only recognizes \"proto2\" and \"proto3\".\n"
+  }
+ ],
+ "acceptOnly": [
+  {
+   "name": "ParseErrorTest.EnumReservedInvalidIdentifier",
+   "helper": "ExpectHasWarnings",
+   "input": "\n        enum TestEnum {\n          FOO = 1;\n          reserved \"foo bar\";\n        }\n      ",
+   "error": "3:19: Reserved name \"foo bar\" is not a valid identifier.\n",
+   "note": "upstream ExpectHasWarnings: asserts the parser reported NO error and only a warning; publishes no descriptor golden. Accept-only."
+  },
+  {
+   "name": "ParseErrorTest.ReservedInvalidIdentifier",
+   "helper": "ExpectHasWarnings",
+   "input": "\n        message Foo {\n          reserved \"foo bar\";\n        }\n      ",
+   "error": "2:19: Reserved name \"foo bar\" is not a valid identifier.\n",
+   "note": "upstream ExpectHasWarnings: asserts the parser reported NO error and only a warning; publishes no descriptor golden. Accept-only."
+  },
+  {
+   "name": "ParseMessageTest.Varint32Edition2024Fails",
+   "helper": "ExpectHasValidationErrors",
+   "input": "edition = \"2024\";\nmessage NewVarintTypes {\n  varint32 value = 1;\n}",
+   "error": "\"varint32\" is not defined.\n",
+   "note": "upstream ExpectHasValidationErrors: asserts protoc's PARSER accepted it (ASSERT_EQ(\"\", error_collector_.text_)); it fails only later, in DescriptorPool validation, which this package does not perform. Must therefore be ACCEPTED."
+  },
+  {
+   "name": "ParseMessageTest.Varint64Edition2024Fails",
+   "helper": "ExpectHasValidationErrors",
+   "input": "edition = \"2024\";\nmessage NewVarintTypes {\n  varint64 int64_field = 1;\n}",
+   "error": "\"varint64\" is not defined.\n",
+   "note": "upstream ExpectHasValidationErrors: asserts protoc's PARSER accepted it (ASSERT_EQ(\"\", error_collector_.text_)); it fails only later, in DescriptorPool validation, which this package does not perform. Must therefore be ACCEPTED."
+  },
+  {
+   "name": "ParseMessageTest.Zigzag32Edition2024Fails",
+   "helper": "ExpectHasValidationErrors",
+   "input": "edition = \"2024\";\nmessage NewVarintTypes {\n  zigzag32 sint32_field = 1;\n}",
+   "error": "\"zigzag32\" is not defined.\n",
+   "note": "upstream ExpectHasValidationErrors: asserts protoc's PARSER accepted it (ASSERT_EQ(\"\", error_collector_.text_)); it fails only later, in DescriptorPool validation, which this package does not perform. Must therefore be ACCEPTED."
+  },
+  {
+   "name": "ParseMessageTest.Zigzag64Edition2024Fails",
+   "helper": "ExpectHasValidationErrors",
+   "input": "edition = \"2024\";\nmessage NewVarintTypes {\n  zigzag64 sint64_field = 1;\n}",
+   "error": "\"zigzag64\" is not defined.\n",
+   "note": "upstream ExpectHasValidationErrors: asserts protoc's PARSER accepted it (ASSERT_EQ(\"\", error_collector_.text_)); it fails only later, in DescriptorPool validation, which this package does not perform. Must therefore be ACCEPTED."
+  },
+  {
+   "name": "ParseMessageTest.Uvarint32Edition2024Fails",
+   "helper": "ExpectHasValidationErrors",
+   "input": "edition = \"2024\";\nmessage NewVarintTypes {\n  uvarint32 uint32_field = 1;\n}",
+   "error": "\"uvarint32\" is not defined.\n",
+   "note": "upstream ExpectHasValidationErrors: asserts protoc's PARSER accepted it (ASSERT_EQ(\"\", error_collector_.text_)); it fails only later, in DescriptorPool validation, which this package does not perform. Must therefore be ACCEPTED."
+  },
+  {
+   "name": "ParseMessageTest.Uvarint64Edition2024Fails",
+   "helper": "ExpectHasValidationErrors",
+   "input": "edition = \"2024\";\nmessage NewVarintTypes {\n  uvarint64 uint64_field = 1;\n}",
+   "error": "\"uvarint64\" is not defined.\n",
+   "note": "upstream ExpectHasValidationErrors: asserts protoc's PARSER accepted it (ASSERT_EQ(\"\", error_collector_.text_)); it fails only later, in DescriptorPool validation, which this package does not perform. Must therefore be ACCEPTED."
+  },
+  {
+   "name": "ParserValidationErrorTest.PackageNameError",
+   "helper": "ExpectHasValidationErrors",
+   "input": "package foo.bar;",
+   "error": "0:0: \"foo\" is already defined (as something other than a package) in file \"bar.proto\".\n",
+   "note": "upstream ExpectHasValidationErrors: asserts protoc's PARSER accepted it (ASSERT_EQ(\"\", error_collector_.text_)); it fails only later, in DescriptorPool validation, which this package does not perform. Must therefore be ACCEPTED."
+  },
+  {
+   "name": "ParserValidationErrorTest.ImportUnloadedError",
+   "helper": "ExpectHasValidationErrors",
+   "input": "package test;\n\nimport \"unloaded.proto\";",
+   "error": "2:0: Import \"unloaded.proto\" has not been loaded.\n",
+   "note": "upstream ExpectHasValidationErrors: asserts protoc's PARSER accepted it (ASSERT_EQ(\"\", error_collector_.text_)); it fails only later, in DescriptorPool validation, which this package does not perform. Must therefore be ACCEPTED."
+  },
+  {
+   "name": "ParserValidationErrorTest.ImportTwice",
+   "helper": "ExpectHasValidationErrors",
+   "input": "package test;\n\nimport \"bar.proto\";\n  import \"bar.proto\";",
+   "error": "3:2: Import \"bar.proto\" was listed twice.\n",
+   "note": "upstream ExpectHasValidationErrors: asserts protoc's PARSER accepted it (ASSERT_EQ(\"\", error_collector_.text_)); it fails only later, in DescriptorPool validation, which this package does not perform. Must therefore be ACCEPTED."
+  },
+  {
+   "name": "ParserValidationErrorTest.ImportOptionTwice",
+   "helper": "ExpectHasValidationErrors",
+   "input": "\n        edition = \"2024\";\n        package test;\n        import option \"bar.proto\";\n          import option \"bar.proto\";\n      ",
+   "error": "4:10: Import \"bar.proto\" was listed twice.\n",
+   "note": "upstream ExpectHasValidationErrors: asserts protoc's PARSER accepted it (ASSERT_EQ(\"\", error_collector_.text_)); it fails only later, in DescriptorPool validation, which this package does not perform. Must therefore be ACCEPTED."
+  },
+  {
+   "name": "ParserValidationErrorTest.ImportAndImportOptionTwice",
+   "helper": "ExpectHasValidationErrors",
+   "input": "\n        edition = \"2024\";\n        package test;\n\n        import \"bar.proto\";\n          import option \"bar.proto\";\n        ",
+   "error": "5:10: Import \"bar.proto\" was listed twice.\n",
+   "note": "upstream ExpectHasValidationErrors: asserts protoc's PARSER accepted it (ASSERT_EQ(\"\", error_collector_.text_)); it fails only later, in DescriptorPool validation, which this package does not perform. Must therefore be ACCEPTED."
+  },
+  {
+   "name": "ParserValidationErrorTest.DuplicateFileError",
+   "helper": "ExpectHasValidationErrors",
+   "input": "package test;",
+   "error": "0:0: A file with this name is already in the pool.\n",
+   "note": "upstream ExpectHasValidationErrors: asserts protoc's PARSER accepted it (ASSERT_EQ(\"\", error_collector_.text_)); it fails only later, in DescriptorPool validation, which this package does not perform. Must therefore be ACCEPTED."
+  },
+  {
+   "name": "ParserValidationErrorTest.MessageNameError",
+   "helper": "ExpectHasValidationErrors",
+   "input": "message Foo {}\nmessage Foo {}\n",
+   "error": "1:8: \"Foo\" is already defined.\n",
+   "note": "upstream ExpectHasValidationErrors: asserts protoc's PARSER accepted it (ASSERT_EQ(\"\", error_collector_.text_)); it fails only later, in DescriptorPool validation, which this package does not perform. Must therefore be ACCEPTED."
+  },
+  {
+   "name": "ParserValidationErrorTest.FieldNameError",
+   "helper": "ExpectHasValidationErrors",
+   "input": "message Foo {\n  optional int32 bar = 1;\n  optional int32 bar = 2;\n}\n",
+   "error": "2:17: \"bar\" is already defined in \"Foo\".\n",
+   "note": "upstream ExpectHasValidationErrors: asserts protoc's PARSER accepted it (ASSERT_EQ(\"\", error_collector_.text_)); it fails only later, in DescriptorPool validation, which this package does not perform. Must therefore be ACCEPTED."
+  },
+  {
+   "name": "ParserValidationErrorTest.FieldTypeError",
+   "helper": "ExpectHasValidationErrors",
+   "input": "message Foo {\n  optional Baz bar = 1;\n}\n",
+   "error": "1:11: \"Baz\" is not defined.\n",
+   "note": "upstream ExpectHasValidationErrors: asserts protoc's PARSER accepted it (ASSERT_EQ(\"\", error_collector_.text_)); it fails only later, in DescriptorPool validation, which this package does not perform. Must therefore be ACCEPTED."
+  },
+  {
+   "name": "ParserValidationErrorTest.FieldNumberError",
+   "helper": "ExpectHasValidationErrors",
+   "input": "message Foo {\n  optional int32 bar = 0;\n}\n",
+   "error": "1:23: Field numbers must be positive integers.\n1:23: Suggested field numbers for Foo: 1\n",
+   "note": "upstream ExpectHasValidationErrors: asserts protoc's PARSER accepted it (ASSERT_EQ(\"\", error_collector_.text_)); it fails only later, in DescriptorPool validation, which this package does not perform. Must therefore be ACCEPTED."
+  },
+  {
+   "name": "ParserValidationErrorTest.FieldExtendeeError",
+   "helper": "ExpectHasValidationErrors",
+   "input": "extend Baz { optional int32 bar = 1; }\n",
+   "error": "0:7: \"Baz\" is not defined.\n",
+   "note": "upstream ExpectHasValidationErrors: asserts protoc's PARSER accepted it (ASSERT_EQ(\"\", error_collector_.text_)); it fails only later, in DescriptorPool validation, which this package does not perform. Must therefore be ACCEPTED."
+  },
+  {
+   "name": "ParserValidationErrorTest.ExtensionJsonNameError",
+   "helper": "ExpectHasValidationErrors",
+   "input": "message TestMessage {\n  extensions 1 to 100;\n}\nextend TestMessage {\n  optional int32 foo = 12 [json_name = \"bar\"];\n}",
+   "error": "4:27: option json_name is not allowed on extension fields.\n",
+   "note": "upstream ExpectHasValidationErrors: asserts protoc's PARSER accepted it (ASSERT_EQ(\"\", error_collector_.text_)); it fails only later, in DescriptorPool validation, which this package does not perform. Must therefore be ACCEPTED."
+  },
+  {
+   "name": "ParserValidationErrorTest.FieldDefaultValueError",
+   "helper": "ExpectHasValidationErrors",
+   "input": "enum Baz { QUX = 1; }\nmessage Foo {\n  optional Baz bar = 1 [default=NO_SUCH_VALUE];\n}\n",
+   "error": "2:32: Enum type \"Baz\" has no value named \"NO_SUCH_VALUE\".\n",
+   "note": "upstream ExpectHasValidationErrors: asserts protoc's PARSER accepted it (ASSERT_EQ(\"\", error_collector_.text_)); it fails only later, in DescriptorPool validation, which this package does not perform. Must therefore be ACCEPTED."
+  },
+  {
+   "name": "ParserValidationErrorTest.FileOptionNameError",
+   "helper": "ExpectHasValidationErrors",
+   "input": "option foo = 5;",
+   "error": "0:7: Option \"foo\" unknown. Ensure that your proto definition file imports the proto which defines the option (i.e. via import option after edition 2024).\n",
+   "note": "upstream ExpectHasValidationErrors: asserts protoc's PARSER accepted it (ASSERT_EQ(\"\", error_collector_.text_)); it fails only later, in DescriptorPool validation, which this package does not perform. Must therefore be ACCEPTED."
+  },
+  {
+   "name": "ParserValidationErrorTest.FileOptionValueError",
+   "helper": "ExpectHasValidationErrors",
+   "input": "option java_outer_classname = 5;",
+   "error": "0:30: Value must be quoted string for string option \"google.protobuf.FileOptions.java_outer_classname\".\n",
+   "note": "upstream ExpectHasValidationErrors: asserts protoc's PARSER accepted it (ASSERT_EQ(\"\", error_collector_.text_)); it fails only later, in DescriptorPool validation, which this package does not perform. Must therefore be ACCEPTED."
+  },
+  {
+   "name": "ParserValidationErrorTest.FieldOptionNameError",
+   "helper": "ExpectHasValidationErrors",
+   "input": "message Foo {\n  optional bool bar = 1 [foo=1];\n}\n",
+   "error": "1:25: Option \"foo\" unknown. Ensure that your proto definition file imports the proto which defines the option (i.e. via import option after edition 2024).\n",
+   "note": "upstream ExpectHasValidationErrors: asserts protoc's PARSER accepted it (ASSERT_EQ(\"\", error_collector_.text_)); it fails only later, in DescriptorPool validation, which this package does not perform. Must therefore be ACCEPTED."
+  },
+  {
+   "name": "ParserValidationErrorTest.FieldOptionValueError",
+   "helper": "ExpectHasValidationErrors",
+   "input": "message Foo {\n  optional int32 bar = 1 [ctype=1];\n}\n",
+   "error": "1:32: Value must be identifier for enum-valued option \"google.protobuf.FieldOptions.ctype\".\n",
+   "note": "upstream ExpectHasValidationErrors: asserts protoc's PARSER accepted it (ASSERT_EQ(\"\", error_collector_.text_)); it fails only later, in DescriptorPool validation, which this package does not perform. Must therefore be ACCEPTED."
+  },
+  {
+   "name": "ParserValidationErrorTest.ExtensionRangeNumberError",
+   "helper": "ExpectHasValidationErrors",
+   "input": "message Foo {\n  extensions 0;\n}\n",
+   "error": "1:13: Extension numbers must be positive integers.\n1:13: Suggested field numbers for Foo: 1\n",
+   "note": "upstream ExpectHasValidationErrors: asserts protoc's PARSER accepted it (ASSERT_EQ(\"\", error_collector_.text_)); it fails only later, in DescriptorPool validation, which this package does not perform. Must therefore be ACCEPTED."
+  },
+  {
+   "name": "ParserValidationErrorTest.ExtensionRangeNumberOrderError",
+   "helper": "ExpectHasValidationErrors",
+   "input": "message Foo {\n  extensions 2 to 1;\n}\n",
+   "error": "1:13: Extension range end number must be greater than start number.\n",
+   "note": "upstream ExpectHasValidationErrors: asserts protoc's PARSER accepted it (ASSERT_EQ(\"\", error_collector_.text_)); it fails only later, in DescriptorPool validation, which this package does not perform. Must therefore be ACCEPTED."
+  },
+  {
+   "name": "ParserValidationErrorTest.ReservedRangeError",
+   "helper": "ExpectHasValidationErrors",
+   "input": "message Foo {\n  reserved 2 to 1;\n}\n",
+   "error": "1:11: Reserved range end number must be greater than start number.\n",
+   "note": "upstream ExpectHasValidationErrors: asserts protoc's PARSER accepted it (ASSERT_EQ(\"\", error_collector_.text_)); it fails only later, in DescriptorPool validation, which this package does not perform. Must therefore be ACCEPTED."
+  },
+  {
+   "name": "ParserValidationErrorTest.Proto3ExtensionError",
+   "helper": "ExpectHasValidationErrors",
+   "input": "syntax = 'proto3';\nmessage Foo { \n  extensions 100 to 199;\n}\nextend Foo { string foo = 101; }\n",
+   "error": "4:7: Extensions in proto3 are only allowed for defining options.\n2:13: Extension ranges are not allowed in proto3.\n",
+   "note": "upstream ExpectHasValidationErrors: asserts protoc's PARSER accepted it (ASSERT_EQ(\"\", error_collector_.text_)); it fails only later, in DescriptorPool validation, which this package does not perform. Must therefore be ACCEPTED."
+  },
+  {
+   "name": "ParserValidationErrorTest.Proto3MessageSet",
+   "helper": "ExpectHasValidationErrors",
+   "input": "syntax = 'proto3';\nmessage Foo { \n  option message_set_wire_format = true;\n}\n",
+   "error": "1:8: MessageSet is not supported in proto3.\n",
+   "note": "upstream ExpectHasValidationErrors: asserts protoc's PARSER accepted it (ASSERT_EQ(\"\", error_collector_.text_)); it fails only later, in DescriptorPool validation, which this package does not perform. Must therefore be ACCEPTED."
+  },
+  {
+   "name": "ParserValidationErrorTest.Proto3Required",
+   "helper": "ExpectHasValidationErrors",
+   "input": "syntax = 'proto3';\nmessage Foo { \n  required int32 field = 1;}\n",
+   "error": "2:11: Required fields are not allowed in proto3.\n",
+   "note": "upstream ExpectHasValidationErrors: asserts protoc's PARSER accepted it (ASSERT_EQ(\"\", error_collector_.text_)); it fails only later, in DescriptorPool validation, which this package does not perform. Must therefore be ACCEPTED."
+  },
+  {
+   "name": "ParserValidationErrorTest.Proto3Default",
+   "helper": "ExpectHasValidationErrors",
+   "input": "syntax = 'proto3';\nmessage Foo { \n  int32 field = 1 [default = 12];}\n",
+   "error": "2:29: Explicit default values are not allowed in proto3.\n",
+   "note": "upstream ExpectHasValidationErrors: asserts protoc's PARSER accepted it (ASSERT_EQ(\"\", error_collector_.text_)); it fails only later, in DescriptorPool validation, which this package does not perform. Must therefore be ACCEPTED."
+  },
+  {
+   "name": "ParserValidationErrorTest.Proto3JsonConflictError",
+   "helper": "ExpectHasValidationErrors",
+   "input": "syntax = 'proto3';\nmessage TestMessage {\n  uint32 _foo = 1;\n  uint32 Foo = 2;\n}\n",
+   "error": "3:9: The default JSON name of field \"Foo\" (\"Foo\") conflicts with the default JSON name of field \"_foo\".\n",
+   "note": "upstream ExpectHasValidationErrors: asserts protoc's PARSER accepted it (ASSERT_EQ(\"\", error_collector_.text_)); it fails only later, in DescriptorPool validation, which this package does not perform. Must therefore be ACCEPTED."
+  },
+  {
+   "name": "ParserValidationErrorTest.Proto3CustomJsonConflictWithDefaultError",
+   "helper": "ExpectHasValidationErrors",
+   "input": "syntax = 'proto3';\nmessage TestMessage {\n  uint32 foo = 1 [json_name='bar'];\n  uint32 bar = 2;\n}\n",
+   "error": "3:9: The default JSON name of field \"bar\" (\"bar\") conflicts with the custom JSON name of field \"foo\".\n",
+   "note": "upstream ExpectHasValidationErrors: asserts protoc's PARSER accepted it (ASSERT_EQ(\"\", error_collector_.text_)); it fails only later, in DescriptorPool validation, which this package does not perform. Must therefore be ACCEPTED."
+  },
+  {
+   "name": "ParserValidationErrorTest.Proto3CustomJsonConflictError",
+   "helper": "ExpectHasValidationErrors",
+   "input": "syntax = 'proto3';\nmessage TestMessage {\n  uint32 foo = 1 [json_name='baz'];\n  uint32 bar = 2 [json_name='baz'];\n}\n",
+   "error": "3:9: The custom JSON name of field \"bar\" (\"baz\") conflicts with the custom JSON name of field \"foo\".\n",
+   "note": "upstream ExpectHasValidationErrors: asserts protoc's PARSER accepted it (ASSERT_EQ(\"\", error_collector_.text_)); it fails only later, in DescriptorPool validation, which this package does not perform. Must therefore be ACCEPTED."
+  },
+  {
+   "name": "ParserValidationErrorTest.Proto2CustomJsonConflictError",
+   "helper": "ExpectHasValidationErrors",
+   "input": "syntax = 'proto2';\nmessage TestMessage {\n  optional uint32 foo = 1 [json_name='baz'];\n  optional uint32 bar = 2 [json_name='baz'];\n}\n",
+   "error": "3:18: The custom JSON name of field \"bar\" (\"baz\") conflicts with the custom JSON name of field \"foo\".\n",
+   "note": "upstream ExpectHasValidationErrors: asserts protoc's PARSER accepted it (ASSERT_EQ(\"\", error_collector_.text_)); it fails only later, in DescriptorPool validation, which this package does not perform. Must therefore be ACCEPTED."
+  },
+  {
+   "name": "ParserValidationErrorTest.EnumNameError",
+   "helper": "ExpectHasValidationErrors",
+   "input": "enum Foo {A = 1;}\nenum Foo {B = 1;}\n",
+   "error": "1:5: \"Foo\" is already defined.\n",
+   "note": "upstream ExpectHasValidationErrors: asserts protoc's PARSER accepted it (ASSERT_EQ(\"\", error_collector_.text_)); it fails only later, in DescriptorPool validation, which this package does not perform. Must therefore be ACCEPTED."
+  },
+  {
+   "name": "ParserValidationErrorTest.Proto3EnumError",
+   "helper": "ExpectHasValidationErrors",
+   "input": "syntax = 'proto3';\nenum Foo {A = 1;}\n",
+   "error": "1:14: The first enum value must be zero for open enums.\n",
+   "note": "upstream ExpectHasValidationErrors: asserts protoc's PARSER accepted it (ASSERT_EQ(\"\", error_collector_.text_)); it fails only later, in DescriptorPool validation, which this package does not perform. Must therefore be ACCEPTED."
+  },
+  {
+   "name": "ParserValidationErrorTest.EnumValueNameError",
+   "helper": "ExpectHasValidationErrors",
+   "input": "enum Foo {\n  BAR = 1;\n  BAR = 1;\n}\n",
+   "error": "2:2: \"BAR\" is already defined.\n",
+   "note": "upstream ExpectHasValidationErrors: asserts protoc's PARSER accepted it (ASSERT_EQ(\"\", error_collector_.text_)); it fails only later, in DescriptorPool validation, which this package does not perform. Must therefore be ACCEPTED."
+  },
+  {
+   "name": "ParserValidationErrorTest.EnumValueAliasError",
+   "helper": "ExpectHasValidationErrors",
+   "input": "enum Foo {\n  BAR = 1;\n  BAZ = 1;\n}\n",
+   "error": "2:8: \"BAZ\" uses the same enum value as \"BAR\". If this is intended, set 'option allow_alias = true;' to the enum definition. The next available enum value is 2.\n",
+   "note": "upstream ExpectHasValidationErrors: asserts protoc's PARSER accepted it (ASSERT_EQ(\"\", error_collector_.text_)); it fails only later, in DescriptorPool validation, which this package does not perform. Must therefore be ACCEPTED."
+  },
+  {
+   "name": "ParserValidationErrorTest.EnumReservedRangeError",
+   "helper": "ExpectHasValidationErrors",
+   "input": "enum Foo {\n  BAR = 1;\n  reserved 2 to 1;\n}\n",
+   "error": "2:11: Reserved range end number must be greater than start number.\n",
+   "note": "upstream ExpectHasValidationErrors: asserts protoc's PARSER accepted it (ASSERT_EQ(\"\", error_collector_.text_)); it fails only later, in DescriptorPool validation, which this package does not perform. Must therefore be ACCEPTED."
+  },
+  {
+   "name": "ParserValidationErrorTest.ServiceNameError",
+   "helper": "ExpectHasValidationErrors",
+   "input": "service Foo {}\nservice Foo {}\n",
+   "error": "1:8: \"Foo\" is already defined.\n",
+   "note": "upstream ExpectHasValidationErrors: asserts protoc's PARSER accepted it (ASSERT_EQ(\"\", error_collector_.text_)); it fails only later, in DescriptorPool validation, which this package does not perform. Must therefore be ACCEPTED."
+  },
+  {
+   "name": "ParserValidationErrorTest.MethodNameError",
+   "helper": "ExpectHasValidationErrors",
+   "input": "message Baz {}\nservice Foo {\n  rpc Bar(Baz) returns(Baz);\n  rpc Bar(Baz) returns(Baz);\n}\n",
+   "error": "3:6: \"Bar\" is already defined in \"Foo\".\n",
+   "note": "upstream ExpectHasValidationErrors: asserts protoc's PARSER accepted it (ASSERT_EQ(\"\", error_collector_.text_)); it fails only later, in DescriptorPool validation, which this package does not perform. Must therefore be ACCEPTED."
+  },
+  {
+   "name": "ParserValidationErrorTest.MethodInputTypeError",
+   "helper": "ExpectHasValidationErrors",
+   "input": "message Baz {}\nservice Foo {\n  rpc Bar(Qux) returns(Baz);\n}\n",
+   "error": "2:10: \"Qux\" is not defined.\n",
+   "note": "upstream ExpectHasValidationErrors: asserts protoc's PARSER accepted it (ASSERT_EQ(\"\", error_collector_.text_)); it fails only later, in DescriptorPool validation, which this package does not perform. Must therefore be ACCEPTED."
+  },
+  {
+   "name": "ParserValidationErrorTest.MethodOutputTypeError",
+   "helper": "ExpectHasValidationErrors",
+   "input": "message Baz {}\nservice Foo {\n  rpc Bar(Baz) returns(Qux);\n}\n",
+   "error": "2:23: \"Qux\" is not defined.\n",
+   "note": "upstream ExpectHasValidationErrors: asserts protoc's PARSER accepted it (ASSERT_EQ(\"\", error_collector_.text_)); it fails only later, in DescriptorPool validation, which this package does not perform. Must therefore be ACCEPTED."
+  },
+  {
+   "name": "ParserValidationErrorTest.ResolvedUndefinedError",
+   "helper": "ExpectHasValidationErrors",
+   "input": "package foo.base;\nimport \"base.proto\";\nmessage qux {\n  optional base.bar baz = 1;\n  optional .base.bar quz = 2;\n}\n",
+   "error": "3:11: \"base.bar\" is resolved to \"foo.base.bar\", which is not defined. The innermost scope is searched first in name resolution. Consider using a leading '.'(i.e., \".base.bar\") to start from the outermost scope.\n",
+   "note": "upstream ExpectHasValidationErrors: asserts protoc's PARSER accepted it (ASSERT_EQ(\"\", error_collector_.text_)); it fails only later, in DescriptorPool validation, which this package does not perform. Must therefore be ACCEPTED."
+  },
+  {
+   "name": "ParserValidationErrorTest.ResolvedUndefinedOptionError",
+   "helper": "ExpectHasValidationErrors",
+   "input": "\n        edition = \"2024\";\n        package qux.baz;\n        import option \"base2.proto\";\n        option (baz.bar).foo = 1;\n      ",
+   "error": "4:15: Option \"(baz.bar)\" is resolved to \"(qux.baz.bar)\", which is not defined. The innermost scope is searched first in name resolution. Consider using a leading '.'(i.e., \"(.baz.bar)\") to start from the outermost scope.\n",
+   "note": "upstream ExpectHasValidationErrors: asserts protoc's PARSER accepted it (ASSERT_EQ(\"\", error_collector_.text_)); it fails only later, in DescriptorPool validation, which this package does not perform. Must therefore be ACCEPTED."
+  },
+  {
+   "name": "ParseEditionsTest.ValidationError",
+   "helper": "ExpectHasValidationErrors",
+   "input": "\n        edition = \"2023\";\n        option features.field_presence = IMPLICIT;\n        option java_package = \"blah\";\n        message TestMessage {\n          string foo = 1 [default = \"hello\"];\n        }",
+   "error": "5:17: Implicit presence fields can't specify defaults.\n",
+   "note": "upstream ExpectHasValidationErrors: asserts protoc's PARSER accepted it (ASSERT_EQ(\"\", error_collector_.text_)); it fails only later, in DescriptorPool validation, which this package does not perform. Must therefore be ACCEPTED."
+  },
+  {
+   "name": "ParseEditionsTest.InvalidMerge",
+   "helper": "ExpectHasValidationErrors",
+   "input": "\n        edition = \"2023\";\n        option features.field_presence = IMPLICIT;\n        option java_package = \"blah\";\n        message TestMessage {\n          string foo = 1 [\n            default = \"hello\",\n            features.field_presence = FIELD_PRESENCE_UNKNOWN,\n            features.enum_type = ENUM_TYPE_UNKNOWN\n          ];\n        }",
+   "error": "5:17: Feature field `field_presence` must resolve to a known value, found FIELD_PRESENCE_UNKNOWN\n",
+   "note": "upstream ExpectHasValidationErrors: asserts protoc's PARSER accepted it (ASSERT_EQ(\"\", error_collector_.text_)); it fails only later, in DescriptorPool validation, which this package does not perform. Must therefore be ACCEPTED."
+  },
+  {
+   "name": "ParseEditionsTest.FeaturesWithoutEditions",
+   "helper": "ExpectHasValidationErrors",
+   "input": "\n        syntax = \"proto3\";\n        option features.field_presence = IMPLICIT;\n        message TestMessage {\n          string foo = 1 [\n            default = \"hello\",\n            features.field_presence = EXPLICIT\n          ];\n        }",
+   "error": "1:8: Features are only valid under editions.\n4:17: Features are only valid under editions.\n",
+   "note": "upstream ExpectHasValidationErrors: asserts protoc's PARSER accepted it (ASSERT_EQ(\"\", error_collector_.text_)); it fails only later, in DescriptorPool validation, which this package does not perform. Must therefore be ACCEPTED."
+  }
+ ],
+ "excluded": [
+  {
+   "helper": "ExpectParsesTo",
+   "case": "ParseMessageTest.IgnoreBOM",
+   "lane": "valid",
+   "reason": "input is computed in C++ at run time, not written as a string literal"
+  },
+  {
+   "helper": "ExpectParsesTo",
+   "case": "ParseMessageTest.FieldDefaults",
+   "lane": "valid",
+   "reason": "expected output is built in C++ at run time, not a string literal"
+  },
+  {
+   "helper": "ExpectHasErrors",
+   "case": "ParseMessageTest.BOMError",
+   "lane": "invalid",
+   "reason": "input is computed in C++ at run time, not written as a string literal"
+  },
+  {
+   "helper": "ExpectHasErrors",
+   "case": "ParseErrorTest.NestingIsLimitedWithoutCrashing",
+   "lane": "invalid",
+   "reason": "input is computed in C++ at run time, not written as a string literal"
+  },
+  {
+   "helper": "ExpectHasErrors",
+   "case": "ParseErrorTest.NestingIsLimitedWithoutCrashing",
+   "lane": "invalid",
+   "reason": "input is computed in C++ at run time, not written as a string literal"
+  },
+  {
+   "helper": "ExpectHasEarlyExitErrors",
+   "case": "ParserTest.RegressionNestedOpenBraceDoNotStackOverflow",
+   "lane": "invalid",
+   "reason": "input is computed in C++ at run time, not written as a string literal"
+  }
+ ],
+ "byHelper": {
+  "ExpectParsesTo": 82,
+  "ExpectHasWarnings": 2,
+  "ExpectHasErrors": 80,
+  "ExpectHasEarlyExitErrors": 16,
+  "ExpectHasValidationErrors": 48
+ }
+}

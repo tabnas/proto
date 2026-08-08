@@ -19,6 +19,17 @@ export type FieldType =
 
 export type OptionValue = string | number | boolean | { [k: string]: OptionValue }
 
+// Symbol visibility, an edition-2024 feature (`export` / `local`).
+export type SymbolVisibility = 'VISIBILITY_EXPORT' | 'VISIBILITY_LOCAL'
+
+// A numeric range. `end` is EXCLUSIVE for message extension/reserved ranges
+// and INCLUSIVE for enum reserved ranges — the same asymmetry protoc has.
+export interface DescriptorRange {
+  start: number
+  end: number
+  options?: Record<string, OptionValue>
+}
+
 export interface FieldDescriptorProto {
   name: string
   number: number
@@ -26,6 +37,13 @@ export interface FieldDescriptorProto {
   type?: FieldType
   // Set for message/enum/group field types (resolution deferred).
   typeName?: string
+  // For an `extend` member: the message being extended, as written.
+  extendee?: string
+  // The `json_name = "..."` pseudo-option, lifted out of `options`.
+  jsonName?: string
+  // The `default = ...` pseudo-option, lifted out of `options`. Always a
+  // string, as in descriptor.proto; the literal is stored as written.
+  defaultValue?: string
   // proto3 explicit `optional` (synthesises a single-field oneof in protoc).
   proto3Optional?: boolean
   // The oneof this field belongs to, as an index into the message's
@@ -43,8 +61,9 @@ export interface EnumValueDescriptorProto {
 export interface EnumDescriptorProto {
   name: string
   value: EnumValueDescriptorProto[]
-  reservedRange?: { start: number; end: number }[]
+  reservedRange?: DescriptorRange[]
   reservedName?: string[]
+  visibility?: SymbolVisibility
   options?: Record<string, OptionValue>
 }
 
@@ -60,9 +79,10 @@ export interface DescriptorProto {
   enumType: EnumDescriptorProto[]
   oneofDecl: OneofDescriptorProto[]
   extension: FieldDescriptorProto[]
-  extensionRange?: { start: number; end: number }[]
-  reservedRange?: { start: number; end: number }[]
+  extensionRange?: DescriptorRange[]
+  reservedRange?: DescriptorRange[]
   reservedName?: string[]
+  visibility?: SymbolVisibility
   options?: Record<string, OptionValue>
 }
 
@@ -88,16 +108,26 @@ export interface FileDescriptorProto {
   dependency: string[]
   publicDependency: number[]
   weakDependency: number[]
+  // `import option "..."` targets (edition 2024). Present only when used.
+  optionDependency?: string[]
   messageType: DescriptorProto[]
   enumType: EnumDescriptorProto[]
   service: ServiceDescriptorProto[]
   extension: FieldDescriptorProto[]
   options?: Record<string, OptionValue>
-  // 'proto2' | 'proto3' for syntax files; absent for edition files.
+  // 'proto2' | 'proto3' for syntax files; 'editions' for edition files.
   syntax?: string
   // 'EDITION_2023' | 'EDITION_2024' for edition files; absent otherwise.
   edition?: string
 }
+
+// protoc's sentinels for `to max` in a range.
+// Message field numbers stop at 2^29-1, so an exclusive `end` is 2^29;
+// a message_set_wire_format message may use the full 32-bit space.
+export const MAX_FIELD_NUMBER_END = 536870912
+export const MAX_MESSAGE_SET_END = 2147483647
+// Enum numbers are plain int32 and enum reserved ranges are inclusive.
+export const MAX_ENUM_NUMBER = 2147483647
 
 // Scalar protobuf types -> FieldDescriptorProto.type. A field whose type
 // is not in this table is a message/enum/group reference (resolution

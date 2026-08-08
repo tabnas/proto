@@ -59,11 +59,19 @@ extendStmt     = "extend" messageType "{" *( field / emptyStmt ) "}"
 extensions     = "extensions" ranges [ fieldOptions ] ";"
 reserved       = "reserved" ( ranges / fieldNames ) ";"
 ranges         = range *( "," range )
-range          = NR [ "to" ( NR / "max" ) ]
-fieldNames     = strLit *( "," strLit )
+; Enum reserved ranges may be negative, so a range bound is signed.
+range          = [ "-" ] NR [ "to" ( [ "-" ] NR / "max" ) ]
+; Reserved names are string literals in proto2/proto3 and bare identifiers
+; from edition 2023 on; the union accepts either (and a mix).
+fieldNames     = reservedName *( "," reservedName )
+reservedName   = strLit / ident
 
-constant       = boolLit / fullIdent / signedNumber / strLit / messageValue
+constant       = boolLit / fullIdent / signedNumber / signedIdent / strLit
+               / messageValue
 signedNumber   = [ "-" / "+" ] NR
+; \`-inf\` / \`-nan\`: a negated identifier constant. Tried after signedNumber
+; so \`-33\` still lexes as a number.
+signedIdent    = "-" fullIdent
 boolLit        = VL
 messageValue   = "{" *messageValueEntry "}"
 messageValueEntry = ident [ ":" ] constant [ "," / ";" ]
@@ -79,6 +87,8 @@ emptyStmt      = ";"
 ; optional/repeated), extend, and extensions live in common (the permissive
 ; union); the descriptor walk enforces what each version actually allows.
 messageElement =/ groupField
+; A group is also a legal oneof member (\`oneof foo { group D = 4 {…} }\`).
+oneofElement   =/ groupField
 groupField     = [ label ] "group" ident "=" fieldNumber messageBody
 
 ; ===== proto3.abnf =====
@@ -99,4 +109,9 @@ importStmt      =/ "import" "option" strLit ";"
 topLevelDef     =/ symbolVisibility message / symbolVisibility enumDef
 messageElement  =/ symbolVisibility message / symbolVisibility enumDef
 symbolVisibility = "export" / "local"
+; \`export\` and \`local\` are contextual: they are only visibility modifiers
+; ahead of \`message\`/\`enum\`, and stay usable as ordinary name components
+; (\`local.pkg.SomeMessage\`). The union grammar lexes them as keywords, so
+; give fullIdent an alternative that may open with one.
+fullIdent       =/ symbolVisibility *( "." ident )
 `

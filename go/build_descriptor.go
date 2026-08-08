@@ -83,6 +83,9 @@ var (
 	numLeadRe  = regexp.MustCompile(`(?i)^[-+]?(?:\d|\.\d|0x|0o|0b)`)
 	rangeRe    = regexp.MustCompile(`^(-?\d+)(?:to(-?\d+|max))?$`)
 	plusPrefix = regexp.MustCompile(`^\+`)
+	// One reserved name: a double- or single-quoted literal, or an identifier.
+	reservedNameRe = regexp.MustCompile(
+		`"((?:[^"\\]|\\.)*)"|'((?:[^'\\]|\\.)*)'|([A-Za-z_][A-Za-z0-9_]*)`)
 )
 
 func stripWS(s string) string { return wsRe.ReplaceAllString(s, "") }
@@ -108,13 +111,17 @@ func srcAt(ns []map[string]any, i int) string {
 	return ""
 }
 
-// toInt parses an integer-valued token (field/enum numbers, ranges).
+// toInt parses an integer-valued token (field/enum numbers, ranges). It must
+// accept every literal form the lexer hands back — decimal, but also the
+// 0x / 0o / 0b integer literals protoc allows for enum and field numbers
+// (`HEX_MAX = 0x7FFFFFFF;`) — so it goes through the same jsNumber path the
+// TS side's Number() does.
 func toInt(s string) int {
 	s = strings.TrimSpace(s)
 	if n, err := strconv.Atoi(s); err == nil {
 		return n
 	}
-	if f, err := strconv.ParseFloat(s, 64); err == nil {
+	if f, ok := jsNumber(s); ok {
 		return int(f)
 	}
 	return 0
@@ -186,31 +193,86 @@ func constantValue(n map[string]any) OptionValue {
 	return s // identifier (enum value name, inf, nan, …) kept verbatim
 }
 
-// optionNameOf reads the option name in an `optionName "=" constant` statement
-// as everything before the constant, with the trailing `=` removed.
+// optionNameOf reads the option name in an `optionName "=" constant` statement.
+//
+// optionStmt keeps optionName as a child node, so use it when present. Inside
+// fieldOption abnf inlines the leading optionNamePart, so there the name has
+// to be read out of src — as everything BEFORE the trailing `"=" constant`.
+// Anchoring at the end matters: `option (file_opt1) = 1;` would otherwise find
+// the value `1` inside the name `file_opt1`.
 func optionNameOf(stmt, value map[string]any) string {
+	if named := child(stmt, "optionName"); named != nil {
+		return nsrc(named)
+	}
 	if value == nil {
 		return ""
 	}
-	i := strings.Index(nsrc(stmt), nsrc(value))
-	pre := ""
-	if i > 0 {
-		pre = nsrc(stmt)[:i]
+	s := strings.TrimSuffix(nsrc(stmt), ";")
+	tail := "=" + nsrc(value)
+	if strings.HasSuffix(s, tail) {
+		return s[:len(s)-len(tail)]
 	}
-	return strings.TrimSuffix(pre, "=")
+	i := strings.Index(s, nsrc(value))
+	if i <= 0 {
+		return ""
+	}
+	return strings.TrimSuffix(s[:i], "=")
+}
+
+// pseudoOptions is a field's option set with `json_name` and `default` split
+// out: protoc lifts those two out of the option set into descriptor fields.
+type pseudoOptions struct {
+	options      map[string]OptionValue
+	jsonName     string
+	defaultValue string
+	hasJSONName  bool
+	hasDefault   bool
 }
 
 // readFieldOptions reads `"[" fieldOption *( "," fieldOption ) "]"`.
-func readFieldOptions(opts map[string]any) map[string]OptionValue {
+func readFieldOptions(opts map[string]any) pseudoOptions {
+	var out pseudoOptions
+	if opts == nil {
+		return out
+	}
+	m := map[string]OptionValue{}
+	for _, fo := range childRules(opts) {
+		cst := child(fo, "constant")
+		name := optionNameOf(fo, cst)
+		if cst == nil || name == "" {
+			continue
+		}
+		switch name {
+		case "json_name":
+			out.jsonName, out.hasJSONName = unquote(nsrc(cst)), true
+		case "default":
+			out.defaultValue, out.hasDefault = unquote(nsrc(cst)), true
+		default:
+			m[name] = constantValue(cst)
+		}
+	}
+	if len(m) > 0 {
+		out.options = m
+	}
+	return out
+}
+
+// plainOptions is the option map for the places that cannot carry
+// json_name / default — extension ranges, enum values.
+func plainOptions(opts map[string]any) map[string]OptionValue {
+	return readFieldOptions(opts).options
+}
+
+// features is the subset of an option map whose names are rooted at
+// `features`; those govern a map entry's key/value fields too.
+func features(opts map[string]OptionValue) map[string]OptionValue {
 	if opts == nil {
 		return nil
 	}
 	out := map[string]OptionValue{}
-	for _, fo := range childRules(opts) {
-		cst := child(fo, "constant")
-		name := optionNameOf(fo, cst)
-		if cst != nil && name != "" {
-			out[name] = constantValue(cst)
+	for k, v := range opts {
+		if k == "features" || strings.HasPrefix(k, "features.") {
+			out[k] = v
 		}
 	}
 	if len(out) == 0 {
@@ -246,8 +308,10 @@ func fieldTypeName(typeText string) (typ, typeName string) {
 	if scalar, ok := ScalarTypes[bare]; ok {
 		return scalar, ""
 	}
-	// Message or enum reference; resolution deferred, store as written.
-	return "TYPE_MESSAGE", typeText
+	// A named reference: could be a message OR an enum, and telling them apart
+	// needs symbol resolution this parser deliberately does not do. protoc
+	// leaves Type unset here too, so record only TypeName, as written.
+	return "", typeText
 }
 
 // typeNodeOf finds the field type node. Normally a `fieldType` child; but when
@@ -263,12 +327,26 @@ func typeNodeOf(n map[string]any) map[string]any {
 	return child(n, "fullIdent")
 }
 
+// applyFieldOptions attaches an option list to a field, splitting out the
+// json_name / default pseudo-options.
+func applyFieldOptions(f *FieldDescriptorProto, opts map[string]any) {
+	po := readFieldOptions(opts)
+	if po.hasJSONName {
+		f.JsonName = po.jsonName
+	}
+	if po.hasDefault {
+		f.DefaultValue = po.defaultValue
+	}
+	if po.options != nil {
+		f.Options = po.options
+	}
+}
+
 func buildField(n map[string]any, version ProtoVersion) FieldDescriptorProto {
 	label := child(n, "label")
 	typeNode := typeNodeOf(n)
 	name := child(n, "ident")
 	number := child(n, "fieldNumber")
-	opts := child(n, "fieldOptions")
 
 	lbl, p3 := fieldLabel(label, version)
 	typ, typeName := fieldTypeName(srcOr(typeNode))
@@ -280,24 +358,57 @@ func buildField(n map[string]any, version ProtoVersion) FieldDescriptorProto {
 		Type:           typ,
 		TypeName:       typeName,
 	}
-	if fo := readFieldOptions(opts); fo != nil {
-		f.Options = fo
-	}
+	applyFieldOptions(&f, child(n, "fieldOptions"))
 	return f
 }
 
-// mapEntryName mirrors the TS `fname.replace(/(^|_)([a-z])/g, …)` — upper-case
-// the first letter and any letter following an underscore (the underscore is
-// preserved) — then append "Entry".
+// buildGroup expands a group into a field plus an implicit nested message.
+// protoc lowercases the field name and keeps the declared name for the
+// message and for TypeName:
+//
+//	`optional group TestGroup = 1 { … }`
+//	  -> field { name: "testgroup", type: TYPE_GROUP, typeName: "TestGroup" }
+//	  -> nestedType { name: "TestGroup", … }
+func buildGroup(n map[string]any, version ProtoVersion, into *DescriptorProto) FieldDescriptorProto {
+	groupName := srcOr(child(n, "ident"))
+	into.NestedType = append(into.NestedType,
+		messageFromBody(groupName, child(n, "messageBody"), version))
+
+	lbl, _ := fieldLabel(child(n, "label"), version)
+	f := FieldDescriptorProto{
+		Name:     strings.ToLower(groupName),
+		Number:   numOr(child(n, "fieldNumber")),
+		Label:    lbl,
+		Type:     "TYPE_GROUP",
+		TypeName: groupName,
+	}
+	applyFieldOptions(&f, child(n, "fieldOptions"))
+	return f
+}
+
+// isGroup: a group is the one construct with BOTH a field number and a message
+// body; `message` has a body but no number, `map`/`field` a number but no body.
+func isGroup(n map[string]any) bool {
+	return child(n, "fieldNumber") != nil && child(n, "messageBody") != nil
+}
+
+// mapEntryName is protoc's map-entry name: strip `_`, upper-case the letter
+// that follows (and the first letter), then append "Entry". `map_field` ->
+// `MapFieldEntry`.
 func mapEntryName(fname string) string {
 	b := make([]byte, 0, len(fname)+5)
+	capNext := true
 	for i := 0; i < len(fname); i++ {
 		c := fname[i]
-		if (i == 0 || fname[i-1] == '_') && c >= 'a' && c <= 'z' {
-			b = append(b, c-('a'-'A'))
-		} else {
-			b = append(b, c)
+		if c == '_' {
+			capNext = true
+			continue
 		}
+		if capNext && c >= 'a' && c <= 'z' {
+			c -= 'a' - 'A'
+		}
+		capNext = false
+		b = append(b, c)
 	}
 	return string(b) + "Entry"
 }
@@ -330,18 +441,22 @@ func buildMapField(n map[string]any, version ProtoVersion, into *DescriptorProto
 		OneofDecl: []OneofDescriptorProto{}, Extension: []FieldDescriptorProto{},
 		Options: map[string]OptionValue{"mapEntry": true},
 	}
-	into.NestedType = append(into.NestedType, entry)
 
 	f := FieldDescriptorProto{
 		Name:     fname,
 		Number:   numOr(number),
 		Label:    "LABEL_REPEATED",
-		Type:     "TYPE_MESSAGE",
 		TypeName: entryName,
 	}
-	if fo := readFieldOptions(child(n, "fieldOptions")); fo != nil {
-		f.Options = fo
+	applyFieldOptions(&f, child(n, "fieldOptions"))
+
+	// `features` on a map field govern the synthesised entry's key and value
+	// fields too, so protoc copies them down. Nothing else is propagated.
+	if feat := features(f.Options); feat != nil {
+		entry.Field[0].Options = feat
+		entry.Field[1].Options = feat
 	}
+	into.NestedType = append(into.NestedType, entry)
 	return f
 }
 
@@ -355,14 +470,22 @@ func buildEnum(n map[string]any) EnumDescriptorProto {
 		}
 		k := kw(el)
 		if strings.HasPrefix(k, "reserved") {
-			addReserved(el, &e.ReservedRange, &e.ReservedName)
+			// Enum reserved ranges are INCLUSIVE and span the whole int32 space.
+			addReserved(el, &e.ReservedRange, &e.ReservedName,
+				rangeOpts{exclusive: false, max: MaxEnumNumber})
 			continue
 		}
 		if strings.HasPrefix(k, "option") {
-			continue // enum-level option
+			if e.Options == nil {
+				e.Options = map[string]OptionValue{}
+			}
+			for kk, vv := range optionFrom(el) {
+				e.Options[kk] = vv
+			}
+			continue
 		}
 		// enumField: ident "=" ["-"] fieldNumber  -> name is the kw before "="
-		name := kw(el)
+		name := k
 		if i := strings.Index(name, "="); i >= 0 {
 			name = name[:i]
 		}
@@ -372,7 +495,9 @@ func buildEnum(n map[string]any) EnumDescriptorProto {
 			if strings.Contains(stripWS(nsrc(el)), "=-") {
 				n = -n
 			}
-			e.Value = append(e.Value, EnumValueDescriptorProto{Name: name, Number: n})
+			e.Value = append(e.Value, EnumValueDescriptorProto{
+				Name: name, Number: n, Options: plainOptions(child(el, "fieldOptions")),
+			})
 		}
 	}
 	return e
@@ -380,9 +505,16 @@ func buildEnum(n map[string]any) EnumDescriptorProto {
 
 // ---- reserved / extensions ranges -----------------------------------------
 
+// rangeOpts says how a range's `end` is written down: message extension and
+// reserved ranges are half-open (end exclusive), enum reserved ranges closed.
+type rangeOpts struct {
+	exclusive bool
+	max       int
+}
+
 // ranges parses `range *( "," range )`. The leading range is inlined into the
 // node's src, so parse the (whitespace-stripped) text rather than kids.
-func ranges(rangesNode map[string]any) []Range {
+func ranges(rangesNode map[string]any, ro rangeOpts) []Range {
 	if rangesNode == nil {
 		return nil
 	}
@@ -393,52 +525,137 @@ func ranges(rangesNode map[string]any) []Range {
 			continue
 		}
 		start := toInt(m[1])
-		end := start
-		if m[2] == "max" {
-			end = 536870911
-		} else if m[2] != "" {
+		var end int
+		switch {
+		case m[2] == "":
+			end = start
+			if ro.exclusive {
+				end = start + 1
+			}
+		case m[2] == "max":
+			end = ro.max
+		default:
 			end = toInt(m[2])
+			if ro.exclusive {
+				end++
+			}
 		}
 		out = append(out, Range{Start: start, End: end})
 	}
 	return out
 }
 
-func addReserved(n map[string]any, rr *[]Range, rnames *[]string) {
-	if rn := child(n, "ranges"); rn != nil {
-		*rr = append(*rr, ranges(rn)...)
-		return
-	}
-	if names := child(n, "fieldNames"); names != nil {
-		for _, k := range childRules(names) {
-			if nrule(k) == "strLit" {
-				*rnames = append(*rnames, unquote(nsrc(k)))
-			}
+// reservedNames reads the reserved-name list. Both the leading strLit/ident
+// and (for a single-item list) the whole list can be inlined into src, so read
+// the names out of the statement text; whole-word tokens make that
+// unambiguous.
+func reservedNames(n map[string]any) []string {
+	body := strings.TrimSuffix(strings.TrimPrefix(nsrc(n), "reserved"), ";")
+	var out []string
+	for _, m := range reservedNameRe.FindAllStringSubmatch(body, -1) {
+		switch {
+		case m[1] != "":
+			out = append(out, m[1])
+		case m[2] != "":
+			out = append(out, m[2])
+		default:
+			out = append(out, m[3])
 		}
 	}
+	return out
+}
+
+func addReserved(n map[string]any, rr *[]Range, rnames *[]string, ro rangeOpts) {
+	if rn := child(n, "ranges"); rn != nil {
+		*rr = append(*rr, ranges(rn, ro)...)
+		return
+	}
+	*rnames = append(*rnames, reservedNames(n)...)
 }
 
 // ---- messages -------------------------------------------------------------
 
 func buildMessage(n map[string]any, version ProtoVersion) DescriptorProto {
+	return messageFromBody(srcOr(child(n, "ident")), child(n, "messageBody"), version)
+}
+
+func messageFromBody(name string, body map[string]any, version ProtoVersion) DescriptorProto {
 	msg := DescriptorProto{
-		Name:  srcOr(child(n, "ident")),
+		Name:  name,
 		Field: []FieldDescriptorProto{}, NestedType: []DescriptorProto{},
 		EnumType: []EnumDescriptorProto{}, OneofDecl: []OneofDescriptorProto{},
 		Extension: []FieldDescriptorProto{},
 	}
-	body := child(n, "messageBody")
+	var elements []map[string]any
 	if body != nil {
 		for _, el := range childRules(body) {
 			if nrule(el) == "messageElement" {
-				addMessageElement(el, version, &msg)
+				elements = append(elements, el)
 			}
 		}
 	}
+
+	// Options first: message_set_wire_format changes what `to max` means in an
+	// extension/reserved range, and protoc applies it wherever the option sits.
+	for _, el := range elements {
+		if isOptionStmt(el) {
+			if msg.Options == nil {
+				msg.Options = map[string]OptionValue{}
+			}
+			for kk, vv := range optionFrom(el) {
+				msg.Options[kk] = vv
+			}
+		}
+	}
+	ro := rangeOpts{exclusive: true, max: MaxFieldNumberEnd}
+	if msg.Options["message_set_wire_format"] == true {
+		ro.max = MaxMessageSetEnd
+	}
+
+	for _, el := range elements {
+		if !isOptionStmt(el) {
+			addMessageElement(el, version, &msg, ro)
+		}
+	}
+	generateSyntheticOneofs(&msg)
 	return msg
 }
 
-func addMessageElement(el map[string]any, version ProtoVersion, msg *DescriptorProto) {
+// isOptionStmt reports an `option` statement, as opposed to an
+// `optional`-labelled field (whose kw is empty because the label starts src).
+func isOptionStmt(el map[string]any) bool {
+	return strings.HasPrefix(kw(el), "option")
+}
+
+// generateSyntheticOneofs mirrors protoc: a single-field oneof is synthesised
+// for every proto3 explicit `optional` field, appended after the declared
+// oneofs. The name is the field name prefixed with `_`, then prefixed with `X`
+// until unique.
+func generateSyntheticOneofs(msg *DescriptorProto) {
+	names := map[string]bool{}
+	for _, f := range msg.Field {
+		names[f.Name] = true
+	}
+	for _, o := range msg.OneofDecl {
+		names[o.Name] = true
+	}
+	for i := range msg.Field {
+		f := &msg.Field[i]
+		if !f.Proto3Optional || f.OneofIndex != nil {
+			continue
+		}
+		oneofName := "_" + f.Name
+		for names[oneofName] {
+			oneofName = "X" + oneofName
+		}
+		names[oneofName] = true
+		idx := len(msg.OneofDecl)
+		f.OneofIndex = &idx
+		msg.OneofDecl = append(msg.OneofDecl, OneofDescriptorProto{Name: oneofName})
+	}
+}
+
+func addMessageElement(el map[string]any, version ProtoVersion, msg *DescriptorProto, ro rangeOpts) {
 	k := kw(el)
 	rs := childRules(el)
 	var first map[string]any
@@ -454,11 +671,10 @@ func addMessageElement(el map[string]any, version ProtoVersion, msg *DescriptorP
 		return
 	case strings.HasPrefix(k, "export"), strings.HasPrefix(k, "local"):
 		// edition 2024 symbol visibility wraps the message/enum as a child node.
-		if m := child(el, "message"); m != nil {
-			msg.NestedType = append(msg.NestedType, buildMessage(m, version))
-		} else if e := child(el, "enumDef"); e != nil {
-			msg.EnumType = append(msg.EnumType, buildEnum(e))
-		}
+		addVisible(el, k, version, &msg.NestedType, &msg.EnumType)
+		return
+	case isGroup(el):
+		msg.Field = append(msg.Field, buildGroup(el, version, msg))
 		return
 	case strings.HasPrefix(k, "message"):
 		msg.NestedType = append(msg.NestedType, buildMessage(el, version))
@@ -467,21 +683,21 @@ func addMessageElement(el map[string]any, version ProtoVersion, msg *DescriptorP
 		msg.EnumType = append(msg.EnumType, buildEnum(el))
 		return
 	case strings.HasPrefix(k, "reserved"):
-		addReserved(el, &msg.ReservedRange, &msg.ReservedName)
+		addReserved(el, &msg.ReservedRange, &msg.ReservedName, ro)
 		return
 	case strings.HasPrefix(k, "extensions"):
-		msg.ExtensionRange = append(msg.ExtensionRange, ranges(child(el, "ranges"))...)
+		rs := ranges(child(el, "ranges"), ro)
+		// A compound `extensions 2, 9 to 11 [(i) = 5];` puts the options on
+		// every range, as protoc does.
+		if opts := plainOptions(child(el, "fieldOptions")); opts != nil {
+			for i := range rs {
+				rs[i].Options = opts
+			}
+		}
+		msg.ExtensionRange = append(msg.ExtensionRange, rs...)
 		return
 	case strings.HasPrefix(k, "extend"):
 		addExtend(el, version, &msg.Extension)
-		return
-	case strings.HasPrefix(k, "option"):
-		if msg.Options == nil {
-			msg.Options = map[string]OptionValue{}
-		}
-		for kk, vv := range optionFrom(el) {
-			msg.Options[kk] = vv
-		}
 		return
 	}
 	if nsrc(el) == ";" {
@@ -490,6 +706,25 @@ func addMessageElement(el map[string]any, version ProtoVersion, msg *DescriptorP
 	// No keyword and a fieldType/label lead => a field.
 	if first != nil && (nrule(first) == "fieldType" || nrule(first) == "label") {
 		msg.Field = append(msg.Field, buildField(el, version))
+	}
+}
+
+// addVisible handles an edition 2024 `export` / `local` message or enum
+// declaration; the wrapped message/enumDef stays a child node.
+func addVisible(el map[string]any, k string, version ProtoVersion,
+	messages *[]DescriptorProto, enums *[]EnumDescriptorProto) {
+	vis := VisibilityLocal
+	if strings.HasPrefix(k, "export") {
+		vis = VisibilityExport
+	}
+	if m := child(el, "message"); m != nil {
+		d := buildMessage(m, version)
+		d.Visibility = vis
+		*messages = append(*messages, d)
+	} else if e := child(el, "enumDef"); e != nil {
+		d := buildEnum(e)
+		d.Visibility = vis
+		*enums = append(*enums, d)
 	}
 }
 
@@ -507,7 +742,12 @@ func addOneof(el map[string]any, version ProtoVersion, msg *DescriptorProto) {
 		if nsrc(of) == ";" {
 			continue
 		}
-		f := buildField(of, version)
+		var f FieldDescriptorProto
+		if isGroup(of) {
+			f = buildGroup(of, version, msg)
+		} else {
+			f = buildField(of, version)
+		}
 		idx := index
 		f.OneofIndex = &idx
 		f.Proto3Optional = false // explicit oneof members aren't proto3-optional
@@ -517,9 +757,12 @@ func addOneof(el map[string]any, version ProtoVersion, msg *DescriptorProto) {
 
 func addExtend(el map[string]any, version ProtoVersion, into *[]FieldDescriptorProto) {
 	// extend messageType "{" *field "}" — fields inline as messageElement-like.
+	extendee := srcOr(child(el, "messageType"))
 	for _, f := range childRules(el) {
 		if nrule(f) == "field" || nrule(f) == "messageElement" {
-			*into = append(*into, buildField(f, version))
+			fd := buildField(f, version)
+			fd.Extendee = extendee
+			*into = append(*into, fd)
 		}
 	}
 }
@@ -532,7 +775,10 @@ func optionFrom(el map[string]any) map[string]OptionValue {
 	if cst == nil {
 		return map[string]OptionValue{}
 	}
-	name := strings.TrimPrefix(optionNameOf(el, cst), "option")
+	name := optionNameOf(el, cst)
+	if name == "" {
+		return map[string]OptionValue{}
+	}
 	return map[string]OptionValue{name: constantValue(cst)}
 }
 
@@ -541,8 +787,18 @@ func optionFrom(el map[string]any) map[string]OptionValue {
 func buildService(n map[string]any) ServiceDescriptorProto {
 	svc := ServiceDescriptorProto{Name: srcOr(child(n, "ident")), Method: []MethodDescriptorProto{}}
 	for _, el := range childRules(n) {
-		if nrule(el) == "serviceElement" && strings.HasPrefix(kw(el), "rpc") {
+		if nrule(el) != "serviceElement" {
+			continue
+		}
+		if strings.HasPrefix(kw(el), "rpc") {
 			svc.Method = append(svc.Method, buildRpc(el))
+		} else if isOptionStmt(el) {
+			if svc.Options == nil {
+				svc.Options = map[string]OptionValue{}
+			}
+			for kk, vv := range optionFrom(el) {
+				svc.Options[kk] = vv
+			}
 		}
 	}
 	return svc
@@ -578,6 +834,17 @@ func buildRpc(el map[string]any) MethodDescriptorProto {
 	if strings.Contains(response, "(stream") {
 		m.ServerStreaming = true
 	}
+	for _, o := range childRules(el) {
+		if nrule(o) != "optionStmt" {
+			continue
+		}
+		if m.Options == nil {
+			m.Options = map[string]OptionValue{}
+		}
+		for kk, vv := range optionFrom(o) {
+			m.Options[kk] = vv
+		}
+	}
 	return m
 }
 
@@ -595,6 +862,7 @@ func BuildFile(proto map[string]any, version ProtoVersion) FileDescriptorProto {
 	}
 	if IsEdition(version) {
 		file.Edition = EditionEnum(version)
+		file.Syntax = "editions"
 	} else {
 		file.Syntax = version
 	}
@@ -611,6 +879,11 @@ func BuildFile(proto map[string]any, version ProtoVersion) FileDescriptorProto {
 			}
 		case strings.HasPrefix(k, "import"):
 			if s := child(def, "strLit"); s != nil {
+				// `import option "x";` (edition 2024) is a separate list.
+				if strings.Contains(k, "option") {
+					file.OptionDependency = append(file.OptionDependency, unquote(nsrc(s)))
+					break
+				}
 				idx := len(file.Dependency)
 				file.Dependency = append(file.Dependency, unquote(nsrc(s)))
 				if strings.Contains(k, "public") {
@@ -620,7 +893,7 @@ func BuildFile(proto map[string]any, version ProtoVersion) FileDescriptorProto {
 					file.WeakDependency = append(file.WeakDependency, idx)
 				}
 			}
-		case strings.HasPrefix(k, "option"):
+		case isOptionStmt(def):
 			if file.Options == nil {
 				file.Options = map[string]OptionValue{}
 			}
@@ -628,11 +901,7 @@ func BuildFile(proto map[string]any, version ProtoVersion) FileDescriptorProto {
 				file.Options[kk] = vv
 			}
 		case strings.HasPrefix(k, "export"), strings.HasPrefix(k, "local"):
-			if m := child(def, "message"); m != nil {
-				file.MessageType = append(file.MessageType, buildMessage(m, version))
-			} else if e := child(def, "enumDef"); e != nil {
-				file.EnumType = append(file.EnumType, buildEnum(e))
-			}
+			addVisible(def, k, version, &file.MessageType, &file.EnumType)
 		case strings.HasPrefix(k, "message"):
 			file.MessageType = append(file.MessageType, buildMessage(def, version))
 		case strings.HasPrefix(k, "enum"):

@@ -51,7 +51,9 @@ service Dir { rpc Find (Person) returns (stream Person); }
   it('synthesises a map entry message and a repeated message field', () => {
     const scores = fdp.messageType[0].field.find((x: any) => x.name === 'scores')
     assert.equal(scores.label, 'LABEL_REPEATED')
-    assert.equal(scores.type, 'TYPE_MESSAGE')
+    // A named type is unresolved here, so `type` is left unset (as protoc
+    // does before its resolution pass) and only `typeName` is recorded.
+    assert.equal(scores.type, undefined)
     assert.equal(scores.typeName, 'ScoresEntry')
     const entry = fdp.messageType[0].nestedType.find((m: any) => m.name === 'ScoresEntry')
     assert.equal(entry.options.mapEntry, true)
@@ -61,10 +63,14 @@ service Dir { rpc Find (Person) returns (stream Person); }
 
   it('records oneof declarations and back-references', () => {
     const m = fdp.messageType[0]
-    assert.deepEqual(m.oneofDecl.map((o: any) => o.name), ['contact'])
+    // `contact` is declared; `_age` is the synthetic oneof protoc adds for
+    // the proto3 explicit `optional int32 age`, appended after it.
+    assert.deepEqual(m.oneofDecl.map((o: any) => o.name), ['contact', '_age'])
     const email = m.field.find((x: any) => x.name === 'email')
     assert.equal(email.oneofIndex, 0)
     assert.equal(email.type, 'TYPE_STRING')
+    const age = m.field.find((x: any) => x.name === 'age')
+    assert.equal(age.oneofIndex, 1)
   })
 
   it('captures nested messages and enums', () => {
@@ -99,17 +105,29 @@ extend Foo { optional string ext = 100; }
     const f = fdp.messageType[0].field
     const id = f.find((x: any) => x.name === 'id')
     assert.equal(id.label, 'LABEL_REQUIRED')
+    // `default` is a pseudo-option: protoc lifts it to `defaultValue`.
     const name = f.find((x: any) => x.name === 'name')
-    assert.equal(name.options.default, 'x')
+    assert.equal(name.defaultValue, 'x')
+    assert.equal(name.options, undefined)
     const bars = f.find((x: any) => x.name === 'bars')
     assert.deepEqual([bars.label, bars.type, bars.typeName],
-      ['LABEL_REPEATED', 'TYPE_MESSAGE', 'Bar'])
+      ['LABEL_REPEATED', undefined, 'Bar'])
+  })
+
+  it('expands a group into a field plus a nested message', () => {
+    const g = fdp.messageType[0].field.find((x: any) => x.name === 'mygroup')
+    assert.deepEqual([g.number, g.label, g.type, g.typeName],
+      [4, 'LABEL_OPTIONAL', 'TYPE_GROUP', 'MyGroup'])
+    const nested = fdp.messageType[0].nestedType.find((m: any) => m.name === 'MyGroup')
+    assert.deepEqual(nested.field.map((x: any) => x.name), ['a'])
   })
 
   it('records extension ranges and top-level extend', () => {
-    assert.deepEqual(fdp.messageType[0].extensionRange, [{ start: 100, end: 199 }])
+    // `end` is exclusive, as in descriptor.proto: `100 to 199` -> [100, 200).
+    assert.deepEqual(fdp.messageType[0].extensionRange, [{ start: 100, end: 200 }])
     assert.equal(fdp.extension[0].name, 'ext')
     assert.equal(fdp.extension[0].number, 100)
+    assert.equal(fdp.extension[0].extendee, 'Foo')
   })
 })
 
@@ -135,9 +153,13 @@ message Outer { local enum E { A = 0; } }
 `)
   it('parses import option, export/local symbol visibility', () => {
     assert.equal(fdp.edition, 'EDITION_2024')
-    assert.deepEqual(fdp.dependency, ['custom.proto'])
+    // `import option` is its own dependency list, not a plain import.
+    assert.deepEqual(fdp.dependency, [])
+    assert.deepEqual(fdp.optionDependency, ['custom.proto'])
     assert.equal(fdp.messageType[0].name, 'Pub')
+    assert.equal(fdp.messageType[0].visibility, 'VISIBILITY_EXPORT')
     assert.equal(fdp.messageType[1].enumType[0].name, 'E')
+    assert.equal(fdp.messageType[1].enumType[0].visibility, 'VISIBILITY_LOCAL')
   })
 })
 

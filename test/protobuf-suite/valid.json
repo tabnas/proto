@@ -1,0 +1,2554 @@
+[
+ {
+  "name": "ParseMessageTest.SimpleMessage",
+  "helper": "ExpectParsesTo",
+  "input": "message TestMessage {\n  required int32 foo = 1;\n}\n",
+  "expected": {
+   "messageType": [
+    {
+     "field": [
+      {
+       "label": "LABEL_REQUIRED",
+       "name": "foo",
+       "number": 1,
+       "type": "TYPE_INT32"
+      }
+     ],
+     "name": "TestMessage"
+    }
+   ]
+  }
+ },
+ {
+  "name": "ParseMessageTest.ImplicitSyntaxIdentifier",
+  "helper": "ExpectParsesTo",
+  "input": "message TestMessage {\n  required int32 foo = 1;\n}\n",
+  "expected": {
+   "messageType": [
+    {
+     "field": [
+      {
+       "label": "LABEL_REQUIRED",
+       "name": "foo",
+       "number": 1,
+       "type": "TYPE_INT32"
+      }
+     ],
+     "name": "TestMessage"
+    }
+   ]
+  }
+ },
+ {
+  "name": "ParseMessageTest.ExplicitSyntaxIdentifier",
+  "helper": "ExpectParsesTo",
+  "input": "syntax = \"proto2\";\nmessage TestMessage {\n  required int32 foo = 1;\n}\n",
+  "expected": {
+   "messageType": [
+    {
+     "field": [
+      {
+       "label": "LABEL_REQUIRED",
+       "name": "foo",
+       "number": 1,
+       "type": "TYPE_INT32"
+      }
+     ],
+     "name": "TestMessage"
+    }
+   ],
+   "syntax": "proto2"
+  }
+ },
+ {
+  "name": "ParseMessageTest.ExplicitRequiredSyntaxIdentifier",
+  "helper": "ExpectParsesTo",
+  "input": "syntax = \"proto2\";\nmessage TestMessage {\n  required int32 foo = 1;\n}\n",
+  "expected": {
+   "messageType": [
+    {
+     "field": [
+      {
+       "label": "LABEL_REQUIRED",
+       "name": "foo",
+       "number": 1,
+       "type": "TYPE_INT32"
+      }
+     ],
+     "name": "TestMessage"
+    }
+   ],
+   "syntax": "proto2"
+  }
+ },
+ {
+  "name": "ParseMessageTest.SimpleFields",
+  "helper": "ExpectParsesTo",
+  "input": "message TestMessage {\n  required int32 foo = 15;\n  optional int32 bar = 34;\n  repeated int32 baz = 3;\n}\n",
+  "expected": {
+   "messageType": [
+    {
+     "field": [
+      {
+       "label": "LABEL_REQUIRED",
+       "name": "foo",
+       "number": 15,
+       "type": "TYPE_INT32"
+      },
+      {
+       "label": "LABEL_OPTIONAL",
+       "name": "bar",
+       "number": 34,
+       "type": "TYPE_INT32"
+      },
+      {
+       "label": "LABEL_REPEATED",
+       "name": "baz",
+       "number": 3,
+       "type": "TYPE_INT32"
+      }
+     ],
+     "name": "TestMessage"
+    }
+   ]
+  }
+ },
+ {
+  "name": "ParseMessageTest.PrimitiveFieldTypes",
+  "helper": "ExpectParsesTo",
+  "input": "message TestMessage {\n  required int32    foo = 1;\n  required int64    foo = 1;\n  required uint32   foo = 1;\n  required uint64   foo = 1;\n  required sint32   foo = 1;\n  required sint64   foo = 1;\n  required fixed32  foo = 1;\n  required fixed64  foo = 1;\n  required sfixed32 foo = 1;\n  required sfixed64 foo = 1;\n  required float    foo = 1;\n  required double   foo = 1;\n  required string   foo = 1;\n  required bytes    foo = 1;\n  required bool     foo = 1;\n}\n",
+  "expected": {
+   "messageType": [
+    {
+     "field": [
+      {
+       "label": "LABEL_REQUIRED",
+       "name": "foo",
+       "number": 1,
+       "type": "TYPE_INT32"
+      },
+      {
+       "label": "LABEL_REQUIRED",
+       "name": "foo",
+       "number": 1,
+       "type": "TYPE_INT64"
+      },
+      {
+       "label": "LABEL_REQUIRED",
+       "name": "foo",
+       "number": 1,
+       "type": "TYPE_UINT32"
+      },
+      {
+       "label": "LABEL_REQUIRED",
+       "name": "foo",
+       "number": 1,
+       "type": "TYPE_UINT64"
+      },
+      {
+       "label": "LABEL_REQUIRED",
+       "name": "foo",
+       "number": 1,
+       "type": "TYPE_SINT32"
+      },
+      {
+       "label": "LABEL_REQUIRED",
+       "name": "foo",
+       "number": 1,
+       "type": "TYPE_SINT64"
+      },
+      {
+       "label": "LABEL_REQUIRED",
+       "name": "foo",
+       "number": 1,
+       "type": "TYPE_FIXED32"
+      },
+      {
+       "label": "LABEL_REQUIRED",
+       "name": "foo",
+       "number": 1,
+       "type": "TYPE_FIXED64"
+      },
+      {
+       "label": "LABEL_REQUIRED",
+       "name": "foo",
+       "number": 1,
+       "type": "TYPE_SFIXED32"
+      },
+      {
+       "label": "LABEL_REQUIRED",
+       "name": "foo",
+       "number": 1,
+       "type": "TYPE_SFIXED64"
+      },
+      {
+       "label": "LABEL_REQUIRED",
+       "name": "foo",
+       "number": 1,
+       "type": "TYPE_FLOAT"
+      },
+      {
+       "label": "LABEL_REQUIRED",
+       "name": "foo",
+       "number": 1,
+       "type": "TYPE_DOUBLE"
+      },
+      {
+       "label": "LABEL_REQUIRED",
+       "name": "foo",
+       "number": 1,
+       "type": "TYPE_STRING"
+      },
+      {
+       "label": "LABEL_REQUIRED",
+       "name": "foo",
+       "number": 1,
+       "type": "TYPE_BYTES"
+      },
+      {
+       "label": "LABEL_REQUIRED",
+       "name": "foo",
+       "number": 1,
+       "type": "TYPE_BOOL"
+      }
+     ],
+     "name": "TestMessage"
+    }
+   ]
+  }
+ },
+ {
+  "name": "ParseMessageTest.FieldJsonName",
+  "helper": "ExpectParsesTo",
+  "input": "message TestMessage {\n  optional string foo = 1 [json_name = \"@type\"];\n}\n",
+  "expected": {
+   "messageType": [
+    {
+     "field": [
+      {
+       "jsonName": "@type",
+       "label": "LABEL_OPTIONAL",
+       "name": "foo",
+       "number": 1,
+       "type": "TYPE_STRING"
+      }
+     ],
+     "name": "TestMessage"
+    }
+   ]
+  }
+ },
+ {
+  "name": "ParseMessageTest.Varint32Unstable",
+  "helper": "ExpectParsesTo",
+  "input": "edition = \"UNSTABLE\";\nmessage NewVarintTypes {\n  varint32 value = 1;\n  }",
+  "expected": {
+   "edition": "EDITION_UNSTABLE",
+   "messageType": [
+    {
+     "field": [
+      {
+       "label": "LABEL_OPTIONAL",
+       "name": "value",
+       "number": 1,
+       "type": "TYPE_INT32"
+      }
+     ],
+     "name": "NewVarintTypes"
+    }
+   ],
+   "syntax": "editions"
+  }
+ },
+ {
+  "name": "ParseMessageTest.Varint64Unstable",
+  "helper": "ExpectParsesTo",
+  "input": "edition = \"UNSTABLE\";\nmessage NewVarintTypes {\n  varint64 int64_field = 1;\n}",
+  "expected": {
+   "edition": "EDITION_UNSTABLE",
+   "messageType": [
+    {
+     "field": [
+      {
+       "label": "LABEL_OPTIONAL",
+       "name": "int64_field",
+       "number": 1,
+       "type": "TYPE_INT64"
+      }
+     ],
+     "name": "NewVarintTypes"
+    }
+   ],
+   "syntax": "editions"
+  }
+ },
+ {
+  "name": "ParseMessageTest.Zigzag32Unstable",
+  "helper": "ExpectParsesTo",
+  "input": "edition = \"UNSTABLE\";\nmessage NewVarintTypes {\n  zigzag32 sint32_field = 1;\n}",
+  "expected": {
+   "edition": "EDITION_UNSTABLE",
+   "messageType": [
+    {
+     "field": [
+      {
+       "label": "LABEL_OPTIONAL",
+       "name": "sint32_field",
+       "number": 1,
+       "type": "TYPE_SINT32"
+      }
+     ],
+     "name": "NewVarintTypes"
+    }
+   ],
+   "syntax": "editions"
+  }
+ },
+ {
+  "name": "ParseMessageTest.Zigzag64Unstable",
+  "helper": "ExpectParsesTo",
+  "input": "edition = \"UNSTABLE\";\nmessage NewVarintTypes {\n  zigzag64 sint64_field = 1;\n}",
+  "expected": {
+   "edition": "EDITION_UNSTABLE",
+   "messageType": [
+    {
+     "field": [
+      {
+       "label": "LABEL_OPTIONAL",
+       "name": "sint64_field",
+       "number": 1,
+       "type": "TYPE_SINT64"
+      }
+     ],
+     "name": "NewVarintTypes"
+    }
+   ],
+   "syntax": "editions"
+  }
+ },
+ {
+  "name": "ParseMessageTest.Uvarint32Unstable",
+  "helper": "ExpectParsesTo",
+  "input": "edition = \"UNSTABLE\";\nmessage NewVarintTypes {\n  uvarint32 uint32_field = 1;\n}",
+  "expected": {
+   "edition": "EDITION_UNSTABLE",
+   "messageType": [
+    {
+     "field": [
+      {
+       "label": "LABEL_OPTIONAL",
+       "name": "uint32_field",
+       "number": 1,
+       "type": "TYPE_UINT32"
+      }
+     ],
+     "name": "NewVarintTypes"
+    }
+   ],
+   "syntax": "editions"
+  }
+ },
+ {
+  "name": "ParseMessageTest.Uvarint64Unstable",
+  "helper": "ExpectParsesTo",
+  "input": "edition = \"UNSTABLE\";\nmessage NewVarintTypes {\n  uvarint64 uint64_field = 1;\n}",
+  "expected": {
+   "edition": "EDITION_UNSTABLE",
+   "messageType": [
+    {
+     "field": [
+      {
+       "label": "LABEL_OPTIONAL",
+       "name": "uint64_field",
+       "number": 1,
+       "type": "TYPE_UINT64"
+      }
+     ],
+     "name": "NewVarintTypes"
+    }
+   ],
+   "syntax": "editions"
+  }
+ },
+ {
+  "name": "ParseMessageTest.Int32Unstable",
+  "helper": "ExpectParsesTo",
+  "input": "\nedition = \"UNSTABLE\";\nmessage Test {\n  int32 value = 1;\n}",
+  "expected": {
+   "edition": "EDITION_UNSTABLE",
+   "messageType": [
+    {
+     "field": [
+      {
+       "label": "LABEL_OPTIONAL",
+       "name": "value",
+       "number": 1,
+       "type": "TYPE_SFIXED32"
+      }
+     ],
+     "name": "Test"
+    }
+   ],
+   "syntax": "editions"
+  }
+ },
+ {
+  "name": "ParseMessageTest.Int32Edition2024",
+  "helper": "ExpectParsesTo",
+  "input": "edition = \"2024\";\nmessage Test {\n  int32 value = 1;\n}",
+  "expected": {
+   "edition": "EDITION_2024",
+   "messageType": [
+    {
+     "field": [
+      {
+       "label": "LABEL_OPTIONAL",
+       "name": "value",
+       "number": 1,
+       "type": "TYPE_INT32"
+      }
+     ],
+     "name": "Test"
+    }
+   ],
+   "syntax": "editions"
+  }
+ },
+ {
+  "name": "ParseMessageTest.UInt32Unstable",
+  "helper": "ExpectParsesTo",
+  "input": "edition = \"UNSTABLE\";\nmessage Test {\n  uint32 value = 1;\n}",
+  "expected": {
+   "edition": "EDITION_UNSTABLE",
+   "messageType": [
+    {
+     "field": [
+      {
+       "label": "LABEL_OPTIONAL",
+       "name": "value",
+       "number": 1,
+       "type": "TYPE_FIXED32"
+      }
+     ],
+     "name": "Test"
+    }
+   ],
+   "syntax": "editions"
+  }
+ },
+ {
+  "name": "ParseMessageTest.UInt32Edition2024",
+  "helper": "ExpectParsesTo",
+  "input": "edition = \"2024\";\nmessage Test {\n  uint32 value = 1;\n}",
+  "expected": {
+   "edition": "EDITION_2024",
+   "messageType": [
+    {
+     "field": [
+      {
+       "label": "LABEL_OPTIONAL",
+       "name": "value",
+       "number": 1,
+       "type": "TYPE_UINT32"
+      }
+     ],
+     "name": "Test"
+    }
+   ],
+   "syntax": "editions"
+  }
+ },
+ {
+  "name": "ParseMessageTest.Int64Unstable",
+  "helper": "ExpectParsesTo",
+  "input": "edition = \"UNSTABLE\";\nmessage Test {\n  int64 value = 1;\n}",
+  "expected": {
+   "edition": "EDITION_UNSTABLE",
+   "messageType": [
+    {
+     "field": [
+      {
+       "label": "LABEL_OPTIONAL",
+       "name": "value",
+       "number": 1,
+       "type": "TYPE_SFIXED64"
+      }
+     ],
+     "name": "Test"
+    }
+   ],
+   "syntax": "editions"
+  }
+ },
+ {
+  "name": "ParseMessageTest.Int64Edition2024",
+  "helper": "ExpectParsesTo",
+  "input": "edition = \"2024\";\nmessage Test {\n  int64 value = 1;\n}",
+  "expected": {
+   "edition": "EDITION_2024",
+   "messageType": [
+    {
+     "field": [
+      {
+       "label": "LABEL_OPTIONAL",
+       "name": "value",
+       "number": 1,
+       "type": "TYPE_INT64"
+      }
+     ],
+     "name": "Test"
+    }
+   ],
+   "syntax": "editions"
+  }
+ },
+ {
+  "name": "ParseMessageTest.UInt64Unstable",
+  "helper": "ExpectParsesTo",
+  "input": "edition = \"UNSTABLE\";\nmessage Test {\n  uint64 value = 1;\n}",
+  "expected": {
+   "edition": "EDITION_UNSTABLE",
+   "messageType": [
+    {
+     "field": [
+      {
+       "label": "LABEL_OPTIONAL",
+       "name": "value",
+       "number": 1,
+       "type": "TYPE_FIXED64"
+      }
+     ],
+     "name": "Test"
+    }
+   ],
+   "syntax": "editions"
+  }
+ },
+ {
+  "name": "ParseMessageTest.UInt64Edition2024",
+  "helper": "ExpectParsesTo",
+  "input": "edition = \"2024\";\nmessage Test {\n  uint64 value = 1;\n}",
+  "expected": {
+   "edition": "EDITION_2024",
+   "messageType": [
+    {
+     "field": [
+      {
+       "label": "LABEL_OPTIONAL",
+       "name": "value",
+       "number": 1,
+       "type": "TYPE_UINT64"
+      }
+     ],
+     "name": "Test"
+    }
+   ],
+   "syntax": "editions"
+  }
+ },
+ {
+  "name": "ParseMessageTest.Fixed32Edition2024",
+  "helper": "ExpectParsesTo",
+  "input": "edition = \"2024\";\nmessage Test {\n  fixed32 value = 1;\n}",
+  "expected": {
+   "edition": "EDITION_2024",
+   "messageType": [
+    {
+     "field": [
+      {
+       "label": "LABEL_OPTIONAL",
+       "name": "value",
+       "number": 1,
+       "type": "TYPE_FIXED32"
+      }
+     ],
+     "name": "Test"
+    }
+   ],
+   "syntax": "editions"
+  }
+ },
+ {
+  "name": "ParseMessageTest.Fixed64Edition2024",
+  "helper": "ExpectParsesTo",
+  "input": "edition = \"2024\";\nmessage Test {\n  fixed64 value = 1;\n}",
+  "expected": {
+   "edition": "EDITION_2024",
+   "messageType": [
+    {
+     "field": [
+      {
+       "label": "LABEL_OPTIONAL",
+       "name": "value",
+       "number": 1,
+       "type": "TYPE_FIXED64"
+      }
+     ],
+     "name": "Test"
+    }
+   ],
+   "syntax": "editions"
+  }
+ },
+ {
+  "name": "ParseMessageTest.Sfixed32Edition2024",
+  "helper": "ExpectParsesTo",
+  "input": "edition = \"2024\";\nmessage Test {\n  sfixed32 value = 1;\n}",
+  "expected": {
+   "edition": "EDITION_2024",
+   "messageType": [
+    {
+     "field": [
+      {
+       "label": "LABEL_OPTIONAL",
+       "name": "value",
+       "number": 1,
+       "type": "TYPE_SFIXED32"
+      }
+     ],
+     "name": "Test"
+    }
+   ],
+   "syntax": "editions"
+  }
+ },
+ {
+  "name": "ParseMessageTest.Sfixed64Edition2024",
+  "helper": "ExpectParsesTo",
+  "input": "edition = \"2024\";\nmessage Test {\n  sfixed64 value = 1;\n}",
+  "expected": {
+   "edition": "EDITION_2024",
+   "messageType": [
+    {
+     "field": [
+      {
+       "label": "LABEL_OPTIONAL",
+       "name": "value",
+       "number": 1,
+       "type": "TYPE_SFIXED64"
+      }
+     ],
+     "name": "Test"
+    }
+   ],
+   "syntax": "editions"
+  }
+ },
+ {
+  "name": "ParseMessageTest.Sint32Edition2024",
+  "helper": "ExpectParsesTo",
+  "input": "edition = \"2024\";\nmessage Test {\n  sint32 value = 1;\n}",
+  "expected": {
+   "edition": "EDITION_2024",
+   "messageType": [
+    {
+     "field": [
+      {
+       "label": "LABEL_OPTIONAL",
+       "name": "value",
+       "number": 1,
+       "type": "TYPE_SINT32"
+      }
+     ],
+     "name": "Test"
+    }
+   ],
+   "syntax": "editions"
+  }
+ },
+ {
+  "name": "ParseMessageTest.Sint64Edition2024",
+  "helper": "ExpectParsesTo",
+  "input": "edition = \"2024\";\nmessage Test {\n  sint64 value = 1;\n}",
+  "expected": {
+   "edition": "EDITION_2024",
+   "messageType": [
+    {
+     "field": [
+      {
+       "label": "LABEL_OPTIONAL",
+       "name": "value",
+       "number": 1,
+       "type": "TYPE_SINT64"
+      }
+     ],
+     "name": "Test"
+    }
+   ],
+   "syntax": "editions"
+  }
+ },
+ {
+  "name": "ParseMessageTest.FieldOptions",
+  "helper": "ExpectParsesTo",
+  "input": "message TestMessage {\n  optional string foo = 1\n      [ctype=CORD, (foo)=7, foo.(.bar.baz).qux.quux.(corge)=-33, \n       (quux)=\"x y\", (baz.qux)=hey];\n}\n",
+  "expected": {
+   "messageType": [
+    {
+     "field": [
+      {
+       "label": "LABEL_OPTIONAL",
+       "name": "foo",
+       "number": 1,
+       "options": {
+        "uninterpretedOption": [
+         {
+          "identifierValue": "CORD",
+          "name": [
+           {
+            "isExtension": false,
+            "namePart": "ctype"
+           }
+          ]
+         },
+         {
+          "name": [
+           {
+            "isExtension": true,
+            "namePart": "foo"
+           }
+          ],
+          "positiveIntValue": "7"
+         },
+         {
+          "name": [
+           {
+            "isExtension": false,
+            "namePart": "foo"
+           },
+           {
+            "isExtension": true,
+            "namePart": ".bar.baz"
+           },
+           {
+            "isExtension": false,
+            "namePart": "qux"
+           },
+           {
+            "isExtension": false,
+            "namePart": "quux"
+           },
+           {
+            "isExtension": true,
+            "namePart": "corge"
+           }
+          ],
+          "negativeIntValue": "-33"
+         },
+         {
+          "name": [
+           {
+            "isExtension": true,
+            "namePart": "quux"
+           }
+          ],
+          "stringValue": "eCB5"
+         },
+         {
+          "identifierValue": "hey",
+          "name": [
+           {
+            "isExtension": true,
+            "namePart": "baz.qux"
+           }
+          ]
+         }
+        ]
+       },
+       "type": "TYPE_STRING"
+      }
+     ],
+     "name": "TestMessage"
+    }
+   ]
+  }
+ },
+ {
+  "name": "ParseMessageTest.FieldOptionsSupportLargeDecimalLiteral",
+  "helper": "ExpectParsesTo",
+  "input": "import \"google/protobuf/descriptor.proto\";\nextend google.protobuf.FieldOptions {\n  optional double f = 10101;\n}\nmessage TestMessage {\n  optional double a = 1 [default = 18446744073709551616];\n  optional double b = 2 [default = -18446744073709551616];\n  optional double c = 3 [(f) = 18446744073709551616];\n  optional double d = 4 [(f) = -18446744073709551616];\n}\n",
+  "expected": {
+   "dependency": [
+    "google/protobuf/descriptor.proto"
+   ],
+   "extension": [
+    {
+     "extendee": "google.protobuf.FieldOptions",
+     "label": "LABEL_OPTIONAL",
+     "name": "f",
+     "number": 10101,
+     "type": "TYPE_DOUBLE"
+    }
+   ],
+   "messageType": [
+    {
+     "field": [
+      {
+       "defaultValue": "1.8446744073709552e+19",
+       "label": "LABEL_OPTIONAL",
+       "name": "a",
+       "number": 1,
+       "type": "TYPE_DOUBLE"
+      },
+      {
+       "defaultValue": "-1.8446744073709552e+19",
+       "label": "LABEL_OPTIONAL",
+       "name": "b",
+       "number": 2,
+       "type": "TYPE_DOUBLE"
+      },
+      {
+       "label": "LABEL_OPTIONAL",
+       "name": "c",
+       "number": 3,
+       "options": {
+        "uninterpretedOption": [
+         {
+          "doubleValue": 18446744073709552000,
+          "name": [
+           {
+            "isExtension": true,
+            "namePart": "f"
+           }
+          ]
+         }
+        ]
+       },
+       "type": "TYPE_DOUBLE"
+      },
+      {
+       "label": "LABEL_OPTIONAL",
+       "name": "d",
+       "number": 4,
+       "options": {
+        "uninterpretedOption": [
+         {
+          "doubleValue": -18446744073709552000,
+          "name": [
+           {
+            "isExtension": true,
+            "namePart": "f"
+           }
+          ]
+         }
+        ]
+       },
+       "type": "TYPE_DOUBLE"
+      }
+     ],
+     "name": "TestMessage"
+    }
+   ]
+  }
+ },
+ {
+  "name": "ParseMessageTest.FieldOptionsSupportInfAndNan",
+  "helper": "ExpectParsesTo",
+  "input": "import \"google/protobuf/descriptor.proto\";\nextend google.protobuf.FieldOptions {\n  optional double f = 10101;\n}\nmessage TestMessage {\n  optional double a = 1 [(f) = inf];\n  optional double b = 2 [(f) = -inf];\n  optional double c = 3 [(f) = nan];\n  optional double d = 4 [(f) = -nan];\n}\n",
+  "expected": {
+   "dependency": [
+    "google/protobuf/descriptor.proto"
+   ],
+   "extension": [
+    {
+     "extendee": "google.protobuf.FieldOptions",
+     "label": "LABEL_OPTIONAL",
+     "name": "f",
+     "number": 10101,
+     "type": "TYPE_DOUBLE"
+    }
+   ],
+   "messageType": [
+    {
+     "field": [
+      {
+       "label": "LABEL_OPTIONAL",
+       "name": "a",
+       "number": 1,
+       "options": {
+        "uninterpretedOption": [
+         {
+          "identifierValue": "inf",
+          "name": [
+           {
+            "isExtension": true,
+            "namePart": "f"
+           }
+          ]
+         }
+        ]
+       },
+       "type": "TYPE_DOUBLE"
+      },
+      {
+       "label": "LABEL_OPTIONAL",
+       "name": "b",
+       "number": 2,
+       "options": {
+        "uninterpretedOption": [
+         {
+          "doubleValue": "-Infinity",
+          "name": [
+           {
+            "isExtension": true,
+            "namePart": "f"
+           }
+          ]
+         }
+        ]
+       },
+       "type": "TYPE_DOUBLE"
+      },
+      {
+       "label": "LABEL_OPTIONAL",
+       "name": "c",
+       "number": 3,
+       "options": {
+        "uninterpretedOption": [
+         {
+          "identifierValue": "nan",
+          "name": [
+           {
+            "isExtension": true,
+            "namePart": "f"
+           }
+          ]
+         }
+        ]
+       },
+       "type": "TYPE_DOUBLE"
+      },
+      {
+       "label": "LABEL_OPTIONAL",
+       "name": "d",
+       "number": 4,
+       "options": {
+        "uninterpretedOption": [
+         {
+          "doubleValue": "NaN",
+          "name": [
+           {
+            "isExtension": true,
+            "namePart": "f"
+           }
+          ]
+         }
+        ]
+       },
+       "type": "TYPE_DOUBLE"
+      }
+     ],
+     "name": "TestMessage"
+    }
+   ]
+  }
+ },
+ {
+  "name": "ParseMessageTest.Oneof",
+  "helper": "ExpectParsesTo",
+  "input": "message TestMessage {\n  oneof foo {\n    int32 a = 1;\n    string b = 2;\n    TestMessage c = 3;\n    group D = 4 { optional int32 i = 5; }\n  }\n}\n",
+  "expected": {
+   "messageType": [
+    {
+     "field": [
+      {
+       "label": "LABEL_OPTIONAL",
+       "name": "a",
+       "number": 1,
+       "oneofIndex": 0,
+       "type": "TYPE_INT32"
+      },
+      {
+       "label": "LABEL_OPTIONAL",
+       "name": "b",
+       "number": 2,
+       "oneofIndex": 0,
+       "type": "TYPE_STRING"
+      },
+      {
+       "label": "LABEL_OPTIONAL",
+       "name": "c",
+       "number": 3,
+       "oneofIndex": 0,
+       "typeName": "TestMessage"
+      },
+      {
+       "label": "LABEL_OPTIONAL",
+       "name": "d",
+       "number": 4,
+       "oneofIndex": 0,
+       "type": "TYPE_GROUP",
+       "typeName": "D"
+      }
+     ],
+     "name": "TestMessage",
+     "nestedType": [
+      {
+       "field": [
+        {
+         "label": "LABEL_OPTIONAL",
+         "name": "i",
+         "number": 5,
+         "type": "TYPE_INT32"
+        }
+       ],
+       "name": "D"
+      }
+     ],
+     "oneofDecl": [
+      {
+       "name": "foo"
+      }
+     ]
+    }
+   ]
+  }
+ },
+ {
+  "name": "ParseMessageTest.MultipleOneofs",
+  "helper": "ExpectParsesTo",
+  "input": "message TestMessage {\n  oneof foo {\n    int32 a = 1;\n    string b = 2;\n  }\n  oneof bar {\n    int32 c = 3;\n    string d = 4;\n  }\n}\n",
+  "expected": {
+   "messageType": [
+    {
+     "field": [
+      {
+       "label": "LABEL_OPTIONAL",
+       "name": "a",
+       "number": 1,
+       "oneofIndex": 0,
+       "type": "TYPE_INT32"
+      },
+      {
+       "label": "LABEL_OPTIONAL",
+       "name": "b",
+       "number": 2,
+       "oneofIndex": 0,
+       "type": "TYPE_STRING"
+      },
+      {
+       "label": "LABEL_OPTIONAL",
+       "name": "c",
+       "number": 3,
+       "oneofIndex": 1,
+       "type": "TYPE_INT32"
+      },
+      {
+       "label": "LABEL_OPTIONAL",
+       "name": "d",
+       "number": 4,
+       "oneofIndex": 1,
+       "type": "TYPE_STRING"
+      }
+     ],
+     "name": "TestMessage",
+     "oneofDecl": [
+      {
+       "name": "foo"
+      },
+      {
+       "name": "bar"
+      }
+     ]
+    }
+   ]
+  }
+ },
+ {
+  "name": "ParseMessageTest.Maps",
+  "helper": "ExpectParsesTo",
+  "input": "message TestMessage {\n  map\u003cint32, string\u003e primitive_type_map = 1;\n  map\u003cKeyType, ValueType\u003e composite_type_map = 2;\n}\n",
+  "expected": {
+   "messageType": [
+    {
+     "field": [
+      {
+       "label": "LABEL_REPEATED",
+       "name": "primitive_type_map",
+       "number": 1,
+       "typeName": "PrimitiveTypeMapEntry"
+      },
+      {
+       "label": "LABEL_REPEATED",
+       "name": "composite_type_map",
+       "number": 2,
+       "typeName": "CompositeTypeMapEntry"
+      }
+     ],
+     "name": "TestMessage",
+     "nestedType": [
+      {
+       "field": [
+        {
+         "label": "LABEL_OPTIONAL",
+         "name": "key",
+         "number": 1,
+         "type": "TYPE_INT32"
+        },
+        {
+         "label": "LABEL_OPTIONAL",
+         "name": "value",
+         "number": 2,
+         "type": "TYPE_STRING"
+        }
+       ],
+       "name": "PrimitiveTypeMapEntry",
+       "options": {
+        "mapEntry": true
+       }
+      },
+      {
+       "field": [
+        {
+         "label": "LABEL_OPTIONAL",
+         "name": "key",
+         "number": 1,
+         "typeName": "KeyType"
+        },
+        {
+         "label": "LABEL_OPTIONAL",
+         "name": "value",
+         "number": 2,
+         "typeName": "ValueType"
+        }
+       ],
+       "name": "CompositeTypeMapEntry",
+       "options": {
+        "mapEntry": true
+       }
+      }
+     ]
+    }
+   ]
+  }
+ },
+ {
+  "name": "ParseMessageTest.Group",
+  "helper": "ExpectParsesTo",
+  "input": "message TestMessage {\n  optional group TestGroup = 1 {};\n}\n",
+  "expected": {
+   "messageType": [
+    {
+     "field": [
+      {
+       "label": "LABEL_OPTIONAL",
+       "name": "testgroup",
+       "number": 1,
+       "type": "TYPE_GROUP",
+       "typeName": "TestGroup"
+      }
+     ],
+     "name": "TestMessage",
+     "nestedType": [
+      {
+       "name": "TestGroup"
+      }
+     ]
+    }
+   ]
+  }
+ },
+ {
+  "name": "ParseMessageTest.NestedMessage",
+  "helper": "ExpectParsesTo",
+  "input": "message TestMessage {\n  message Nested {}\n  optional Nested test_nested = 1;\n}\n",
+  "expected": {
+   "messageType": [
+    {
+     "field": [
+      {
+       "label": "LABEL_OPTIONAL",
+       "name": "test_nested",
+       "number": 1,
+       "typeName": "Nested"
+      }
+     ],
+     "name": "TestMessage",
+     "nestedType": [
+      {
+       "name": "Nested"
+      }
+     ]
+    }
+   ]
+  }
+ },
+ {
+  "name": "ParseMessageTest.NestedEnum",
+  "helper": "ExpectParsesTo",
+  "input": "message TestMessage {\n  enum NestedEnum {}\n  optional NestedEnum test_enum = 1;\n}\n",
+  "expected": {
+   "messageType": [
+    {
+     "enumType": [
+      {
+       "name": "NestedEnum"
+      }
+     ],
+     "field": [
+      {
+       "label": "LABEL_OPTIONAL",
+       "name": "test_enum",
+       "number": 1,
+       "typeName": "NestedEnum"
+      }
+     ],
+     "name": "TestMessage"
+    }
+   ]
+  }
+ },
+ {
+  "name": "ParseMessageTest.ReservedRange",
+  "helper": "ExpectParsesTo",
+  "input": "message TestMessage {\n  required int32 foo = 1;\n  reserved 2, 15, 9 to 11, 3, 20 to max;\n}\n",
+  "expected": {
+   "messageType": [
+    {
+     "field": [
+      {
+       "label": "LABEL_REQUIRED",
+       "name": "foo",
+       "number": 1,
+       "type": "TYPE_INT32"
+      }
+     ],
+     "name": "TestMessage",
+     "reservedRange": [
+      {
+       "end": 3,
+       "start": 2
+      },
+      {
+       "end": 16,
+       "start": 15
+      },
+      {
+       "end": 12,
+       "start": 9
+      },
+      {
+       "end": 4,
+       "start": 3
+      },
+      {
+       "end": 536870912,
+       "start": 20
+      }
+     ]
+    }
+   ]
+  }
+ },
+ {
+  "name": "ParseMessageTest.ReservedRangeOnMessageSet",
+  "helper": "ExpectParsesTo",
+  "input": "message TestMessage {\n  option message_set_wire_format = true;\n  reserved 20 to max;\n}\n",
+  "expected": {
+   "messageType": [
+    {
+     "name": "TestMessage",
+     "options": {
+      "uninterpretedOption": [
+       {
+        "identifierValue": "true",
+        "name": [
+         {
+          "isExtension": false,
+          "namePart": "message_set_wire_format"
+         }
+        ]
+       }
+      ]
+     },
+     "reservedRange": [
+      {
+       "end": 2147483647,
+       "start": 20
+      }
+     ]
+    }
+   ]
+  }
+ },
+ {
+  "name": "ParseMessageTest.ReservedNames",
+  "helper": "ExpectParsesTo",
+  "input": "message TestMessage {\n  reserved \"foo\", \"bar\";\n}\n",
+  "expected": {
+   "messageType": [
+    {
+     "name": "TestMessage",
+     "reservedName": [
+      "foo",
+      "bar"
+     ]
+    }
+   ]
+  }
+ },
+ {
+  "name": "ParseMessageTest.ReservedIdentifiers",
+  "helper": "ExpectParsesTo",
+  "input": "edition = \"2023\";\nmessage TestMessage {\n  reserved foo, bar;\n}\n",
+  "expected": {
+   "edition": "EDITION_2023",
+   "messageType": [
+    {
+     "name": "TestMessage",
+     "reservedName": [
+      "foo",
+      "bar"
+     ]
+    }
+   ],
+   "syntax": "editions"
+  }
+ },
+ {
+  "name": "ParseMessageTest.ExtensionRange",
+  "helper": "ExpectParsesTo",
+  "input": "message TestMessage {\n  extensions 10 to 19;\n  extensions 30 to max;\n}\n",
+  "expected": {
+   "messageType": [
+    {
+     "extensionRange": [
+      {
+       "end": 20,
+       "start": 10
+      },
+      {
+       "end": 536870912,
+       "start": 30
+      }
+     ],
+     "name": "TestMessage"
+    }
+   ]
+  }
+ },
+ {
+  "name": "ParseMessageTest.ExtensionRangeWithOptions",
+  "helper": "ExpectParsesTo",
+  "input": "message TestMessage {\n  extensions 10 to 19 [(i) = 5];\n}\n",
+  "expected": {
+   "messageType": [
+    {
+     "extensionRange": [
+      {
+       "end": 20,
+       "options": {
+        "uninterpretedOption": [
+         {
+          "name": [
+           {
+            "isExtension": true,
+            "namePart": "i"
+           }
+          ],
+          "positiveIntValue": "5"
+         }
+        ]
+       },
+       "start": 10
+      }
+     ],
+     "name": "TestMessage"
+    }
+   ]
+  }
+ },
+ {
+  "name": "ParseMessageTest.CompoundExtensionRange",
+  "helper": "ExpectParsesTo",
+  "input": "message TestMessage {\n  extensions 2, 15, 9 to 11, 100 to max, 3;\n}\n",
+  "expected": {
+   "messageType": [
+    {
+     "extensionRange": [
+      {
+       "end": 3,
+       "start": 2
+      },
+      {
+       "end": 16,
+       "start": 15
+      },
+      {
+       "end": 12,
+       "start": 9
+      },
+      {
+       "end": 536870912,
+       "start": 100
+      },
+      {
+       "end": 4,
+       "start": 3
+      }
+     ],
+     "name": "TestMessage"
+    }
+   ]
+  }
+ },
+ {
+  "name": "ParseMessageTest.CompoundExtensionRangeWithOptions",
+  "helper": "ExpectParsesTo",
+  "input": "message TestMessage {\n  extensions 2, 15, 9 to 11, 100 to max, 3 [(i) = 5];\n}\n",
+  "expected": {
+   "messageType": [
+    {
+     "extensionRange": [
+      {
+       "end": 3,
+       "options": {
+        "uninterpretedOption": [
+         {
+          "name": [
+           {
+            "isExtension": true,
+            "namePart": "i"
+           }
+          ],
+          "positiveIntValue": "5"
+         }
+        ]
+       },
+       "start": 2
+      },
+      {
+       "end": 16,
+       "options": {
+        "uninterpretedOption": [
+         {
+          "name": [
+           {
+            "isExtension": true,
+            "namePart": "i"
+           }
+          ],
+          "positiveIntValue": "5"
+         }
+        ]
+       },
+       "start": 15
+      },
+      {
+       "end": 12,
+       "options": {
+        "uninterpretedOption": [
+         {
+          "name": [
+           {
+            "isExtension": true,
+            "namePart": "i"
+           }
+          ],
+          "positiveIntValue": "5"
+         }
+        ]
+       },
+       "start": 9
+      },
+      {
+       "end": 536870912,
+       "options": {
+        "uninterpretedOption": [
+         {
+          "name": [
+           {
+            "isExtension": true,
+            "namePart": "i"
+           }
+          ],
+          "positiveIntValue": "5"
+         }
+        ]
+       },
+       "start": 100
+      },
+      {
+       "end": 4,
+       "options": {
+        "uninterpretedOption": [
+         {
+          "name": [
+           {
+            "isExtension": true,
+            "namePart": "i"
+           }
+          ],
+          "positiveIntValue": "5"
+         }
+        ]
+       },
+       "start": 3
+      }
+     ],
+     "name": "TestMessage"
+    }
+   ]
+  }
+ },
+ {
+  "name": "ParseMessageTest.LargerMaxForMessageSetWireFormatMessages",
+  "helper": "ExpectParsesTo",
+  "input": "message TestMessage {\n  extensions 4 to max;\n  option message_set_wire_format = true;\n}\n",
+  "expected": {
+   "messageType": [
+    {
+     "extensionRange": [
+      {
+       "end": 2147483647,
+       "start": 4
+      }
+     ],
+     "name": "TestMessage",
+     "options": {
+      "uninterpretedOption": [
+       {
+        "identifierValue": "true",
+        "name": [
+         {
+          "isExtension": false,
+          "namePart": "message_set_wire_format"
+         }
+        ]
+       }
+      ]
+     }
+    }
+   ]
+  }
+ },
+ {
+  "name": "ParseMessageTest.Extensions",
+  "helper": "ExpectParsesTo",
+  "input": "extend Extendee1 { optional int32 foo = 12; }\nextend Extendee2 { repeated TestMessage bar = 22; }\n",
+  "expected": {
+   "extension": [
+    {
+     "extendee": "Extendee1",
+     "label": "LABEL_OPTIONAL",
+     "name": "foo",
+     "number": 12,
+     "type": "TYPE_INT32"
+    },
+    {
+     "extendee": "Extendee2",
+     "label": "LABEL_REPEATED",
+     "name": "bar",
+     "number": 22,
+     "typeName": "TestMessage"
+    }
+   ]
+  }
+ },
+ {
+  "name": "ParseMessageTest.ExtensionsInMessageScope",
+  "helper": "ExpectParsesTo",
+  "input": "message TestMessage {\n  extend Extendee1 { optional int32 foo = 12; }\n  extend Extendee2 { repeated TestMessage bar = 22; }\n}\n",
+  "expected": {
+   "messageType": [
+    {
+     "extension": [
+      {
+       "extendee": "Extendee1",
+       "label": "LABEL_OPTIONAL",
+       "name": "foo",
+       "number": 12,
+       "type": "TYPE_INT32"
+      },
+      {
+       "extendee": "Extendee2",
+       "label": "LABEL_REPEATED",
+       "name": "bar",
+       "number": 22,
+       "typeName": "TestMessage"
+      }
+     ],
+     "name": "TestMessage"
+    }
+   ]
+  }
+ },
+ {
+  "name": "ParseMessageTest.MultipleExtensionsOneExtendee",
+  "helper": "ExpectParsesTo",
+  "input": "extend Extendee1 {\n  optional int32 foo = 12;\n  repeated TestMessage bar = 22;\n}\n",
+  "expected": {
+   "extension": [
+    {
+     "extendee": "Extendee1",
+     "label": "LABEL_OPTIONAL",
+     "name": "foo",
+     "number": 12,
+     "type": "TYPE_INT32"
+    },
+    {
+     "extendee": "Extendee1",
+     "label": "LABEL_REPEATED",
+     "name": "bar",
+     "number": 22,
+     "typeName": "TestMessage"
+    }
+   ]
+  }
+ },
+ {
+  "name": "ParseMessageTest.OptionalLabelProto3",
+  "helper": "ExpectParsesTo",
+  "input": "syntax = \"proto3\";\nmessage TestMessage {\n  int32 foo = 1;\n}\n",
+  "expected": {
+   "messageType": [
+    {
+     "field": [
+      {
+       "label": "LABEL_OPTIONAL",
+       "name": "foo",
+       "number": 1,
+       "type": "TYPE_INT32"
+      }
+     ],
+     "name": "TestMessage"
+    }
+   ],
+   "syntax": "proto3"
+  }
+ },
+ {
+  "name": "ParseMessageTest.ExplicitOptionalLabelProto3",
+  "helper": "ExpectParsesTo",
+  "input": "syntax = 'proto3';\nmessage TestMessage {\n  optional int32 foo = 1;\n}\n",
+  "expected": {
+   "messageType": [
+    {
+     "field": [
+      {
+       "label": "LABEL_OPTIONAL",
+       "name": "foo",
+       "number": 1,
+       "oneofIndex": 0,
+       "proto3Optional": true,
+       "type": "TYPE_INT32"
+      }
+     ],
+     "name": "TestMessage",
+     "oneofDecl": [
+      {
+       "name": "_foo"
+      }
+     ]
+    }
+   ],
+   "syntax": "proto3"
+  }
+ },
+ {
+  "name": "ParseMessageTest.ExplicitOptionalLabelProto3",
+  "helper": "ExpectParsesTo",
+  "input": "syntax = 'proto3';\nmessage TestMessage {\n  optional int32 foo = 1;\n  oneof _foo {\n    int32 __foo = 2;\n  }\n}\n",
+  "expected": {
+   "messageType": [
+    {
+     "field": [
+      {
+       "label": "LABEL_OPTIONAL",
+       "name": "foo",
+       "number": 1,
+       "oneofIndex": 1,
+       "proto3Optional": true,
+       "type": "TYPE_INT32"
+      },
+      {
+       "label": "LABEL_OPTIONAL",
+       "name": "__foo",
+       "number": 2,
+       "oneofIndex": 0,
+       "type": "TYPE_INT32"
+      }
+     ],
+     "name": "TestMessage",
+     "oneofDecl": [
+      {
+       "name": "_foo"
+      },
+      {
+       "name": "X_foo"
+      }
+     ]
+    }
+   ],
+   "syntax": "proto3"
+  }
+ },
+ {
+  "name": "ParseEnumTest.SimpleEnum",
+  "helper": "ExpectParsesTo",
+  "input": "enum TestEnum {\n  FOO = 0;\n}\n",
+  "expected": {
+   "enumType": [
+    {
+     "name": "TestEnum",
+     "value": [
+      {
+       "name": "FOO",
+       "number": 0
+      }
+     ]
+    }
+   ]
+  }
+ },
+ {
+  "name": "ParseEnumTest.Values",
+  "helper": "ExpectParsesTo",
+  "input": "enum TestEnum {\n  FOO = 13;\n  BAR = -10;\n  BAZ = 500;\n  HEX_MAX = 0x7FFFFFFF;\n  HEX_MIN = -0x80000000;\n  INT_MAX = 2147483647;\n  INT_MIN = -2147483648;\n}\n",
+  "expected": {
+   "enumType": [
+    {
+     "name": "TestEnum",
+     "value": [
+      {
+       "name": "FOO",
+       "number": 13
+      },
+      {
+       "name": "BAR",
+       "number": -10
+      },
+      {
+       "name": "BAZ",
+       "number": 500
+      },
+      {
+       "name": "HEX_MAX",
+       "number": 2147483647
+      },
+      {
+       "name": "HEX_MIN",
+       "number": -2147483648
+      },
+      {
+       "name": "INT_MAX",
+       "number": 2147483647
+      },
+      {
+       "name": "INT_MIN",
+       "number": -2147483648
+      }
+     ]
+    }
+   ]
+  }
+ },
+ {
+  "name": "ParseEnumTest.ValueOptions",
+  "helper": "ExpectParsesTo",
+  "input": "enum TestEnum {\n  FOO = 13;\n  BAR = -10 [ (something.text) = 'abc' ];\n  BAZ = 500 [ (something.text) = 'def', other = 1 ];\n}\n",
+  "expected": {
+   "enumType": [
+    {
+     "name": "TestEnum",
+     "value": [
+      {
+       "name": "FOO",
+       "number": 13
+      },
+      {
+       "name": "BAR",
+       "number": -10,
+       "options": {
+        "uninterpretedOption": [
+         {
+          "name": [
+           {
+            "isExtension": true,
+            "namePart": "something.text"
+           }
+          ],
+          "stringValue": "YWJj"
+         }
+        ]
+       }
+      },
+      {
+       "name": "BAZ",
+       "number": 500,
+       "options": {
+        "uninterpretedOption": [
+         {
+          "name": [
+           {
+            "isExtension": true,
+            "namePart": "something.text"
+           }
+          ],
+          "stringValue": "ZGVm"
+         },
+         {
+          "name": [
+           {
+            "isExtension": false,
+            "namePart": "other"
+           }
+          ],
+          "positiveIntValue": "1"
+         }
+        ]
+       }
+      }
+     ]
+    }
+   ]
+  }
+ },
+ {
+  "name": "ParseEnumTest.ReservedRange",
+  "helper": "ExpectParsesTo",
+  "input": "enum TestEnum {\n  FOO = 0;\n  reserved -2147483648, -6 to -4, -1 to 1, 2, 15, 9 to 11, 3, 20 to max;\n}\n",
+  "expected": {
+   "enumType": [
+    {
+     "name": "TestEnum",
+     "reservedRange": [
+      {
+       "end": -2147483648,
+       "start": -2147483648
+      },
+      {
+       "end": -4,
+       "start": -6
+      },
+      {
+       "end": 1,
+       "start": -1
+      },
+      {
+       "end": 2,
+       "start": 2
+      },
+      {
+       "end": 15,
+       "start": 15
+      },
+      {
+       "end": 11,
+       "start": 9
+      },
+      {
+       "end": 3,
+       "start": 3
+      },
+      {
+       "end": 2147483647,
+       "start": 20
+      }
+     ],
+     "value": [
+      {
+       "name": "FOO",
+       "number": 0
+      }
+     ]
+    }
+   ]
+  }
+ },
+ {
+  "name": "ParseEnumTest.ReservedNames",
+  "helper": "ExpectParsesTo",
+  "input": "enum TestEnum {\n  FOO = 0;\n  reserved \"foo\", \"bar\";\n}\n",
+  "expected": {
+   "enumType": [
+    {
+     "name": "TestEnum",
+     "reservedName": [
+      "foo",
+      "bar"
+     ],
+     "value": [
+      {
+       "name": "FOO",
+       "number": 0
+      }
+     ]
+    }
+   ]
+  }
+ },
+ {
+  "name": "ParseEnumTest.ReservedIdentifiers",
+  "helper": "ExpectParsesTo",
+  "input": "edition = \"2023\";\nenum TestEnum {\n  FOO = 0;\n  reserved foo, bar;\n}\n",
+  "expected": {
+   "edition": "EDITION_2023",
+   "enumType": [
+    {
+     "name": "TestEnum",
+     "reservedName": [
+      "foo",
+      "bar"
+     ],
+     "value": [
+      {
+       "name": "FOO",
+       "number": 0
+      }
+     ]
+    }
+   ],
+   "syntax": "editions"
+  }
+ },
+ {
+  "name": "ParseServiceTest.SimpleService",
+  "helper": "ExpectParsesTo",
+  "input": "service TestService {\n  rpc Foo(In) returns (Out);\n}\n",
+  "expected": {
+   "service": [
+    {
+     "method": [
+      {
+       "inputType": "In",
+       "name": "Foo",
+       "outputType": "Out"
+      }
+     ],
+     "name": "TestService"
+    }
+   ]
+  }
+ },
+ {
+  "name": "ParseServiceTest.MethodsAndStreams",
+  "helper": "ExpectParsesTo",
+  "input": "service TestService {\n  rpc Foo(In1) returns (Out1);\n  rpc Bar(In2) returns (Out2);\n  rpc Baz(In3) returns (Out3);\n}\n",
+  "expected": {
+   "service": [
+    {
+     "method": [
+      {
+       "inputType": "In1",
+       "name": "Foo",
+       "outputType": "Out1"
+      },
+      {
+       "inputType": "In2",
+       "name": "Bar",
+       "outputType": "Out2"
+      },
+      {
+       "inputType": "In3",
+       "name": "Baz",
+       "outputType": "Out3"
+      }
+     ],
+     "name": "TestService"
+    }
+   ]
+  }
+ },
+ {
+  "name": "ParseImportTest.ParseImport",
+  "helper": "ExpectParsesTo",
+  "input": "import \"foo/bar/baz.proto\";\n",
+  "expected": {
+   "dependency": [
+    "foo/bar/baz.proto"
+   ]
+  }
+ },
+ {
+  "name": "ParseImportTest.ParseMultipleImports",
+  "helper": "ExpectParsesTo",
+  "input": "import \"foo.proto\";\nimport \"bar.proto\";\nimport \"baz.proto\";\n",
+  "expected": {
+   "dependency": [
+    "foo.proto",
+    "bar.proto",
+    "baz.proto"
+   ]
+  }
+ },
+ {
+  "name": "ParseImportTest.ParsePublicImports",
+  "helper": "ExpectParsesTo",
+  "input": "import \"foo.proto\";\nimport public \"bar.proto\";\nimport \"baz.proto\";\nimport public \"qux.proto\";\n",
+  "expected": {
+   "dependency": [
+    "foo.proto",
+    "bar.proto",
+    "baz.proto",
+    "qux.proto"
+   ],
+   "publicDependency": [
+    1,
+    3
+   ]
+  }
+ },
+ {
+  "name": "ParseImportTest.ParseOptionImports",
+  "helper": "ExpectParsesTo",
+  "input": "\n        edition = \"2024\";\n        import \"foo.proto\";\n        import \"bar.proto\";\n        import option \"baz.proto\";\n        import option \"qux.proto\";\n      ",
+  "expected": {
+   "dependency": [
+    "foo.proto",
+    "bar.proto"
+   ],
+   "edition": "EDITION_2024",
+   "optionDependency": [
+    "baz.proto",
+    "qux.proto"
+   ],
+   "syntax": "editions"
+  }
+ },
+ {
+  "name": "ParseImportTest.ParseOptionAndPublicImports",
+  "helper": "ExpectParsesTo",
+  "input": "\n        edition = \"2024\";\n        import \"foo.proto\";\n        import public \"bar.proto\";\n        import option \"baz.proto\";\n        import option \"qux.proto\";\n      ",
+  "expected": {
+   "dependency": [
+    "foo.proto",
+    "bar.proto"
+   ],
+   "edition": "EDITION_2024",
+   "optionDependency": [
+    "baz.proto",
+    "qux.proto"
+   ],
+   "publicDependency": [
+    1
+   ],
+   "syntax": "editions"
+  }
+ },
+ {
+  "name": "ParseMiscTest.ParsePackage",
+  "helper": "ExpectParsesTo",
+  "input": "package foo.bar.baz;\n",
+  "expected": {
+   "package": "foo.bar.baz"
+  }
+ },
+ {
+  "name": "ParseMiscTest.ParsePackageWithSpaces",
+  "helper": "ExpectParsesTo",
+  "input": "package foo   .   bar.  \n  baz;\n",
+  "expected": {
+   "package": "foo.bar.baz"
+  }
+ },
+ {
+  "name": "ParseMiscTest.ParseFileOptions",
+  "helper": "ExpectParsesTo",
+  "input": "option java_package = \"com.google.foo\";\noption optimize_for = CODE_SIZE;",
+  "expected": {
+   "options": {
+    "uninterpretedOption": [
+     {
+      "name": [
+       {
+        "isExtension": false,
+        "namePart": "java_package"
+       }
+      ],
+      "stringValue": "Y29tLmdvb2dsZS5mb28="
+     },
+     {
+      "identifierValue": "CODE_SIZE",
+      "name": [
+       {
+        "isExtension": false,
+        "namePart": "optimize_for"
+       }
+      ]
+     }
+    ]
+   }
+  }
+ },
+ {
+  "name": "ParserValidationErrorTest.ImportOptionUnloadedNoError",
+  "helper": "ExpectParsesTo",
+  "input": "\n        edition = \"2024\";\n        package test;\n\n        import option \"unloaded.proto\";\n        option (file_opt1) = 1;\n      ",
+  "expected": {
+   "edition": "EDITION_2024",
+   "optionDependency": [
+    "unloaded.proto"
+   ],
+   "options": {
+    "uninterpretedOption": [
+     {
+      "name": [
+       {
+        "isExtension": true,
+        "namePart": "file_opt1"
+       }
+      ],
+      "positiveIntValue": "1"
+     }
+    ]
+   },
+   "package": "test",
+   "syntax": "editions"
+  }
+ },
+ {
+  "name": "ParserValidationErrorTest.Proto2JsonConflictError",
+  "helper": "ExpectParsesTo",
+  "input": "syntax = 'proto2';\nmessage TestMessage {\n  optional uint32 _foo = 1;\n  optional uint32 Foo = 2;\n}\n",
+  "expected": {
+   "messageType": [
+    {
+     "field": [
+      {
+       "label": "LABEL_OPTIONAL",
+       "name": "_foo",
+       "number": 1,
+       "type": "TYPE_UINT32"
+      },
+      {
+       "label": "LABEL_OPTIONAL",
+       "name": "Foo",
+       "number": 2,
+       "type": "TYPE_UINT32"
+      }
+     ],
+     "name": "TestMessage"
+    }
+   ],
+   "syntax": "proto2"
+  }
+ },
+ {
+  "name": "ParserValidationErrorTest.Proto2CustomJsonConflictWithDefaultError",
+  "helper": "ExpectParsesTo",
+  "input": "syntax = 'proto2';\nmessage TestMessage {\n  optional uint32 foo = 1 [json_name='bar'];\n  optional uint32 bar = 2;\n}\n",
+  "expected": {
+   "messageType": [
+    {
+     "field": [
+      {
+       "jsonName": "bar",
+       "label": "LABEL_OPTIONAL",
+       "name": "foo",
+       "number": 1,
+       "type": "TYPE_UINT32"
+      },
+      {
+       "label": "LABEL_OPTIONAL",
+       "name": "bar",
+       "number": 2,
+       "type": "TYPE_UINT32"
+      }
+     ],
+     "name": "TestMessage"
+    }
+   ],
+   "syntax": "proto2"
+  }
+ },
+ {
+  "name": "ParserValidationErrorTest.Proto3JsonConflictLegacy",
+  "helper": "ExpectParsesTo",
+  "input": "syntax = 'proto3';\nmessage TestMessage {\n  option deprecated_legacy_json_field_conflicts = true;\n  uint32 fooBar = 1;\n  uint32 foo_bar = 2;\n}\n",
+  "expected": {
+   "messageType": [
+    {
+     "field": [
+      {
+       "label": "LABEL_OPTIONAL",
+       "name": "fooBar",
+       "number": 1,
+       "type": "TYPE_UINT32"
+      },
+      {
+       "label": "LABEL_OPTIONAL",
+       "name": "foo_bar",
+       "number": 2,
+       "type": "TYPE_UINT32"
+      }
+     ],
+     "name": "TestMessage",
+     "options": {
+      "uninterpretedOption": [
+       {
+        "identifierValue": "true",
+        "name": [
+         {
+          "isExtension": false,
+          "namePart": "deprecated_legacy_json_field_conflicts"
+         }
+        ]
+       }
+      ]
+     }
+    }
+   ],
+   "syntax": "proto3"
+  }
+ },
+ {
+  "name": "ParserValidationErrorTest.Proto2JsonConflictLegacy",
+  "helper": "ExpectParsesTo",
+  "input": "syntax = 'proto2';\nmessage TestMessage {\n  option deprecated_legacy_json_field_conflicts = true;\n  optional uint32 fooBar = 1;\n  optional uint32 foo_bar = 2;\n}\n",
+  "expected": {
+   "messageType": [
+    {
+     "field": [
+      {
+       "label": "LABEL_OPTIONAL",
+       "name": "fooBar",
+       "number": 1,
+       "type": "TYPE_UINT32"
+      },
+      {
+       "label": "LABEL_OPTIONAL",
+       "name": "foo_bar",
+       "number": 2,
+       "type": "TYPE_UINT32"
+      }
+     ],
+     "name": "TestMessage",
+     "options": {
+      "uninterpretedOption": [
+       {
+        "identifierValue": "true",
+        "name": [
+         {
+          "isExtension": false,
+          "namePart": "deprecated_legacy_json_field_conflicts"
+         }
+        ]
+       }
+      ]
+     }
+    }
+   ],
+   "syntax": "proto2"
+  }
+ },
+ {
+  "name": "ParseEditionsTest.Editions",
+  "helper": "ExpectParsesTo",
+  "input": "\n        edition = \"2023\";\n        message A {\n          int32 b = 1;\n        }",
+  "expected": {
+   "edition": "EDITION_2023",
+   "messageType": [
+    {
+     "field": [
+      {
+       "label": "LABEL_OPTIONAL",
+       "name": "b",
+       "number": 1,
+       "type": "TYPE_INT32"
+      }
+     ],
+     "name": "A"
+    }
+   ],
+   "syntax": "editions"
+  }
+ },
+ {
+  "name": "ParseEditionsTest.TestEdition",
+  "helper": "ExpectParsesTo",
+  "input": "\n        edition = \"99998_TEST_ONLY\";\n      ",
+  "expected": {
+   "edition": "EDITION_99998_TEST_ONLY",
+   "syntax": "editions"
+  }
+ },
+ {
+  "name": "ParseEditionsTest.ExtensionsParse",
+  "helper": "ExpectParsesTo",
+  "input": "\n        edition = '2023';\n        message Foo {\n          extensions 100 to 199;\n        }\n        extend Foo { string foo = 101; }",
+  "expected": {
+   "edition": "EDITION_2023",
+   "extension": [
+    {
+     "extendee": "Foo",
+     "label": "LABEL_OPTIONAL",
+     "name": "foo",
+     "number": 101,
+     "type": "TYPE_STRING"
+    }
+   ],
+   "messageType": [
+    {
+     "extensionRange": [
+      {
+       "end": 200,
+       "start": 100
+      }
+     ],
+     "name": "Foo"
+    }
+   ],
+   "syntax": "editions"
+  }
+ },
+ {
+  "name": "ParseEditionsTest.MapFeatures",
+  "helper": "ExpectParsesTo",
+  "input": "\n        edition = '2023';\n        message Foo {\n          map\u003cstring, int\u003e map_field = 1 [\n            features.my_feature = SOMETHING\n          ];\n        }",
+  "expected": {
+   "edition": "EDITION_2023",
+   "messageType": [
+    {
+     "field": [
+      {
+       "label": "LABEL_REPEATED",
+       "name": "map_field",
+       "number": 1,
+       "options": {
+        "uninterpretedOption": [
+         {
+          "identifierValue": "SOMETHING",
+          "name": [
+           {
+            "isExtension": false,
+            "namePart": "features"
+           },
+           {
+            "isExtension": false,
+            "namePart": "my_feature"
+           }
+          ]
+         }
+        ]
+       },
+       "typeName": "MapFieldEntry"
+      }
+     ],
+     "name": "Foo",
+     "nestedType": [
+      {
+       "field": [
+        {
+         "label": "LABEL_OPTIONAL",
+         "name": "key",
+         "number": 1,
+         "options": {
+          "uninterpretedOption": [
+           {
+            "identifierValue": "SOMETHING",
+            "name": [
+             {
+              "isExtension": false,
+              "namePart": "features"
+             },
+             {
+              "isExtension": false,
+              "namePart": "my_feature"
+             }
+            ]
+           }
+          ]
+         },
+         "type": "TYPE_STRING"
+        },
+        {
+         "label": "LABEL_OPTIONAL",
+         "name": "value",
+         "number": 2,
+         "options": {
+          "uninterpretedOption": [
+           {
+            "identifierValue": "SOMETHING",
+            "name": [
+             {
+              "isExtension": false,
+              "namePart": "features"
+             },
+             {
+              "isExtension": false,
+              "namePart": "my_feature"
+             }
+            ]
+           }
+          ]
+         },
+         "typeName": "int"
+        }
+       ],
+       "name": "MapFieldEntry",
+       "options": {
+        "mapEntry": true
+       }
+      }
+     ]
+    }
+   ],
+   "syntax": "editions"
+  }
+ },
+ {
+  "name": "ParseVisibilityTest.Edition2024NonStrictExportMessage",
+  "helper": "ExpectParsesTo",
+  "input": "\n        edition = \"2024\";\n        export message A {\n          local enum NestedEnum {\n            A_VAL = 0;\n          }\n          export message NestedMessage {\n          }\n        }",
+  "expected": {
+   "edition": "EDITION_2024",
+   "messageType": [
+    {
+     "enumType": [
+      {
+       "name": "NestedEnum",
+       "value": [
+        {
+         "name": "A_VAL",
+         "number": 0
+        }
+       ],
+       "visibility": "VISIBILITY_LOCAL"
+      }
+     ],
+     "name": "A",
+     "nestedType": [
+      {
+       "name": "NestedMessage",
+       "visibility": "VISIBILITY_EXPORT"
+      }
+     ],
+     "visibility": "VISIBILITY_EXPORT"
+    }
+   ],
+   "syntax": "editions"
+  }
+ },
+ {
+  "name": "ParseVisibilityTest.Edition2024NonStrictLocalMessage",
+  "helper": "ExpectParsesTo",
+  "input": "\n        edition = \"2024\";\n        local message B {\n          export enum NestedEnum {\n            B_VAL = 0;\n          }\n          local message NestedMessage {\n          }\n        }\n        ",
+  "expected": {
+   "edition": "EDITION_2024",
+   "messageType": [
+    {
+     "enumType": [
+      {
+       "name": "NestedEnum",
+       "value": [
+        {
+         "name": "B_VAL",
+         "number": 0
+        }
+       ],
+       "visibility": "VISIBILITY_EXPORT"
+      }
+     ],
+     "name": "B",
+     "nestedType": [
+      {
+       "name": "NestedMessage",
+       "visibility": "VISIBILITY_LOCAL"
+      }
+     ],
+     "visibility": "VISIBILITY_LOCAL"
+    }
+   ],
+   "syntax": "editions"
+  }
+ },
+ {
+  "name": "ParseVisibilityTest.Edition2024NonStrictExportEnum",
+  "helper": "ExpectParsesTo",
+  "input": "\n        edition = \"2024\";\n        export enum C {\n          C_VAL = 0;\n        }\n        ",
+  "expected": {
+   "edition": "EDITION_2024",
+   "enumType": [
+    {
+     "name": "C",
+     "value": [
+      {
+       "name": "C_VAL",
+       "number": 0
+      }
+     ],
+     "visibility": "VISIBILITY_EXPORT"
+    }
+   ],
+   "syntax": "editions"
+  }
+ },
+ {
+  "name": "ParseVisibilityTest.Edition2024NonStrictLocalEnum",
+  "helper": "ExpectParsesTo",
+  "input": "\n        edition = \"2024\";\n        local enum D {\n          D_VAL = 0;\n        }\n        ",
+  "expected": {
+   "edition": "EDITION_2024",
+   "enumType": [
+    {
+     "name": "D",
+     "value": [
+      {
+       "name": "D_VAL",
+       "number": 0
+      }
+     ],
+     "visibility": "VISIBILITY_LOCAL"
+    }
+   ],
+   "syntax": "editions"
+  }
+ },
+ {
+  "name": "ParseVisibilityTest.Edition2023NestedKeywordName",
+  "helper": "ExpectParsesTo",
+  "input": "\n        edition = \"2023\";\n        message MySimpleMessage {\n          local.pkg_name.SomeMessage msg = 1;\n          export.other_pkg_name.SomeMessage other_msg = 2;\n        }\n        ",
+  "expected": {
+   "edition": "EDITION_2023",
+   "messageType": [
+    {
+     "field": [
+      {
+       "label": "LABEL_OPTIONAL",
+       "name": "msg",
+       "number": 1,
+       "typeName": "local.pkg_name.SomeMessage"
+      },
+      {
+       "label": "LABEL_OPTIONAL",
+       "name": "other_msg",
+       "number": 2,
+       "typeName": "export.other_pkg_name.SomeMessage"
+      }
+     ],
+     "name": "MySimpleMessage"
+    }
+   ],
+   "syntax": "editions"
+  }
+ },
+ {
+  "name": "ParseVisibilityTest.Edition2024NestedKeywordName",
+  "helper": "ExpectParsesTo",
+  "input": "\n        edition = \"2024\";\n        message MySimpleMessage {\n          .local.pkg_name.SomeMessage msg = 1;\n          .export.other_pkg_name.SomeMessage other_msg = 2;\n        }\n        ",
+  "expected": {
+   "edition": "EDITION_2024",
+   "messageType": [
+    {
+     "field": [
+      {
+       "label": "LABEL_OPTIONAL",
+       "name": "msg",
+       "number": 1,
+       "typeName": ".local.pkg_name.SomeMessage"
+      },
+      {
+       "label": "LABEL_OPTIONAL",
+       "name": "other_msg",
+       "number": 2,
+       "typeName": ".export.other_pkg_name.SomeMessage"
+      }
+     ],
+     "name": "MySimpleMessage"
+    }
+   ],
+   "syntax": "editions"
+  }
+ }
+]

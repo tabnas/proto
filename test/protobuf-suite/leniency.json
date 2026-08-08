@@ -1,0 +1,123 @@
+{
+ "protocVersion": "libprotoc 35.1",
+ "probes": [
+  {
+   "name": "hash-line-comment",
+   "input": "syntax = \"proto3\";\n# a hash comment\nmessage M { int32 a = 1; }\n",
+   "why": "`#` is a comment in jsonic/the shared @tabnas/abnf lexer. The .proto language spec has only // and /* */ comments.",
+   "accepted": false,
+   "protoc": "/tmp/tmplv5vef_0/probe.proto:2:1: Expected top-level statement (e.g. \"message\").",
+   "tabnas": true,
+   "tabnasNote": "DEVIATION: accepted. `#` starts a comment in the shared tabnas lexer."
+  },
+  {
+   "name": "backtick-string",
+   "input": "syntax = \"proto3\";\npackage `demo`;\n",
+   "why": "backtick strings are a jsonic lexer feature; .proto has no backtick string literal.",
+   "accepted": false,
+   "protoc": "/tmp/tmplv5vef_0/probe.proto:2:9: Expected identifier.",
+   "tabnas": false,
+   "tabnasNote": "agrees with protoc: rejected."
+  },
+  {
+   "name": "digit-separator-in-field-number",
+   "input": "syntax = \"proto3\";\nmessage M { int32 a = 1_0; }\n",
+   "why": "`1_0` is a jsonic-style digit separator. .proto intLit has no separators.",
+   "accepted": false,
+   "protoc": "/tmp/tmplv5vef_0/probe.proto:2:24: Need space between number and identifier.\n/tmp/tmplv5vef_0/probe.proto:2:24: Expected \";\".",
+   "tabnas": true,
+   "tabnasNote": "DEVIATION: accepted. `1_0` is a tabnas/jsonic digit separator."
+  },
+  {
+   "name": "exponent-field-number",
+   "input": "syntax = \"proto3\";\nmessage M { int32 a = 1e2; }\n",
+   "why": "`1e2` is a float literal. .proto fieldNumber = intLit, so a float is not a field number.",
+   "accepted": false,
+   "protoc": "/tmp/tmplv5vef_0/probe.proto:2:23: Expected field number.",
+   "tabnas": true,
+   "tabnasNote": "DEVIATION: accepted. `1e2` lexes as a number where .proto wants an intLit."
+  },
+  {
+   "name": "underscore-suffixed-number-in-enum",
+   "input": "syntax = \"proto2\";\nenum E { A = 1_000; }\n",
+   "why": "same digit-separator leniency, in enum value position.",
+   "accepted": false,
+   "protoc": "/tmp/tmplv5vef_0/probe.proto:2:15: Need space between number and identifier.\n/tmp/tmplv5vef_0/probe.proto:2:15: Expected \";\".",
+   "tabnas": true,
+   "tabnasNote": "DEVIATION: accepted. Same digit-separator leniency."
+  },
+  {
+   "name": "empty-file",
+   "input": "",
+   "why": "an empty .proto is a legal (if useless) file; it must not crash the parser.",
+   "accepted": true,
+   "protoc": "",
+   "tabnas": true,
+   "tabnasNote": "agrees with protoc: an empty .proto is legal."
+  },
+  {
+   "name": "single-quoted-string",
+   "input": "syntax = 'proto3';\n",
+   "why": "control probe: .proto strLit allows BOTH quote characters, so this must be ACCEPTED. It is here so the probe set cannot be read as 'everything unusual is rejected'.",
+   "accepted": true,
+   "protoc": "",
+   "tabnas": true,
+   "tabnasNote": "agrees with protoc: accepted."
+  },
+  {
+   "name": "hex-field-number",
+   "input": "syntax = \"proto2\";\nmessage M { optional int32 a = 0x10; }\n",
+   "why": "control probe: .proto intLit includes hexLit, so this must be ACCEPTED (as 16).",
+   "accepted": true,
+   "protoc": "",
+   "tabnas": true,
+   "tabnasNote": "agrees with protoc: accepted."
+  },
+  {
+   "name": "octal-field-number",
+   "input": "syntax = \"proto2\";\nmessage M { optional int32 a = 010; }\n",
+   "why": "control probe: .proto intLit includes octLit, so this must be ACCEPTED (as 8, not 10).",
+   "accepted": true,
+   "protoc": "",
+   "tabnas": true,
+   "tabnasNote": "agrees with protoc: accepted."
+  },
+  {
+   "name": "trailing-close-brace",
+   "input": "syntax = \"proto3\";\nmessage M { int32 a = 1; }\n}\n",
+   "why": "trailing garbage after a complete file must be rejected, not silently ignored.",
+   "accepted": false,
+   "protoc": "/tmp/tmplv5vef_0/probe.proto:3:1: Expected top-level statement (e.g. \"message\").\n/tmp/tmplv5vef_0/probe.proto:3:1: Unmatched \"}\".",
+   "tabnas": false,
+   "tabnasNote": "agrees with protoc: rejected."
+  },
+  {
+   "name": "unterminated-message",
+   "input": "syntax = \"proto3\";\nmessage M { int32 a = 1;\n",
+   "why": "truncated input at EOF must be rejected (the csv/json5 unterminated-at-EOF failure class).",
+   "accepted": false,
+   "protoc": "/tmp/tmplv5vef_0/probe.proto:3:1: Reached end of input in message definition (missing '}').",
+   "tabnas": false,
+   "tabnasNote": "agrees with protoc: rejected."
+  },
+  {
+   "name": "json-object",
+   "input": "{a:1}\n",
+   "why": "the json5 leniency-leak probe: a jsonic document must NOT be accepted as .proto.",
+   "accepted": false,
+   "protoc": "/tmp/tmplv5vef_0/probe.proto:1:1: Expected top-level statement (e.g. \"message\").",
+   "tabnas": false,
+   "tabnasNote": "agrees with protoc: rejected."
+  },
+  {
+   "name": "unterminated-json-object",
+   "input": "{a:1\n",
+   "why": "the exact json5 leak input: '{a:1' errors with the json5 plugin alone but is ACCEPTED through the documented jsonic stack.",
+   "accepted": false,
+   "protoc": "/tmp/tmplv5vef_0/probe.proto:1:1: Expected top-level statement (e.g. \"message\").",
+   "tabnas": false,
+   "tabnasNote": "agrees with protoc: rejected."
+  }
+ ],
+ "tabnasNote": "`accepted` is protocs answer; `tabnas` is @tabnas/protos, recorded so the deviation surface cannot silently grow (ts/test/protobuf-conformance.test.ts asserts it)."
+}

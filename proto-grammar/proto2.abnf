@@ -2,4 +2,6 @@
 ; optional/repeated), extend, and extensions live in common (the permissive
 ; union); the descriptor walk enforces what each version actually allows.
 messageElement =/ groupField
+; A group is also a legal oneof member (`oneof foo { group D = 4 {…} }`).
+oneofElement   =/ groupField
 groupField     = [ label ] "group" ident "=" fieldNumber messageBody

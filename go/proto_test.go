@@ -113,7 +113,9 @@ func TestProto3(t *testing.T) {
 		if scores == nil {
 			t.Fatal("no scores field")
 		}
-		if scores.Label != "LABEL_REPEATED" || scores.Type != "TYPE_MESSAGE" || scores.TypeName != "ScoresEntry" {
+		// A named type is unresolved here, so Type is left unset (as protoc does
+		// before its resolution pass) and only TypeName is recorded.
+		if scores.Label != "LABEL_REPEATED" || scores.Type != "" || scores.TypeName != "ScoresEntry" {
 			t.Errorf("scores = %+v", scores)
 		}
 		entry := findNested(fdp.MessageType[0].NestedType, "ScoresEntry")
@@ -135,8 +137,15 @@ func TestProto3(t *testing.T) {
 
 	t.Run("oneof declarations and back-references", func(t *testing.T) {
 		m := fdp.MessageType[0]
-		if len(m.OneofDecl) != 1 || m.OneofDecl[0].Name != "contact" {
+		// `contact` is declared; `_age` is the synthetic oneof protoc adds for
+		// the proto3 explicit `optional int32 age`, appended after it.
+		if len(m.OneofDecl) != 2 || m.OneofDecl[0].Name != "contact" ||
+			m.OneofDecl[1].Name != "_age" {
 			t.Errorf("oneofDecl = %v", m.OneofDecl)
+		}
+		if age := findField(m.Field, "age"); age == nil ||
+			age.OneofIndex == nil || *age.OneofIndex != 1 {
+			t.Errorf("age.OneofIndex = %+v", age)
 		}
 		email := findField(m.Field, "email")
 		if email == nil {
@@ -209,22 +218,37 @@ func TestProto2(t *testing.T) {
 		if id == nil || id.Label != "LABEL_REQUIRED" {
 			t.Errorf("id = %+v", id)
 		}
+		// `default` is a pseudo-option: protoc lifts it to DefaultValue.
 		name := findField(f, "name")
-		if name == nil || name.Options["default"] != "x" {
-			t.Errorf("name.options.default = %v", name)
+		if name == nil || name.DefaultValue != "x" || name.Options != nil {
+			t.Errorf("name = %+v", name)
 		}
 		bars := findField(f, "bars")
-		if bars == nil || bars.Label != "LABEL_REPEATED" || bars.Type != "TYPE_MESSAGE" || bars.TypeName != "Bar" {
+		if bars == nil || bars.Label != "LABEL_REPEATED" || bars.Type != "" || bars.TypeName != "Bar" {
 			t.Errorf("bars = %+v", bars)
 		}
 	})
 
+	t.Run("group expands to a field plus a nested message", func(t *testing.T) {
+		g := findField(fdp.MessageType[0].Field, "mygroup")
+		if g == nil || g.Number != 4 || g.Label != "LABEL_OPTIONAL" ||
+			g.Type != "TYPE_GROUP" || g.TypeName != "MyGroup" {
+			t.Errorf("mygroup = %+v", g)
+		}
+		nested := findNested(fdp.MessageType[0].NestedType, "MyGroup")
+		if nested == nil || len(nested.Field) != 1 || nested.Field[0].Name != "a" {
+			t.Errorf("MyGroup = %+v", nested)
+		}
+	})
+
 	t.Run("extension ranges and top-level extend", func(t *testing.T) {
+		// End is exclusive, as in descriptor.proto: `100 to 199` -> [100, 200).
 		if !reflect.DeepEqual(fdp.MessageType[0].ExtensionRange,
-			[]Range{{Start: 100, End: 199}}) {
+			[]Range{{Start: 100, End: 200}}) {
 			t.Errorf("extensionRange = %v", fdp.MessageType[0].ExtensionRange)
 		}
-		if len(fdp.Extension) == 0 || fdp.Extension[0].Name != "ext" || fdp.Extension[0].Number != 100 {
+		if len(fdp.Extension) == 0 || fdp.Extension[0].Name != "ext" ||
+			fdp.Extension[0].Number != 100 || fdp.Extension[0].Extendee != "Foo" {
 			t.Errorf("extension = %v", fdp.Extension)
 		}
 	})
@@ -261,14 +285,20 @@ message Outer { local enum E { A = 0; } }
 	if fdp.Edition != "EDITION_2024" {
 		t.Errorf("edition = %q", fdp.Edition)
 	}
-	if !reflect.DeepEqual(fdp.Dependency, []string{"custom.proto"}) {
+	// `import option` is its own dependency list, not a plain import.
+	if !reflect.DeepEqual(fdp.Dependency, []string{}) {
 		t.Errorf("dependency = %v", fdp.Dependency)
 	}
-	if fdp.MessageType[0].Name != "Pub" {
-		t.Errorf("messageType[0].name = %q", fdp.MessageType[0].Name)
+	if !reflect.DeepEqual(fdp.OptionDependency, []string{"custom.proto"}) {
+		t.Errorf("optionDependency = %v", fdp.OptionDependency)
+	}
+	if fdp.MessageType[0].Name != "Pub" ||
+		fdp.MessageType[0].Visibility != VisibilityExport {
+		t.Errorf("messageType[0] = %+v", fdp.MessageType[0])
 	}
 	if len(fdp.MessageType) < 2 || len(fdp.MessageType[1].EnumType) == 0 ||
-		fdp.MessageType[1].EnumType[0].Name != "E" {
+		fdp.MessageType[1].EnumType[0].Name != "E" ||
+		fdp.MessageType[1].EnumType[0].Visibility != VisibilityLocal {
 		t.Errorf("local enum E not found: %+v", fdp.MessageType)
 	}
 }
@@ -306,13 +336,15 @@ func TestVersionDetection(t *testing.T) {
 	})
 
 	t.Run("detects editions and records edition", func(t *testing.T) {
+		// As in protoc, an edition file carries BOTH Syntax "editions" and the
+		// concrete Edition.
 		e23 := mustParse(t, `edition = "2023";`, nil)
-		if e23.Edition != "EDITION_2023" || e23.Syntax != "" {
+		if e23.Edition != "EDITION_2023" || e23.Syntax != "editions" {
 			t.Errorf("e23 = %+v", e23)
 		}
 		e24 := mustParse(t, `edition = "2024";`, nil)
-		if e24.Edition != "EDITION_2024" {
-			t.Errorf("e24.Edition = %q", e24.Edition)
+		if e24.Edition != "EDITION_2024" || e24.Syntax != "editions" {
+			t.Errorf("e24 = %+v", e24)
 		}
 	})
 

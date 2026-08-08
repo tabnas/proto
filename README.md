@@ -13,7 +13,9 @@ into [FileDescriptorProto][fdp]-shaped JSON, using the
 [ABNF](https://github.com/tabnas/abnf) grammar.
 
 The TypeScript implementation lives in [`ts/`](ts) — see
-[`ts/README.md`](ts/README.md) for usage and API.
+[`ts/README.md`](ts/README.md) for usage and API. A Go port that tracks it
+lives in [`go/`](go); both run the shared fixtures in
+[`test/spec`](test/spec).
 
 ```js
 const { parse } = require('@tabnas/proto')
@@ -37,11 +39,29 @@ The grammar is pure structure over the lexer's whole-word tokens (`TX`
 identifier, `NR` number, `ST` string, `VL` keyword value); whitespace and
 `//` / `/* */` comments are handled by the lexer.
 
+## Conformance
+
+The output is checked against **protoc 35.1's own parser test corpus**,
+extracted from upstream `parser_unittest.cc` and vendored under
+[`test/protobuf-suite`](test/protobuf-suite): all 71 in-scope `valid` cases
+(source + the exact descriptor protoc's parser produces) and all 50
+`accept-only` cases pass, with nothing skipped. The 11 excluded cases
+declare protoc-internal editions (`UNSTABLE`, `99998_TEST_ONLY`) outside the
+proto2 / proto3 / 2023 / 2024 support this package claims.
+
+The grammar is a permissive *union* of the four versions, so rejecting
+version-illegal input is deliberately not part of the contract — recognition
+and descriptor shape are. See [`AGENTS.md`](AGENTS.md) for the full
+statement, including the two declared output-shape deviations from protoc.
+
 ## Layout
 
 ```
 proto-grammar/        # ABNF grammar: common.abnf + per-version deltas
 ts/                   # TypeScript implementation (plugin + descriptor walk)
+go/                   # Go port, tracking ts/
+test/spec/            # shared .tsv fixtures, run by BOTH runtimes
+test/protobuf-suite/  # vendored protoc parser_unittest conformance corpus
 ```
 
 [fdp]: https://protobuf.dev/reference/protobuf/google.protobuf/#file-descriptor-proto

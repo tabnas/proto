@@ -13,11 +13,14 @@ describe('version detection', () => {
   })
 
   it('detects edition 2023 / 2024 and records the edition', () => {
+    // As in protoc, an edition file carries BOTH `syntax: "editions"` and
+    // the concrete `edition`.
     const e23 = parse('edition = "2023";')
     assert.equal(e23.edition, 'EDITION_2023')
-    assert.equal(e23.syntax, undefined)
+    assert.equal(e23.syntax, 'editions')
     const e24 = parse('edition = "2024";')
     assert.equal(e24.edition, 'EDITION_2024')
+    assert.equal(e24.syntax, 'editions')
   })
 
   it('uses the explicit option when there is no declaration', () => {
