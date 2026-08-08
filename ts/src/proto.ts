@@ -65,6 +65,11 @@ function parse(src: string, options?: Partial<ProtoOptions>): FileDescriptorProt
   return toDescriptor(tn.parse(src), options)
 }
 
-export { Proto, parse, toDescriptor }
+// VERSION is this package's version. It MUST equal package.json "version":
+// the release orchestrator rewrites both, and test/version.test.ts fails the
+// build if they drift. Mirrors `const VERSION` in go/proto.go.
+const VERSION = '0.3.0'
+
+export { Proto, parse, toDescriptor, VERSION }
 export type { ProtoVersion }
 export * from './descriptor'
