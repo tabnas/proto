@@ -60,3 +60,19 @@ hand-editing, and only after the conformance test is green.
   case fix TS first and pin the corrected behaviour here.
 - A new fixture must pass in BOTH runtimes: run `go test ./...` (from `go/`)
   and `npm test` (from `ts/`) before considering it done.
+
+## Harness rules (both runtimes)
+
+These are the ways a suite can pass while measuring nothing. Each has bitten
+this repo; do not reintroduce them.
+
+- **Never throw out of a `describe()` body.** node's test runner prints a red
+  suite for a describe-body throw, counts **zero** failed tests, and **exits
+  0** — so a malformed or empty fixture goes green in CI. Put the guard in a
+  leaf `it()`. (`ts/test/parity.test.ts` was this shape until 2026-08.)
+- **No assertion that cannot fail.** `assert.ok(n >= 0)` is true for every
+  possible `n`. If the point is "we found some", ratchet at the count you
+  actually measured and say so in the message.
+- **No silent skip on a missing corpus.** Everything the conformance runners
+  read is committed under `protobuf-suite/`, so an absent file is a failure,
+  not a reason to pass quietly.

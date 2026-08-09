@@ -39,6 +39,8 @@ go/
   descriptor.go        # port of ts/src/descriptor.ts
   detect_version.go    # port of ts/src/detect-version.ts
   parity_test.go       # runs the same test/spec/*.tsv fixtures
+  protobuf_conformance_test.go  # protoc corpus in Go: valid / accept-only /
+                       #   leniency, same contracts as the TS runner
   version_test.go      # VERSION const == ts/package.json "version"
 test/
   spec/*.tsv           # shared cross-runtime fixtures (see test/AGENTS.md)
@@ -142,8 +144,10 @@ Everything else that diverges from `protoc` is a bug.
 The bar: **protoc 35.1's own parser test corpus**, extracted from upstream
 `src/google/protobuf/compiler/parser_unittest.cc` and vendored under
 `test/protobuf-suite/` (see its AGENTS.md). `ts/test/protobuf-conformance.test.ts`
-runs it — nothing is skipped, and the corpus is in-repo so it needs no
-network:
+and `go/protobuf_conformance_test.go` each run it against protoc's goldens,
+with the same contracts and the same normalisation — nothing is skipped, and
+the corpus is in-repo so it needs no network. Counts below are per runtime and
+were re-measured 2026-08-09; both runtimes give the same answer:
 
 - `valid` (82 cases): source + the descriptor protoc's parser produces.
   **71/71 in-scope pass.** The 11 excluded declare protoc-internal editions

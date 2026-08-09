@@ -115,7 +115,16 @@ function importsToRequire(code) {
 }
 
 // Rewrite `<expr>  // => <expected>` lines into __eq(expr, expected) calls.
-const ARROW = /\/\/\s*=>(.*)$/
+//
+// HARNESS DEFECT, fixed 2026-08: this regex is used two ways — per line inside
+// rewriteAssertions (where `$` means end-of-line, correctly) and as a
+// whole-block filter, `ARROW.test(joined)`. Without the `m` flag `$` anchors to
+// the end of the WHOLE block, so a block whose last line was not the `// =>`
+// line was silently dropped from the harness: no test, no skip, no mention.
+// `m` makes `$` mean end-of-line in both uses. (Re-measured on this repo's
+// docs: 11 testable blocks before and after, so nothing was being lost here
+// yet — the trap was latent, and the next doc edit would have sprung it.)
+const ARROW = /\/\/\s*=>(.*)$/m
 function rewriteAssertions(code) {
   let count = 0
   const out = code.split('\n').map((line) => {
@@ -185,8 +194,19 @@ describe('doc-examples', () => {
     })
   }
 
-  it('found at least one tested example (sanity)', () => {
-    // Not a hard failure if a repo has no `// =>` examples yet.
-    assert.ok(testable >= 0, `tested ${testable} doc example block(s)`)
+  // HARNESS DEFECT, fixed 2026-08: this used to be `assert.ok(testable >= 0)`,
+  // which is true for every possible value of `testable` — including 0. The
+  // whole doc-example harness could go green while extracting and running
+  // NOTHING (a regression in extractBlocks, a renamed doc directory, a `tsc`
+  // output layout change). A ratchet at the observed count is the honest
+  // version: it fails if extraction ever drops a block.
+  const MIN_TESTABLE = 11 // measured 2026-08-09: ts/README.md + ts/doc/*
+  it(`extracted at least ${MIN_TESTABLE} testable doc blocks`, () => {
+    assert.ok(
+      testable >= MIN_TESTABLE,
+      `extracted ${testable} testable doc example block(s), expected at least ` +
+        `${MIN_TESTABLE}. Doc examples stopped being found — fix the extractor ` +
+        `or the docs. Do NOT lower this number to get green.`,
+    )
   })
 })
