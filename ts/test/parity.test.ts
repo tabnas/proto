@@ -69,9 +69,26 @@ function label(s: string): string {
 }
 
 function runSpec(file: string) {
-  const rows = loadSpec(file)
+  // HARNESS DEFECT, fixed 2026-08: loading used to happen inside the describe()
+  // body, with `assert.ok(0 < rows.length)` there too. node's test runner
+  // reports a describe-body throw as a failed SUITE while counting ZERO failed
+  // TESTS — and then EXITS 0. So an empty or malformed fixture printed a red
+  // mark and the run still went green. Loading now happens outside, and the
+  // guard is a real leaf test that does set the exit code. (go/parity_test.go
+  // already fails hard on both: loadSpec t.Fatalf's.)
+  let rows: SpecRow[] = []
+  let loadError: Error | null = null
+  try {
+    rows = loadSpec(file)
+  } catch (e: any) {
+    loadError = e
+  }
+
   describe('spec: ' + file, () => {
-    assert.ok(0 < rows.length, file + ': no cases')
+    it('fixture loads and has cases', () => {
+      if (loadError) throw loadError
+      assert.ok(0 < rows.length, file + ': no cases')
+    })
     for (const row of rows) {
       it(`row ${row.line}: ${label(row.input)}`, () => {
         const opts = '' === row.opts.trim() ? undefined : JSON.parse(row.opts)

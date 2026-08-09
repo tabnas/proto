@@ -35,6 +35,14 @@ are **not** committed (they are large and are upstream's to distribute);
 `leniency`. It never skips: the corpus is in-repo, so an absent file is a
 failure, not a silent pass.
 
+`go/protobuf_conformance_test.go` runs the same three lanes with the same
+contracts and the same normalisation, so Go is measured against protoc's
+goldens directly rather than transitively. (`test/spec/protobuf-suite.tsv`
+also feeds the `valid` lane to Go, but its `expected` column is *this
+parser's* output — it proves Go matches TypeScript, not that Go matches
+protoc, and it covers neither `accept-only` nor `leniency`.) It never skips
+either.
+
 `invalid` is deliberately **not** a pass/fail gate. `proto-grammar/common.abnf`
 is a permissive union across proto2/proto3/editions and per-version legality
 is the walk's / protoc's concern, not recognition's — so roughly half of that
