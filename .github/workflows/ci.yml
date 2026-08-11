@@ -11,4 +11,4 @@ jobs:
   ci:
     uses: tabnas/.github/.github/workflows/polyglot-ci.yml@main
     with:
-      deps: "parser bnf abnf support"
+      deps: "parser support bnf abnf"
