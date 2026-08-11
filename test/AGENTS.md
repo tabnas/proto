@@ -14,7 +14,7 @@ Blank lines are skipped, and so are comment lines — a line starting with
 | Column | Meaning |
 |---|---|
 | `input` | `.proto` source. Escapes `\n` `\r` `\t` `\\` are decoded. |
-| `expected` | The resulting FileDescriptorProto as JSON, or `ERROR` / `ERROR:<substring>` for input that must be rejected. |
+| `expected` | The resulting FileDescriptorProto as JSON, or `ERROR` / `ERROR:<substring>` for input that must be rejected. Unlike most of the fleet the text after the colon is a fragment of the MESSAGE, not an error code: the one such row names the plugin's own version check, which is not a parse failure the engine gives a code to. |
 | `opts` | Optional JSON `ProtoOptions` — `{"version":"proto3"}`, `{"reconcile":false}` (empty means auto-detect). |
 
 `expected` and `opts` are **not** escape-decoded — they are raw JSON, so
@@ -26,12 +26,21 @@ order do not affect the comparison.
 
 ## Who runs what
 
-- TypeScript: `ts/test/parity.test.ts` — reads `../../test/spec` at runtime
-  from `dist-test/`, one `describe` per file.
-- Go: `go/parity_test.go` — `TestSpec` globs `../test/spec/*.tsv`.
+- TypeScript: `ts/test/parity.test.ts` — `makeRunner(...).dir(...)`.
+- Go: `go/parity_test.go` — `support.Runner{...}.Dir(t, dir)`.
+
+Both are a dozen lines holding only what is specific to proto: how to
+build the parser for a row's options. Everything else — finding
+`test/spec`, reading the file, decoding escapes, the `ERROR:` contract,
+the comparison, the `<file>:<line>` in a failure message — comes from
+[`@tabnas/support`](https://github.com/tabnas/support) and its Go half, so
+the two loaders cannot drift from each other either.
 
 Both discover files by directory listing: adding a `.tsv` here runs it in
-both runtimes without touching either runner.
+both runtimes without touching either runner. An empty fixture, and a spec
+directory with no fixtures in it, both **fail** — a runner that reports
+green having run nothing is indistinguishable from coverage that was never
+there.
 
 ## The files
 
