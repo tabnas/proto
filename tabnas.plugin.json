@@ -1,0 +1,16 @@
+{
+  "$schema": "https://tabnas.dev/schema/plugin.schema.json",
+  "name": "@tabnas/proto",
+  "go": "github.com/tabnas/proto/go",
+  "description": "Protocol Buffers IDL parsing for the tabnas engine (proto2, proto3, editions).",
+  "base": "@tabnas/abnf",
+  "engine": "@tabnas/parser",
+  "extensions": [
+    ".proto"
+  ],
+  "specDir": "test/spec",
+  "errorCodes": [],
+  "docs": "https://tabnas.dev/docs/packages",
+  "repository": "https://github.com/tabnas/proto",
+  "versionSource": "ts/package.json"
+}
