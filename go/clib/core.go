@@ -188,6 +188,12 @@ func parseWith(handle int64, src string) string {
 		})
 	}
 
+	return acceptDoc(val)
+}
+
+// acceptDoc builds the accept reply; the parsed value is included only
+// when this format declares a JSON-representable result (valueOut).
+func acceptDoc(val any) string {
 	doc := map[string]any{"ok": true, "accept": true}
 	if valueOut {
 		if b, jerr := json.Marshal(val); jerr == nil {
