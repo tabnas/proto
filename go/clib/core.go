@@ -19,10 +19,13 @@ package main
 
 import (
 	"encoding/json"
+	"math/big"
 	"strings"
 	"sync"
+	"unicode/utf8"
 
 	plug "github.com/tabnas/proto/go"
+	host "github.com/tabnas/parser/go"
 )
 
 const (
@@ -47,7 +50,16 @@ var (
 	reg    sync.RWMutex
 	nextID int64
 	loaded = map[int64]*instance{}
+
+	// sharedMu is for constructs whose parse function drives HIDDEN
+	// package-global state (e.g. a singleton front-end parser): the
+	// per-instance mutex only serializes one handle, so such constructs
+	// must take this process-wide lock inside their closure. Unused by
+	// constructs whose engines are genuinely per-handle.
+	sharedMu sync.Mutex
 )
+
+var _ = &sharedMu // referenced only by opt-in constructs
 
 // newParser builds one engine with the proto grammar installed
 // NATIVELY — in-process, not via a serialized spec. That is a
@@ -56,7 +68,7 @@ var (
 // behaviour as closures, which cannot cross a data boundary at all.
 // The body is the per-repo column of admin tasks/clib-rollout.tsv.
 func newParser() (parseFn, error) {
-	return func(src string) (any, error) { return plug.Parse(src, nil) }, nil
+	j := host.Make(); if err := plug.Proto(j); err != nil { return nil, err }; return func(src string) (any, error) { cst, err := j.Parse(src); if err != nil { return nil, err }; return plug.ToDescriptor(cst, nil) }, nil
 }
 
 // reply marshals a result document. Marshalling cannot fail for the
@@ -115,7 +127,10 @@ func errPayload(err error) any {
 func loadGrammar(optsJSON string) string {
 	if optsJSON != "" {
 		var o map[string]any
-		if err := json.Unmarshal([]byte(optsJSON), &o); err != nil {
+		// err covers non-JSON and non-object shapes; the nil check
+		// covers the JSON document `null`, which unmarshals into a nil
+		// map without error and would otherwise slip the reservation.
+		if err := json.Unmarshal([]byte(optsJSON), &o); err != nil || o == nil {
 			return failDoc("usage", "options must be a JSON object")
 		}
 		if len(o) > 0 {
@@ -196,13 +211,54 @@ func parseWith(handle int64, src string) string {
 func acceptDoc(val any) string {
 	doc := map[string]any{"ok": true, "accept": true}
 	if valueOut {
-		if b, jerr := json.Marshal(val); jerr == nil {
+		if why := jsonUnsafe(val); why != "" {
+			// encoding/json corrupts these silently — invalid UTF-8
+			// becomes U+FFFD without error, and arbitrary-precision
+			// integers become IEEE-754-rounded numbers in most JSON
+			// decoders. Refusing to emit the value is the honest
+			// answer: accept stays true, and the value stays
+			// retrievable through a native runtime.
+			doc["valueError"] = "value contains " + why +
+				" that JSON encoding would corrupt; retrieve it via a" +
+				" native tabnas runtime"
+		} else if b, jerr := json.Marshal(val); jerr == nil {
 			doc["value"] = json.RawMessage(b)
 		} else {
 			doc["valueError"] = firstLine(jerr.Error())
 		}
 	}
 	return reply(doc)
+}
+
+// jsonUnsafe walks val and reports (as a short reason, or "") anything
+// encoding/json would corrupt rather than refuse: invalid UTF-8 in
+// strings or keys (folded to U+FFFD), and arbitrary-precision numbers
+// (emitted as bare JSON numbers that IEEE-754 decoders round).
+func jsonUnsafe(val any) string {
+	switch v := val.(type) {
+	case string:
+		if !utf8.ValidString(v) {
+			return "non-UTF-8 string bytes"
+		}
+	case *big.Int, *big.Float:
+		return "arbitrary-precision numbers"
+	case map[string]any:
+		for k, e := range v {
+			if !utf8.ValidString(k) {
+				return "non-UTF-8 string bytes"
+			}
+			if why := jsonUnsafe(e); why != "" {
+				return why
+			}
+		}
+	case []any:
+		for _, e := range v {
+			if why := jsonUnsafe(e); why != "" {
+				return why
+			}
+		}
+	}
+	return ""
 }
 
 func safeParse(p parseFn, src string) (val any, err error) {

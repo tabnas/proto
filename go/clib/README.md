@@ -64,6 +64,10 @@ const c = @cImport(@cInclude("tabnas.h"));
 // c.tabnas_free.
 ```
 
+## Format notes
+
+The engine and ABNF-compiled grammar are built ONCE per handle (package `Parse` rebuilds them per call, which would serialize grammar compilation under the handle mutex); `ToDescriptor` resolves the proto version per file with default options.
+
 ## Layout
 
 - `core.go` — the behaviour, in plain Go (testable).

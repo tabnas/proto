@@ -110,6 +110,14 @@ func TestOptionsReserved(t *testing.T) {
 	if m := decode(t, loadGrammar("not json")); m["ok"] != false {
 		t.Fatalf("junk options accepted: %v", m)
 	}
+	// `null` unmarshals into a nil map without error; it must not slip
+	// the reservation, and non-object documents must not either.
+	if m := decode(t, loadGrammar("null")); m["ok"] != false {
+		t.Fatalf("null options accepted: %v", m)
+	}
+	if m := decode(t, loadGrammar("[1]")); m["ok"] != false {
+		t.Fatalf("array options accepted: %v", m)
+	}
 }
 
 func TestFreedHandleIsGone(t *testing.T) {

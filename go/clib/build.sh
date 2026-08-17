@@ -25,8 +25,11 @@ OUT="${OUT:-dist}"
 PKG="."
 LIB="libtabnasproto"
 
-host_os=$(go env GOOS)
-host_arch=$(go env GOARCH)
+# GOHOSTOS/GOHOSTARCH, not GOOS/GOARCH: the latter name the TARGET when
+# a caller exports them for cross-compilation, and mistaking a target
+# for the physical host selects the wrong toolchain branch.
+host_os=$(go env GOHOSTOS)
+host_arch=$(go env GOHOSTARCH)
 
 # A target NAMED on the command line is a requirement, not a wish: if it
 # cannot be built the script fails, so release automation cannot mistake
@@ -36,7 +39,7 @@ targets=""
 explicit=0
 case "${1:-host}" in
   host) targets="$host_os/$host_arch" ;;
-  all)  targets="linux/amd64 linux/arm64 windows/amd64"
+  all)  targets="linux/amd64 linux/arm64 windows/amd64 windows/arm64"
         [ "$host_os" = "darwin" ] && targets="$targets darwin/amd64 darwin/arm64" ;;
   *)    targets="$*"; explicit=1 ;;
 esac
@@ -72,10 +75,17 @@ for t in $targets; do
   arch=${t##*/}
   ext=$(lib_ext "$os")
   out="$OUT/$LIB-$os-$arch$ext"
+  # A skipped target must leave no stale artifact from an earlier run —
+  # packaging would otherwise publish an old binary as current.
+  rm -f "$out"
 
   if [ "$os" = "$host_os" ] && [ "$arch" = "$host_arch" ]; then
     CGO_ENABLED=1 GOOS="$os" GOARCH="$arch" \
       go build -buildmode=c-shared -o "$out" "$PKG"
+    # Canonical basename for the host: release artifacts carry the
+    # target suffix, but the linker (and the pkg-config Libs line)
+    # wants lib$LIB$ext — installers copy or link this name into libdir.
+    ln -sf "$(basename "$out")" "$OUT/$LIB$ext"
   else
     if [ "$os" = "darwin" ]; then
       skip_or_fail "skip $t: darwin cannot be cross-compiled (needs Apple's SDK); build on a macOS host"
@@ -91,7 +101,7 @@ for t in $targets; do
       continue
     fi
     cc="$OUT/.zigcc-$os-$arch"
-    printf '#!/bin/sh\nexec %s cc -target %s "$@"\n' "$ZIG" "$zt" > "$cc"
+    printf '#!/bin/sh\nexec "%s" cc -target %s "$@"\n' "$ZIG" "$zt" > "$cc"
     chmod +x "$cc"
     CGO_ENABLED=1 GOOS="$os" GOARCH="$arch" CC="$(cd "$(dirname "$cc")" && pwd)/$(basename "$cc")" \
       go build -buildmode=c-shared -o "$out" "$PKG"

@@ -1,5 +1,9 @@
 # pkg-config for libtabnasproto (tabnas-clib-template: v1)
 # Install alongside the built library; substitute @PREFIX@ at install.
+# Libs links the CANONICAL basename (libtabnasproto.so/.dylib). Release
+# artifacts carry a target suffix; installing means copying (or
+# symlinking, as build.sh does for the host build in dist/) the artifact
+# to the canonical name in ${libdir}.
 prefix=@PREFIX@
 libdir=${prefix}/lib
 includedir=${prefix}/include
