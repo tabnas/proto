@@ -12,6 +12,8 @@ into [FileDescriptorProto][fdp]-shaped JSON, using the
 [Tabnas](https://github.com/tabnas/parser) parser and an
 [ABNF](https://github.com/tabnas/abnf) grammar.
 
+Docs, guides, the error reference and the playground: **[tabnas.dev](https://tabnas.dev)**.
+
 The TypeScript implementation lives in [`ts/`](ts) — see
 [`ts/README.md`](ts/README.md) for usage and API. A Go port that tracks it
 lives in [`go/`](go); both run the shared fixtures in
