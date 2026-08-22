@@ -1,15 +1,61 @@
-# Publishes this repo's @tabnas/* package to npm on a `ts/v*` tag push, via
-# GitHub OIDC Trusted Publishing (no token). The build runs against the
-# ALREADY-PUBLISHED dependency versions (npm i resolves them), so a failing
-# build never publishes. The full test suite is gated separately: the
-# orchestrator (admin/publish.sh) verifies build+test locally against
-# published deps and requires a green main CI (polyglot-ci) before tagging.
-# Tests are not re-run here because some suites load sibling packages by path
-# (e.g. debug -> abnf), which don't exist in this standalone publish env.
-# Go modules are served by the module proxy from the `go/v*` tag directly.
+# Target: tabnas/proto -> .github/workflows/release.yml
+#
+# Publishes @tabnas/proto to npm via GitHub OIDC Trusted Publishing (no
+# token), and writes the release tags. The fleet-standard shape — see
+# lsp__release.yml, where the reasoning is worked through at length.
+#
+# STAGED AS PART OF THE M9 SWEEP. release.yml was the one workflow kind
+# never brought under rollout/: ci.yml was staged for 33 repos,
+# scorecard and notify-status for 29, release.yml for 2. So ADR-16's
+# node24 sweep never reached it, and every deployed copy still pinned
+# checkout@34e11487 and setup-node@49933ea5 — node20-runtime majors.
+# Staging fixes the pins and puts the file under the applier, so the
+# next fleet-wide change reaches it without anyone remembering.
+#
+# TWO TRIGGERS:
+#   workflow_dispatch  the normal path. Bump in a reviewed PR first;
+#                      this run reads main, publishes it, tags it. The
+#                      workflow never commits.
+#   push: ts/v*        the orchestrator path — admin/publish.sh pushes
+#                      the tag itself, so the tag steps no-op.
+#
+# npm allows exactly ONE workflow file per trusted publisher, so the
+# tagging has to live in this file rather than a workflow of its own; an
+# OIDC token from an unregistered workflow is refused as 404 (not 403,
+# so as not to leak whether a package exists). Renaming this file breaks
+# publishing until the npm-side entry is updated to match.
+#
+# TWO CREDENTIALS, NEITHER ABLE TO DO THE OTHER'S JOB: id-token: write
+# is OIDC, exchanged AT NPM, and cannot create a tag — its audience is
+# the registry, not GitHub. contents: write is the per-run GITHUB_TOKEN
+# and writes the tags. They cannot be split across workflows either: a
+# ref pushed with GITHUB_TOKEN does not start another run, so "tag in A,
+# publish on the tag" would publish nothing, silently.
+#
+# NO TEST STEP, preserving what the previous header recorded: some
+# suites load sibling packages BY PATH (debug -> abnf), which do not
+# exist in a standalone publish environment. The build DOES run, against
+# already-published dependency versions, so a failing build never
+# publishes. ci.yml gates the bump PR across the full matrix.
+#
+# Go modules are served by proxy.golang.org straight from the go/v* tag:
+# PUSHING THE TAG IS THE RELEASE, and it cannot be undone — the proxy
+# caches module versions immutably. A go/vX.Y.Z naming the wrong commit
+# is permanent; bump to the next patch rather than moving it.
+#
+# Actions are pinned to full commit SHAs with the corresponding release
+# as a trailing comment, on the lowest major whose `runs.using` is
+# node24 (ADR-16).
+
 name: release
 
 on:
+  workflow_dispatch:
+    inputs:
+      go:
+        description: 'Also tag the Go module (go/v<version>)'
+        type: boolean
+        default: true
   push:
     tags:
       - 'ts/v*'
@@ -21,18 +67,111 @@ jobs:
   publish-npm:
     runs-on: ubuntu-latest
     permissions:
-      id-token: write
-      contents: read
+      id-token: write   # OIDC -> npm; cannot write refs
+      contents: write   # GITHUB_TOKEN -> tags; cannot publish
     steps:
-      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
-      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09  # v5.1.0
+        with:
+          fetch-depth: 0   # tags, for the already-released guard
+
+      - uses: actions/setup-node@a0853c24544627f65ddf259abe73b1d18a591444  # v5.0.0
         with:
           node-version: 24
           registry-url: https://registry.npmjs.org
-      - name: Build and publish to npm (OIDC trusted publishing)
+
+      - name: Read the version
+        id: v
+        run: |
+          V="$(node -p "require('./ts/package.json').version")"
+          echo "version=$V" >> "$GITHUB_OUTPUT"
+          echo "Releasing $V"
+
+      # A dispatch is NOT inherently tied to the default branch — the ref
+      # is a parameter, so dispatching a version-bump feature branch would
+      # publish an immutable npm version and immutable tags from an
+      # unreviewed commit. Refuse anything but main.
+      - name: Refuse a dispatch from anywhere but main
+        if: github.event_name == 'workflow_dispatch' && github.ref != 'refs/heads/main'
+        run: |
+          echo "::error::release must be dispatched from main (got ${{ github.ref }})"
+          exit 1
+
+      # Which tags this run still has to create. Fails closed only when
+      # there is NOTHING left to do, which is the real "you forgot to
+      # bump" signal; a run that has ts/v but is missing go/v is a
+      # half-finished release and must be repairable, not refused.
+      - name: Decide which tags this run must create
+        id: tags
+        if: github.event_name == 'workflow_dispatch'
+        run: |
+          V="${{ steps.v.outputs.version }}"
+          MISSING=""; ANCHOR=""
+          for T in "ts/v$V" "go/v$V"; do
+            case "$T" in
+              go/*) [ "${{ inputs.go }}" = "true" ] || continue ;;
+            esac
+            if C="$(git rev-parse -q --verify "refs/tags/$T^{commit}")"; then
+              [ -n "$ANCHOR" ] || ANCHOR="$C"
+            else
+              MISSING="$MISSING $T"
+            fi
+          done
+          MISSING="$(echo $MISSING)"
+          if [ -z "$MISSING" ]; then
+            echo "::error::every tag this run would create already exists — bump the version first"
+            exit 1
+          fi
+
+          # A REPAIR must name the commit the release actually happened at,
+          # not whatever main has become since. If ts/v landed and go/v did
+          # not, and main moved on, tagging HEAD would leave the two tags
+          # identifying DIFFERENT commits — permanent for the Go module,
+          # because proxy.golang.org caches module versions immutably.
+          HEAD_C="$(git rev-parse HEAD)"
+          if [ -z "$ANCHOR" ]; then
+            ANCHOR="$HEAD_C"
+          elif [ "$ANCHOR" != "$HEAD_C" ]; then
+            if ! npm view "@tabnas/proto@$V" version >/dev/null 2>&1; then
+              echo "::error::$V is tagged at $ANCHOR but is not on npm — publishing would ship HEAD while the tags name an older commit; resolve by hand"
+              exit 1
+            fi
+            echo "repairing an earlier release: anchoring to $ANCHOR (HEAD has moved on)"
+          fi
+          echo "missing=$MISSING" >> "$GITHUB_OUTPUT"
+          echo "anchor=$ANCHOR" >> "$GITHUB_OUTPUT"
+          echo "will create:$MISSING at $ANCHOR"
+
+      # Fails OPEN: the REGISTRY, not the tag, decides whether a version
+      # is released. A run can publish and then fail before tagging;
+      # without this the re-run dies on "cannot publish over the
+      # previously published versions" before reaching the tag steps.
+      - name: Publish to npm if the version is missing (OIDC)
         working-directory: ts
         run: |
+          V="${{ steps.v.outputs.version }}"
           npm install -g npm@latest
-          npm i
-          npm run build --if-present
-          npm publish --access public
+          if npm view "@tabnas/proto@$V" version >/dev/null 2>&1; then
+            echo "@tabnas/proto@$V is already on npm — skipping publish"
+          else
+            npm i
+            npm run build --if-present
+            npm publish --access public
+          fi
+
+      # After publishing, so a tag only ever exists for a release that
+      # reached the registry.
+      - name: Tag the release
+        if: github.event_name == 'workflow_dispatch'
+        run: |
+          git config user.name  'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+
+          # ONE atomic transaction, not a push per tag. Pushed separately,
+          # ts/v could land and go/v fail on a transient error, leaving npm
+          # published, ts/v tagged and the Go module unreleased — and the
+          # guard above would then refuse every re-dispatch, so the
+          # half-release could never be repaired.
+          for T in ${{ steps.tags.outputs.missing }}; do
+            git tag "$T" "${{ steps.tags.outputs.anchor }}"
+          done
+          git push --atomic origin ${{ steps.tags.outputs.missing }}
