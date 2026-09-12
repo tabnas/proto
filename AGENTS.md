@@ -227,11 +227,14 @@ The steps, in order:
    immutably. If you take it, say so.
 4. **Wait for `main` CI to go green on the bump commit.** The release
    workflow **has no test step** — it reads `main`, builds against
-   already-published dependencies, publishes and tags. The bump's own CI
-   is the only gate there is, and here that is two workflows rather than
-   one: `ci.yml`, and `clib.yml`, which triggers on any `go/**` change and
-   so runs on every version bump. An npm version is immutable, and a Go
-   module tag is worse: proxy.golang.org caches module versions permanently,
+   already-published dependencies, publishes and tags. The bump commit's
+   own CI is the only gate there is. **`clib.yml` is not part of it** —
+   it triggers on `pull_request` for `go/**` and on manual dispatch, with
+   no `push` trigger, so it runs on the bump *PR* and never on the merged
+   commit. Require it green before merging in step 3; after the merge only
+   `ci.yml` runs, and a direct push to `main` skips clib entirely.
+
+   An npm version is immutable, and a Go module tag is worse: proxy.golang.org caches module versions permanently,
    so a `go/vX.Y.Z` naming the wrong commit cannot be moved, only
    superseded.
 5. **Record the release commit, then dispatch.** The confirmation
@@ -245,6 +248,13 @@ The steps, in order:
    ```
 
    Then dispatch `release.yml` on `main` with `go: true`.
+
+   Keep that SHA. If a later run has to repair this release, the comparison
+   must still be against the commit npm actually served — re-reading `main`
+   at repair time gives you whatever it has become, which is exactly the
+   value the faulty anchor would also produce, so the check would agree with
+   itself and pass. If you no longer have it, recover it from the original
+   run: the `head_sha` of that `release.yml` run is the commit it published.
 6. Confirm — and make the check **fail**, not merely print:
 
    ```bash
