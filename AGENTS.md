@@ -234,12 +234,21 @@ The steps, in order:
    module tag is worse: proxy.golang.org caches module versions permanently,
    so a `go/vX.Y.Z` naming the wrong commit cannot be moved, only
    superseded.
-5. Dispatch `release.yml` on `main` with `go: true`.
+5. **Record the release commit, then dispatch.** The confirmation
+   below compares each tag against the commit you released, and a run
+   that publishes and then fails to tag can be followed by `main`
+   moving — so capture it *before* the dispatch, and read it from the
+   remote rather than a local ref that may be stale:
+
+   ```bash
+   REL=$(git ls-remote origin refs/heads/main | cut -f1)
+   ```
+
+   Then dispatch `release.yml` on `main` with `go: true`.
 6. Confirm — and make the check **fail**, not merely print:
 
    ```bash
    V=x.y.z
-   REL=$(git rev-parse origin/main)   # capture BEFORE dispatching
    npm view @tabnas/proto@$V version
    for T in "ts/v$V" "go/v$V"; do
      S=$(git ls-remote origin "refs/tags/$T" | cut -f1)
