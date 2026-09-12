@@ -182,11 +182,13 @@ The steps, in order:
    usually does not, so reproduce that before believing anything:
 
    ```bash
-   cd ts
-   rm -f package-lock.json      # gitignored here; pins the old versions
-   rm -rf node_modules
-   npm install
-   npm test
+   (
+     cd ts
+     rm -f package-lock.json      # gitignored here; pins the old versions
+     rm -rf node_modules
+     npm install
+     npm test
+   )
    ```
 
    **Removing the lockfile is not enough on its own.** It does not touch
@@ -212,9 +214,11 @@ The steps, in order:
    the sibling directory. Assert its absence first:
 
    ```bash
-   cd go
-   go mod edit -json | grep -q '"Replace": null' || { echo 'go.mod has a replace'; exit 1; }
-   GOWORK=off go test -count=1 ./...
+   (
+     cd go
+     go mod edit -json | grep -q '"Replace": null' || { echo 'go.mod has a replace'; exit 1; }
+     GOWORK=off go test -count=1 ./...
+   )
    ```
 
    `-count=1` because shared fixtures live outside the Go module, so a
@@ -225,14 +229,17 @@ The steps, in order:
    `main` is a recovery path, not the normal one: CI still gates it, but
    nothing reviews it, and step 5 then publishes that unreviewed commit
    immutably. If you take it, say so.
+
+   **`clib.yml` must be green on this PR before you merge.** It triggers
+   on `pull_request` for `go/**` and on manual dispatch, with no `push`
+   trigger — so it runs here and never on the merged commit. This is the
+   only chance to see it, and the direct-push recovery path skips it
+   entirely.
 4. **Wait for `main` CI to go green on the bump commit.** The release
    workflow **has no test step** — it reads `main`, builds against
    already-published dependencies, publishes and tags. The bump commit's
-   own CI is the only gate there is. **`clib.yml` is not part of it** —
-   it triggers on `pull_request` for `go/**` and on manual dispatch, with
-   no `push` trigger, so it runs on the bump *PR* and never on the merged
-   commit. Require it green before merging in step 3; after the merge only
-   `ci.yml` runs, and a direct push to `main` skips clib entirely.
+   own CI is the only gate there is, and after the merge that is
+   `ci.yml` alone.
 
    An npm version is immutable, and a Go module tag is worse: proxy.golang.org caches module versions permanently,
    so a `go/vX.Y.Z` naming the wrong commit cannot be moved, only
