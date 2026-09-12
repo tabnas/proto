@@ -151,6 +151,163 @@ What "correct" means here, in order of authority:
    `ts/test/version.test.ts` and `go/version_test.go` fail the build if
    they drift.
 
+## Releasing
+
+Publishing is **dispatch-driven and runs in CI**, never locally:
+[`.github/workflows/release.yml`](.github/workflows/release.yml) publishes
+`@tabnas/proto` to npm over GitHub OIDC trusted publishing (no token,
+provenance attached), and a `go/v*` tag is the Go module release —
+proxy.golang.org serves it straight from the tag. A local `npm publish` goes
+out over a token and bypasses OIDC entirely — do not use it for a release.
+
+### Dispatch it; do not push the tag
+
+**Run the workflow with `workflow_dispatch` on `main`, with the `go` input
+true.** That is the path the workflow's own header calls normal, and it is
+the only one an agent can take: **a session's credentials cannot push tag
+refs — `git push origin ts/v…` fails with HTTP 403**, while branch pushes
+from the same credentials succeed. It is a ref-type boundary, not a broken
+token or a network fault. Nothing is lost by never touching a tag, because
+the workflow creates both tags itself, in one atomic push, *after* npm
+accepts the publish. Pushing a tag by hand is the orchestrator's path
+(`admin/publish.sh`), not yours.
+
+The steps, in order:
+
+1. Bump all **three** version sites together — `ts/package.json`, `VERSION`
+   in `ts/src/proto.ts` and `const VERSION` in `go/proto.go`. Drift is
+   caught by `ts/test/version.test.ts` and `go/version_test.go`.
+2. Verify against the **published** dependencies rather than your checkout.
+   The release runner installs fresh from the registry; a working tree
+   usually does not, so reproduce that before believing anything:
+
+   ```bash
+   cd ts
+   rm -f package-lock.json      # gitignored here; pins the old versions
+   rm -rf node_modules
+   npm install
+   npm test
+   ```
+
+   **Removing the lockfile is not enough on its own.** It does not touch
+   `node_modules`, and the sibling symlinks that make local development work
+   (`ts/node_modules/@tabnas/…` pointing at a checkout) survive it — the
+   suite then passes against unreleased code while appearing to verify the
+   published one. Reinstalling is the part that matters.
+
+   One thing a clean install does **not** isolate:
+   `ts/test/doc-examples.test.*` resolves `@tabnas/*` by filesystem path
+   (`const TABNAS = path.join(REPO, '..')`), not through `node_modules`. If
+   unbuilt sibling checkouts sit beside this repo, those blocks fail with
+   `MODULE_NOT_FOUND` no matter what you installed — build the siblings, or
+   verify somewhere they are absent.
+
+   `npm test` already compiles here: `ts/package.json` sets `pretest` to
+   `npm run build`, which npm runs automatically. No separate build step is
+   needed, and adding one just builds twice.
+
+   On the Go side, `GOWORK=off` is necessary and **not sufficient** — it
+   disables the workspace and nothing else. A `replace` carrying no version
+   on the left applies to every version, so the `require` still resolves to
+   the sibling directory. Assert its absence first:
+
+   ```bash
+   cd go
+   go mod edit -json | grep -q '"Replace": null' || { echo 'go.mod has a replace'; exit 1; }
+   GOWORK=off go test -count=1 ./...
+   ```
+
+   `-count=1` because shared fixtures live outside the Go module, so a
+   changed corpus does not invalidate the test cache.
+3. **Merge the bump through a reviewed PR.** That is the house convention —
+   `CONTRIBUTING.md` squash-merges PRs and takes the title as the commit
+   message — and what `release.yml`'s own header describes. A direct push to
+   `main` is a recovery path, not the normal one: CI still gates it, but
+   nothing reviews it, and step 5 then publishes that unreviewed commit
+   immutably. If you take it, say so.
+4. **Wait for `main` CI to go green on the bump commit.** The release
+   workflow **has no test step** — it reads `main`, builds against
+   already-published dependencies, publishes and tags. `ci.yml` on the bump
+   commit is the only gate there is. An npm version is immutable, and a Go
+   module tag is worse: proxy.golang.org caches module versions permanently,
+   so a `go/vX.Y.Z` naming the wrong commit cannot be moved, only
+   superseded.
+5. Dispatch `release.yml` on `main` with `go: true`.
+6. Confirm — and make the check **fail**, not merely print:
+
+   ```bash
+   V=x.y.z
+   npm view @tabnas/proto@$V version
+   n=$(git ls-remote --tags origin "refs/tags/ts/v$V" "refs/tags/go/v$V" | wc -l)
+   [ "$n" = 2 ] || { echo "incomplete release: $n/2 tags"; exit 1; }
+   ```
+
+   Neither `… | grep v$V` nor a bare `wc -l` is a check: `grep` exits 0 when
+   *either* ref matches, and `wc` prints the count and exits 0 regardless.
+   Both report a half-finished release as a finished one.
+
+   **The dispatch does not publish the C artifacts.**
+   `.github/workflows/clib-release.yml` triggers on `release: published`, so
+   the shared library is built only once a GitHub Release exists for the
+   tag. Create the release, or dispatch that workflow yourself.
+
+### When a dispatch dies half-way
+
+The workflow fails closed on a dispatch from any ref but `main`, and when
+every tag it would create already exists (the "you forgot to bump" signal).
+It fails *open* on an already-published npm version, so a run that published
+and then died before tagging can be re-dispatched — **but only while `main`
+still points at the release commit.**
+
+That caveat is the sharp edge. The repair logic anchors new tags to an
+*existing* tag. If the run published to npm and died before the atomic push,
+neither tag exists to supply that anchor — so if `main` has moved on, the
+anchor falls back to the new `HEAD` while the publish step skips the version
+already on npm. Both tags then land on a commit that is not the one npm
+serves, and for the Go module that is permanent. In that state, recover the
+original SHA and tag it by hand, or bump to the next patch. Do not just
+re-dispatch.
+
+### Never commit the local wiring
+
+Testing against unreleased siblings means symlinked `node_modules`,
+`replace` directives and a workspace. None of it may reach a commit, and
+`git add -A` is how it does:
+
+- `go mod edit -replace …=/abs/path` — CI reports it as `replacement
+  directory /… does not exist`.
+- **`go.sum`, after the replace comes out.** A `replace` makes the sibling's
+  sums unused, so `go mod tidy` drops them; reverting `go.mod` alone then
+  leaves `missing go.sum entry` — a *different* error on the commit meant to
+  fix the first one. Revert both, and diff them against the last release
+  commit.
+- **A `go.work` belongs outside every repo**, one level up. Be precise about
+  what it does and does not check: it still consults the `go.sum` files of
+  its member modules and writes any missing sums to `go.work.sum`. What it
+  skips is validating the *declared version* of a module it replaces with a
+  local one — which is exactly the part that hides a bad dependency bump,
+  and why the `GOWORK=off` run above exists.
+- Scratch files — anything written to measure something.
+
+Stage deliberately (`git add <path>`) and read `git status --short` before
+every commit. This bites hardest on a PR whose CI is *expected* red for a
+known dependency: a fresh breakage hides inside the expected failure.
+
+### `make publish-ts` and `make publish-go` are not the release path
+
+They predate `release.yml`. Read what each actually does before using
+either:
+
+- `publish-ts` runs a local `npm publish`, which goes out over a token and
+  bypasses the OIDC trusted publishing the workflow uses.
+- `publish-go V=x.y.z` breaks the version invariant: it `sed`s and stages
+  **only** `go/proto.go`, leaving `ts/package.json` and `VERSION` in
+  `ts/src/proto.ts` on the previous version — the exact state the version
+  tests exist to reject. Its `test-go` prerequisite also runs *before* the
+  `sed`, so what it verifies is not what it tags.
+
+They stay in the Makefile because removing them is a separate change.
+
 ## Error codes
 
 This package declares no error codes of its own — there is no
