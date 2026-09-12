@@ -195,6 +195,13 @@ The steps, in order:
    suite then passes against unreleased code while appearing to verify the
    published one. Reinstalling is the part that matters.
 
+   One thing a clean install does **not** isolate:
+   `ts/test/doc-examples.test.*` resolves `@tabnas/*` by filesystem path
+   (`const TABNAS = path.join(REPO, '..')`), not through `node_modules`. If
+   unbuilt sibling checkouts sit beside this repo, those blocks fail with
+   `MODULE_NOT_FOUND` no matter what you installed — build the siblings, or
+   verify somewhere they are absent.
+
    `npm test` already compiles here: `ts/package.json` sets `pretest` to
    `npm run build`, which npm runs automatically. No separate build step is
    needed, and adding one just builds twice.
