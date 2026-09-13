@@ -1,7 +1,7 @@
 # @tabnas/proto
 
-Parse Protocol Buffers `.proto` IDL — **proto2, proto3, and editions 2023
-/ 2024** — into [FileDescriptorProto][fdp]-shaped JSON, using the
+Parse Protocol Buffers `.proto` IDL (**proto2, proto3, and editions 2023
+/ 2024**) into [FileDescriptorProto][fdp]-shaped JSON, using the
 [Tabnas](https://github.com/tabnas/parser) parser driven by an
 [ABNF](https://github.com/tabnas/abnf) grammar.
 
@@ -42,10 +42,10 @@ agree (`reconcile: true`, the default) or `parse` throws; set
 
 ## API
 
-- `parse(src, options?) => FileDescriptorProto` — parse a `.proto` string.
-- `Proto` — the Tabnas plugin; `new Tabnas().use(Proto)` installs the
+- `parse(src, options?) => FileDescriptorProto`. Parse a `.proto` string.
+- `Proto`. The Tabnas plugin; `new Tabnas().use(Proto)` installs the
   grammar so `tn.parse(src)` returns the raw `{rule, src, kids}` CST.
-- `toDescriptor(cst, options?)` — turn a parsed CST into a
+- `toDescriptor(cst, options?)`. Turn a parsed CST into a
   FileDescriptorProto.
 
 Options: `{ version?: 'proto2'|'proto3'|'2023'|'2024' | null,
@@ -61,7 +61,7 @@ A `FileDescriptorProto`-shaped object (the `descriptor.proto` JSON shape):
 `syntax` / `edition`. `map<K,V>` fields are expanded to a repeated message
 field plus a synthesised `…Entry` nested message with
 `options.mapEntry = true`, groups to a `TYPE_GROUP` field plus a nested
-message, and a proto3 explicit `optional` to a synthetic `_<field>` oneof —
+message, and a proto3 explicit `optional` to a synthetic `_<field>` oneof,
 exactly as `protoc` does. Type names are stored as written and `type` is
 left unset for them; cross-file resolution is a separate concern.
 

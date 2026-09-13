@@ -38,16 +38,16 @@ fields; enum values as their string names):
 
 - `package?`, `dependency[]`, `publicDependency[]`, `weakDependency[]`
 - `package?`, `optionDependency[]?` (edition 2024 `import option`)
-- `messageType[]` — `DescriptorProto`: `name`, `field[]`, `nestedType[]`,
+- `messageType[]`. `DescriptorProto`: `name`, `field[]`, `nestedType[]`,
   `enumType[]`, `oneofDecl[]`, `extension[]`, `extensionRange[]`,
   `reservedRange[]`, `reservedName[]`, `visibility?`, `options?`
-- `enumType[]` — `EnumDescriptorProto`: `name`, `value[]`, `reservedRange[]`,
+- `enumType[]`. `EnumDescriptorProto`: `name`, `value[]`, `reservedRange[]`,
   `reservedName[]`, `visibility?`, `options?`
-- `service[]` — `ServiceDescriptorProto`: `name`, `method[]`, `options?`
+- `service[]`. `ServiceDescriptorProto`: `name`, `method[]`, `options?`
 - `extension[]`, `options?`, and `syntax?` / `edition?`
 
 `syntax` is `'proto2'` / `'proto3'` for a syntax file and `'editions'` for
-an edition file — an edition file carries both `syntax` and `edition`, as
+an edition file; an edition file carries both `syntax` and `edition`, as
 `protoc` emits them.
 
 ### `FieldDescriptorProto`
@@ -59,8 +59,8 @@ types, stored as written), `extendee?`, `jsonName?`, `defaultValue?`,
 
 Scalar types map to `TYPE_DOUBLE … TYPE_SINT64`. Any other type is a
 message-or-enum reference that cannot be told apart without symbol
-resolution, so — exactly as `protoc`'s parser does before its resolution
-pass — `type` is left **unset** and only `typeName` is recorded, as
+resolution, so (exactly as `protoc`'s parser does before its resolution
+pass) `type` is left **unset** and only `typeName` is recorded, as
 written. Cross-file / scope resolution is a separate pass.
 
 `json_name` and `default` are pseudo-options: they are lifted out of
@@ -69,7 +69,7 @@ written). An `extend` member records the message it extends in `extendee`.
 
 ### Ranges
 
-`extensionRange` / message `reservedRange` are half-open — `end` is
+`extensionRange` / message `reservedRange` are half-open: `end` is
 **exclusive**, so `extensions 100 to 199` is `{ start: 100, end: 200 }`.
 Enum `reservedRange` is closed: `end` is **inclusive**. `to max` is
 `536870912` (exclusive) for message ranges, `2147483647` in a
@@ -102,7 +102,7 @@ it.
 
 Options are a plain `{ name: value }` map keyed by the option name exactly
 as written (`ctype`, `(foo)`, `features.field_presence`,
-`foo.(.bar.baz).qux`) — not `protoc`'s `uninterpretedOption` list. The
+`foo.(.bar.baz).qux`), not `protoc`'s `uninterpretedOption` list. The
 information is the same; the shape is friendlier to read. Values are
 JavaScript strings / numbers / booleans, with identifiers (`CORD`, `inf`,
 `-nan`) kept verbatim.

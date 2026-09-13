@@ -14,7 +14,7 @@ into [FileDescriptorProto][fdp]-shaped JSON, using the
 
 Docs, guides, the error reference and the playground: **[tabnas.dev](https://tabnas.dev)**.
 
-The TypeScript implementation lives in [`ts/`](ts) — see
+The TypeScript implementation lives in [`ts/`](ts). See
 [`ts/README.md`](ts/README.md) for usage and API. A Go port that tracks it
 lives in [`go/`](go); both run the shared fixtures in
 [`test/spec`](test/spec).
@@ -52,7 +52,7 @@ declare protoc-internal editions (`UNSTABLE`, `99998_TEST_ONLY`) outside the
 proto2 / proto3 / 2023 / 2024 support this package claims.
 
 The grammar is a permissive *union* of the four versions, so rejecting
-version-illegal input is deliberately not part of the contract — recognition
+version-illegal input is deliberately not part of the contract: recognition
 and descriptor shape are. See [`AGENTS.md`](AGENTS.md) for the full
 statement, including the two declared output-shape deviations from protoc.
 

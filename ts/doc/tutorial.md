@@ -1,4 +1,4 @@
-# Tutorial — your first `.proto` parse
+# Tutorial: your first `.proto` parse
 
 This walks you from nothing to a parsed FileDescriptorProto.
 
@@ -56,6 +56,6 @@ parse('message M {}', { version: 'proto3' }).syntax  // => 'proto3'
 
 ## Next steps
 
-- [guide.md](guide.md) — task recipes (maps, oneofs, services, options).
-- [reference.md](reference.md) — the full API and output shape.
-- [concepts.md](concepts.md) — how the grammar and walk work.
+- [guide.md](guide.md). Task recipes (maps, oneofs, services, options).
+- [reference.md](reference.md). The full API and output shape.
+- [concepts.md](concepts.md). How the grammar and walk work.
