@@ -66,3 +66,10 @@ tags-go:
 reset:
 	cd ts && npm run reset
 	cd go && go clean -cache && go build ./... && go test -v ./...
+
+# The prose gate (see docs/STYLE-GUIDE.md). Vale over the reader-facing
+# pages, at the levels set in .vale.ini, on the same file list
+# ts/test/docs.test.js reads. Requires `vale` on PATH and one
+# `vale sync`. Warnings are advisory, errors fail.
+prose:
+	vale --minAlertLevel=error $$(node ts/scripts/gated-docs.cjs)

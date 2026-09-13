@@ -16,13 +16,13 @@ FileDescriptorProto.
 
 The Tabnas lexer already tokenises whole words and **ignores** whitespace
 and `//` / `/* */` comments between tokens. So the grammar carries no
-whitespace rules and no char-by-char lexical definitions — it is pure
+whitespace rules and no char-by-char lexical definitions. It is pure
 structure over the lexer's built-in tokens, referenced by name:
 
-- `TX` — identifier (`ident = TX`)
-- `NR` — number (`fieldNumber = NR`)
-- `ST` — string (`strLit = ST`)
-- `VL` — `true` / `false` / `null`
+- `TX`. Identifier (`ident = TX`)
+- `NR`. Number (`fieldNumber = NR`)
+- `ST`. String (`strLit = ST`)
+- `VL`: `true` / `false` / `null`
 
 Keywords are whole-word matched (`@tabnas/abnf`'s `wordKeywords` option) so
 `option` never grabs the `option` prefix of an identifier `optional`.
@@ -32,14 +32,14 @@ Keywords are whole-word matched (`@tabnas/abnf`'s `wordKeywords` option) so
 `common.abnf` defines the shared core. Per-version delta files extend it
 with ABNF incremental alternatives (`name =/ alt`):
 
-- `proto2.abnf` — `group`
-- `edition-2023.abnf` — `edition = "…";`
-- `edition-2024.abnf` — `import option`, `export` / `local` visibility
+- `proto2.abnf`: `group`
+- `edition-2023.abnf`: `edition = "…";`
+- `edition-2024.abnf`: `import option`, `export` / `local` visibility
 
 (labels, `extend`, `extensions` are shared in `common.abnf`). The five
 files are concatenated into a single permissive grammar that accepts every
 version's syntax. Which constructs are *legal* for the resolved version is
-a concern of the walk and of `protoc`, not of recognition — keeping the
+a concern of the walk and of `protoc`, not of recognition, keeping the
 grammar small and the spec pages easy to mirror.
 
 ## The walk and abnf inlining
@@ -63,6 +63,6 @@ descriptor details such as `proto3Optional`.
 ## Out of scope (for now)
 
 A Go port (mirroring the `@tabnas/zon` / `@tabnas/abnf` dual-runtime
-layout), edition *feature* resolution (e.g. `features.field_presence`
-driving presence defaults — features are recorded verbatim in `options`),
+layout), edition *feature* resolution (for example `features.field_presence`
+driving presence defaults; features are recorded verbatim in `options`),
 cross-file type resolution, and the protobuf text/wire formats.
