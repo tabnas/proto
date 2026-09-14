@@ -5,7 +5,8 @@
 # repo-set go.work + node_modules symlinks (admin/scripts/link.sh).
 
 .PHONY: all build test clean build-ts build-go test-ts test-go \
-        clean-ts clean-go publish-ts publish-go tags-go reset embed generate
+        clean-ts clean-go publish-ts publish-go tags-go reset embed generate \
+        prose prose-counts
 
 all: build test
 
