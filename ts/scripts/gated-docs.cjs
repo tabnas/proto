@@ -26,15 +26,31 @@ function exists(rel) {
 }
 
 
-// Filtered to what is actually on disk, so a renamed page fails as a
-// missing gate rather than as a crash.
+// A declared page that is not on disk THROWS.
+//
+// This filtered instead, and the comment here claimed the filter made a
+// renamed page "fail as a missing gate". It did the opposite: the page
+// left the list, both halves of the gate carried on over what remained,
+// and the coverage test passed because it only counts what the list
+// returned. Deleting a page was the one way to stop it being checked.
 function gatedDocs() {
-  return PAGES.filter(exists)
+  return present(PAGES, 'gated')
 }
 
 
 function tutorials() {
-  return TUTORIALS.filter(exists)
+  return present(TUTORIALS, 'a tutorial')
+}
+
+
+function present(declared, what) {
+  const gone = declared.filter((f) => !exists(f))
+  if (0 < gone.length) {
+    throw new Error(
+      `gated-docs: declared ${what} but not on disk: ` + gone.join(', ') +
+      '. Rename it here, or delete the entry deliberately.')
+  }
+  return declared
 }
 
 
