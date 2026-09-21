@@ -13,7 +13,8 @@ const PAGES = [
   "ts/doc/reference.md",
   "ts/doc/tutorial.md",
   "README.md",
-  "ts/README.md"
+  "ts/README.md",
+  "rs/README.md"
 ]
 
 const TUTORIALS = [

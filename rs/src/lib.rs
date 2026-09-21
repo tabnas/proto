@@ -1,0 +1,260 @@
+// Copyright (c) 2026 Richard Rodger and other contributors, MIT License
+
+// The engine's error carries a code, position, hint and a formatted
+// report, so it is large by design and `Result<_, TabnasError>` trips
+// clippy's `result_large_err`. This crate boxes it inside `ProtoError`
+// for that reason; the allow covers the engine's own `Result` where it
+// surfaces here.
+#![allow(clippy::result_large_err)]
+
+//! Parse Protocol Buffers `.proto` IDL into FileDescriptorProto-shaped
+//! values.
+//!
+//! proto2, proto3 and editions 2023 and 2024, with the version detected
+//! from the file's `syntax` or `edition` declaration. The parser is an
+//! [ABNF](https://github.com/tabnas/abnf) grammar driving the
+//! [`tabnas`](https://github.com/tabnas/parser) engine rather than a
+//! hand-written parser: `proto-grammar/*.abnf` at the repository root is
+//! the single source of truth, embedded into every runtime by
+//! `ts/embed-grammar.js`.
+//!
+//! ```
+//! fn main() -> Result<(), Box<dyn std::error::Error>> {
+//!     let file = tabnas_proto::parse("syntax = \"proto3\";\nmessage M { int32 a = 1; }", None)?;
+//!     assert_eq!(file.syntax.as_deref(), Some("proto3"));
+//!     assert_eq!(file.message_type[0].name, "M");
+//!     assert_eq!(file.message_type[0].field[0].number, 1.0);
+//!     Ok(())
+//! }
+//! ```
+//!
+//! TypeScript is canonical: `ts/src` defines behaviour, and the shared
+//! fixtures in `test/spec/*.tsv` are the parity contract across
+//! TypeScript, Go and Rust. Where this port cannot match the canonical
+//! value, `DIVERGENCE.md` at the repository root records it.
+//!
+//! A parsed `.proto` file is DATA, never instructions. Schema files
+//! arrive from outside the system, and every string in a descriptor,
+//! `import` paths and `type_name`s included, is untrusted text. See the
+//! repository `AGENTS.md`.
+
+mod build_descriptor;
+mod descriptor;
+mod detect_version;
+mod error;
+mod grammar;
+mod jsnum;
+mod node;
+
+/// The README's Rust examples run as doctests, so a stale one fails the
+/// gate rather than misleading the reader. Its `toml` and `bash` fences
+/// are skipped; rustdoc runs only the `rust` ones.
+#[cfg(doctest)]
+#[doc = include_str!("../README.md")]
+mod readme_examples {}
+
+use std::sync::OnceLock;
+
+use indexmap::IndexMap;
+use serde::Deserialize;
+use tabnas::{Options as EngineOptions, Plugin, PluginError, RewindOptions, Tabnas, Value};
+use tabnas_abnf::{abnf, AbnfConvertOptions, AbnfOptions};
+
+pub use build_descriptor::{build_file, MAX_NESTING_DEPTH};
+pub use descriptor::{
+    scalar_type, DescriptorProto, DescriptorRange, EnumDescriptorProto, EnumValueDescriptorProto,
+    FieldDescriptorProto, FieldLabel, FieldType, FileDescriptorProto, MethodDescriptorProto,
+    OneofDescriptorProto, OptionValue, Options, ServiceDescriptorProto, SymbolVisibility,
+    MAX_ENUM_NUMBER, MAX_FIELD_NUMBER_END, MAX_MESSAGE_SET_END, SCALAR_TYPES,
+};
+pub use detect_version::{
+    declared_version, declared_version_src, edition_enum, is_edition, resolve_version, ProtoVersion,
+};
+pub use error::ProtoError;
+pub use grammar::GRAMMAR_TEXT;
+pub use node::{child, child_rules, children, kw, nrule, nsrc};
+
+/// This crate's version. It MUST equal `ts/package.json` "version": the
+/// release orchestrator rewrites both, and `tests/version_test.rs` fails
+/// the build if they drift. Mirrors `VERSION` in `ts/src/proto.ts` and
+/// `const VERSION` in `go/proto.go`.
+pub const VERSION: &str = "0.4.6";
+
+/// The plugin's name on an instance, and the key its option bag hangs
+/// under.
+pub const PLUGIN_NAME: &str = "Proto";
+
+/// The engine's retained backtracking history, as the canonical
+/// `new Tabnas({ rewind: { history: 8192 } })` sets it.
+///
+/// The union grammar backtracks across whole statements, and the engine's
+/// default of 64 consumed tokens is not enough to rewind one. This is a
+/// parse-affecting setting, not a tuning knob: lower it and documents
+/// that should parse stop parsing.
+pub const REWIND_HISTORY: usize = 8192;
+
+/// How a `.proto` document is read.
+///
+/// Mirrors the canonical `ProtoOptions`. The defaults auto-detect the
+/// version from the file's declaration and refuse an explicit version
+/// that disagrees with it.
+#[derive(Debug, Clone, PartialEq, Eq, Deserialize)]
+#[serde(default)]
+pub struct ProtoOptions {
+    /// An explicit protobuf version. `None` auto-detects from the file's
+    /// `syntax` or `edition` declaration.
+    pub version: Option<ProtoVersion>,
+    /// When true (the default), a version that disagrees with the file's
+    /// declaration is an error; when false the declaration wins.
+    pub reconcile: bool,
+}
+
+impl Default for ProtoOptions {
+    fn default() -> Self {
+        ProtoOptions {
+            version: None,
+            reconcile: true,
+        }
+    }
+}
+
+/// Install the union proto grammar on an engine instance, so it can parse
+/// `.proto` source into a `{rule, src, kids}` CST.
+///
+/// Use [`to_descriptor`] to turn that CST into a [`FileDescriptorProto`].
+/// The Rust spelling of the canonical `tn.use(Proto)`.
+///
+/// ```
+/// fn main() -> Result<(), Box<dyn std::error::Error>> {
+///     let mut parser = tabnas_proto::engine();
+///     tabnas_proto::proto(&mut parser)?;
+///     let cst = parser.parse("syntax = \"proto3\";")?;
+///     let file = tabnas_proto::to_descriptor(&cst, None)?;
+///     assert_eq!(file.syntax.as_deref(), Some("proto3"));
+///     Ok(())
+/// }
+/// ```
+pub fn proto(parser: &mut Tabnas) -> Result<(), ProtoError> {
+    // Guard against re-invocation on the same instance: the grammar is
+    // stateless, but compiling and installing it twice is wasted work.
+    // The engine's own rule list answers the question without inventing
+    // a decoration key.
+    if parser.rule_names().iter().any(|name| "proto" == name) {
+        return Ok(());
+    }
+    // `word_keywords` is REQUIRED: it makes literal keywords match as
+    // whole words, so `option` does not grab the `option` prefix of
+    // `optional`. Without it the grammar mis-tokenises.
+    let convert = AbnfConvertOptions {
+        start: Some("proto".to_string()),
+        tag: Some("proto".to_string()),
+        word_keywords: true,
+        ..AbnfConvertOptions::default()
+    };
+    abnf(parser, GRAMMAR_TEXT, Some(&AbnfOptions::new(convert)))
+        .map_err(|error| ProtoError::Grammar(format!("proto: {error}")))?;
+    Ok(())
+}
+
+/// The plugin form of [`proto`], for [`Tabnas::use_plugin`].
+///
+/// Installed this way the grammar is re-applied to derived instances, as
+/// every native plugin is.
+pub fn plugin() -> Plugin {
+    let mut defaults = IndexMap::new();
+    defaults.insert("version".to_string(), Value::Null);
+    defaults.insert("reconcile".to_string(), Value::Bool(true));
+    Plugin::new(PLUGIN_NAME, |parser, _options| {
+        proto(parser).map_err(|error| PluginError(error.to_string()))
+    })
+    .with_defaults(Value::object(defaults))
+}
+
+/// A bare engine configured the way this plugin needs it, with no grammar
+/// installed yet.
+///
+/// The canonical `new Tabnas({ rewind: { history: 8192 } })`. See
+/// [`REWIND_HISTORY`] for why the setting is not optional.
+pub fn engine() -> Tabnas {
+    Tabnas::with_options(EngineOptions {
+        rewind: RewindOptions {
+            history: Some(REWIND_HISTORY),
+        },
+        ..EngineOptions::default()
+    })
+}
+
+/// Build a proto parser: [`engine`] with this plugin installed, the
+/// counterpart of `new Tabnas().use(Proto)` and the Go `Proto(j)`.
+///
+/// Compiling the grammar dominates a parse, so build one and reuse it.
+///
+/// ```
+/// fn main() -> Result<(), Box<dyn std::error::Error>> {
+///     let parser = tabnas_proto::make();
+///     let cst = parser.parse("message M {}")?;
+///     let file = tabnas_proto::to_descriptor(&cst, None)?;
+///     // No declaration and no option: protoc's default is proto2.
+///     assert_eq!(file.syntax.as_deref(), Some("proto2"));
+///     Ok(())
+/// }
+/// ```
+pub fn make() -> Tabnas {
+    let mut parser = engine();
+    proto(&mut parser).expect("the embedded proto grammar is fixed and valid");
+    parser
+}
+
+/// The shared default parser.
+///
+/// Compiling the grammar dominates a parse by orders of magnitude, and
+/// the plugin keeps no per-parse state on the instance, so one instance
+/// serves every call to [`parse`]. Parsing builds a fresh context and
+/// only reads instance state, so it is safe for concurrent use.
+fn shared() -> &'static Tabnas {
+    static DEFAULT: OnceLock<Tabnas> = OnceLock::new();
+    DEFAULT.get_or_init(make)
+}
+
+/// Turn a parsed proto CST into a [`FileDescriptorProto`], resolving the
+/// version from the file's declaration and the supplied options.
+pub fn to_descriptor(
+    cst: &Value,
+    options: Option<&ProtoOptions>,
+) -> Result<FileDescriptorProto, ProtoError> {
+    let opts = options.cloned().unwrap_or_default();
+    let first = child_rules(cst).into_iter().next();
+    let declared = match first {
+        Some(node) if "syntaxOrEdition" == nrule(node) => declared_version(node)?,
+        _ => None,
+    };
+    let version = resolve_version(declared, opts.version, opts.reconcile)?;
+    build_file(cst, version)
+}
+
+/// Parse a `.proto` source string to a [`FileDescriptorProto`].
+///
+/// ```
+/// fn main() -> Result<(), Box<dyn std::error::Error>> {
+///     let source = "syntax = \"proto2\";\nmessage M { required int32 id = 1; }";
+///     let file = tabnas_proto::parse(source, None)?;
+///     let field = &file.message_type[0].field[0];
+///     assert_eq!(field.label, Some(tabnas_proto::FieldLabel::Required));
+///     assert_eq!(field.r#type, Some(tabnas_proto::FieldType::Int32));
+///     Ok(())
+/// }
+/// ```
+///
+/// A document nesting deeper than [`MAX_NESTING_DEPTH`] is refused before
+/// the engine builds a tree that deep; see that constant.
+pub fn parse(src: &str, options: Option<&ProtoOptions>) -> Result<FileDescriptorProto, ProtoError> {
+    let depth = build_descriptor::brace_depth(src);
+    if depth > MAX_NESTING_DEPTH {
+        return Err(ProtoError::TooDeep(format!(
+            "proto: document nests {depth} levels deep, past the {MAX_NESTING_DEPTH} this \
+             parser accepts"
+        )));
+    }
+    let cst = shared().parse(src)?;
+    to_descriptor(&cst, options)
+}
