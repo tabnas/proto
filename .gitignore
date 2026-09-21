@@ -49,3 +49,8 @@ test/protobuf-suite/parser_unittest.cc
 
 # Written by the counts script while measuring, removed after.
 .vale-counts.ini
+
+# --- Rust ---
+# The crate's build directory. rs/Cargo.lock IS committed: the crate is
+# not published, so the lock is the record of what a gate resolved.
+target/

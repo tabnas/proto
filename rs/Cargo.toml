@@ -1,0 +1,41 @@
+# The Rust port of @tabnas/proto. ts/ is canonical; go/ and this crate
+# track it. `version` MUST equal ts/package.json "version", `VERSION` in
+# ts/src/proto.ts and `const VERSION` in go/proto.go:
+# tests/version_test.rs fails the build when they drift.
+
+[package]
+name = "tabnas-proto"
+version = "0.4.6"
+edition = "2021"
+rust-version = "1.85"
+license = "MIT"
+description = "Parse Protocol Buffers .proto IDL (proto2, proto3, edition 2023/2024) into FileDescriptorProto-shaped values, using the tabnas engine and an ABNF grammar"
+repository = "https://github.com/tabnas/proto"
+readme = "README.md"
+keywords = ["protobuf", "proto", "parser", "tabnas", "descriptor"]
+categories = ["parser-implementations"]
+
+[lib]
+name = "tabnas_proto"
+path = "src/lib.rs"
+
+[dependencies]
+# The engine and the ABNF compiler are consumed as SIBLING CHECKOUTS, the
+# standard tabnas development model: clone https://github.com/tabnas/parser
+# and https://github.com/tabnas/abnf next to this repo. Neither crate is
+# published, so there is no registry version to fall back on.
+#
+# Clone https://github.com/tabnas/bnf as well. It gets no entry here,
+# because it is tabnas-abnf that depends on it, but cargo reads the whole
+# manifest graph before it compiles anything, so without that checkout
+# nothing here resolves.
+tabnas = { path = "../../parser/rs" }
+tabnas-abnf = { path = "../../abnf/rs" }
+indexmap = { version = "2", features = ["serde"] }
+serde = { version = "1.0", features = ["derive"] }
+serde_json = { version = "1.0", features = ["preserve_order", "raw_value"] }
+
+[dev-dependencies]
+# The shared fixture loader, runner and divergence register: one loader in
+# three languages, so the rows mean the same thing in every runtime.
+tabnas-support = { path = "../../support/rs", features = ["serde_json"] }

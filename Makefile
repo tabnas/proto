@@ -1,20 +1,22 @@
-# Build, test and publish both the TypeScript (ts/) and Go (go/)
-# implementations. ts/ is canonical; go/ tracks it.
+# Build, test and publish the TypeScript (ts/), Go (go/) and Rust (rs/)
+# implementations. ts/ is canonical; go/ and rs/ track it.
 #
 # Local build/test resolve the unpublished @tabnas siblings via the
-# repo-set go.work + node_modules symlinks (admin/scripts/link.sh).
+# repo-set go.work + node_modules symlinks (admin/scripts/link.sh). The
+# Rust crate resolves them as path dependencies on sibling checkouts; see
+# rs/AGENTS.md.
 
-.PHONY: all build test clean build-ts build-go test-ts test-go \
-        clean-ts clean-go publish-ts publish-go tags-go reset embed generate \
+.PHONY: all build test clean build-ts build-go build-rs test-ts test-go test-rs \
+        clean-ts clean-go clean-rs publish-ts publish-go tags-go reset embed generate \
         prose prose-counts
 
 all: build test
 
-build: build-ts build-go
+build: build-ts build-go build-rs
 
-test: test-ts test-go
+test: test-ts test-go test-rs
 
-clean: clean-ts clean-go
+clean: clean-ts clean-go clean-rs
 
 # --- TypeScript (package in ts/) ---
 build-ts:
@@ -63,6 +65,24 @@ publish-go: test-go
 # List published Go module tags, newest first.
 tags-go:
 	git tag -l 'go/v*' --sort=-version:refname
+
+# --- Rust (crate in rs/) ---
+#
+# Nothing to fetch: the engine, the ABNF compiler and the shared fixture
+# runner are path dependencies on sibling checkouts (parser, abnf, bnf,
+# support). `ci/rust/run.sh` is the full gate; these are the inner loop.
+build-rs:
+	cd rs && cargo build --all-targets
+
+# `--all-targets` does NOT include doctests, and rs/README.md is
+# doctested, so both selections are run.
+test-rs:
+	cd rs && cargo test --all-targets
+	cd rs && cargo test --doc
+	cd rs && cargo clippy --all-targets --all-features -- -D warnings
+
+clean-rs:
+	cd rs && cargo clean
 
 reset:
 	cd ts && npm run reset

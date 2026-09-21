@@ -1,0 +1,64 @@
+input	ts	go	rust	why
+# divergent.tsv — where this repo's THREE ports DISAGREE, executed.
+#
+#   input  .proto source. Escapes \n \r \t \\ are decoded, as in spec/.
+#   ts,go,rust
+#          what each port produces: the FileDescriptorProto as JSON, or
+#          ERROR:<message fragment>.
+#   why    what causes it, and where the repair lives.
+#
+# NOT A FIXTURE, and deliberately NOT under spec/: both other runtimes run
+# every file in spec/ by directory listing, and these rows are expected to
+# disagree. A fixture fails when behaviour REGRESSES; this fails BOTH ways,
+# because when a port is repaired to agree with the others the row still
+# claims they differ, so the suite goes red and names the row to delete. A
+# divergence recorded as a passing test of current behaviour survives its
+# own repair with nothing red, which is how the 2026-08 fleet audit found
+# 29 recorded claims contradicted by execution.
+#
+# Run by rs/tests/divergent_test.rs, which reads the `rust` column through
+# tabnas_support::Register. The `ts` and `go` cells were MEASURED on
+# 2026-09-21 against this checkout (ts/src via Node 22 type stripping, and
+# go/ via `go test`), not copied from prose. TypeScript and Go have no
+# runner for this file yet; adding one is how those two columns stop being
+# a record and start being a test.
+#
+# --- the TypeScript prototype-chain defect -------------------------------
+# `SCALAR_TYPES[bare]` is a bare object literal indexed by text from the
+# source, so a field type named after an Object.prototype member finds an
+# inherited value instead of `undefined`: `__proto__` yields the prototype
+# object itself (`"type":{}`), and the eleven function-valued members yield
+# a function, which JSON.stringify drops, so the field loses both `type`
+# and `typeName`. Go and Rust both record the `typeName` protoc's parser
+# records. The repair belongs in TypeScript (a `Map`, or an own-property
+# check); until it lands, Rust cannot match TypeScript here and would not
+# want to.
+syntax = "proto2";\nmessage M { optional __proto__ a = 1; }\n	{"dependency":[],"publicDependency":[],"weakDependency":[],"messageType":[{"name":"M","field":[{"name":"a","number":1,"label":"LABEL_OPTIONAL","type":{}}],"nestedType":[],"enumType":[],"oneofDecl":[],"extension":[]}],"enumType":[],"service":[],"extension":[],"syntax":"proto2"}	{"dependency":[],"publicDependency":[],"weakDependency":[],"messageType":[{"name":"M","field":[{"name":"a","number":1,"label":"LABEL_OPTIONAL","typeName":"__proto__"}],"nestedType":[],"enumType":[],"oneofDecl":[],"extension":[]}],"enumType":[],"service":[],"extension":[],"syntax":"proto2"}	{"dependency":[],"publicDependency":[],"weakDependency":[],"messageType":[{"name":"M","field":[{"name":"a","number":1,"label":"LABEL_OPTIONAL","typeName":"__proto__"}],"nestedType":[],"enumType":[],"oneofDecl":[],"extension":[]}],"enumType":[],"service":[],"extension":[],"syntax":"proto2"}	TS defect: SCALAR_TYPES[name] reaches Object.prototype - repair in ts/src/build-descriptor.ts
+syntax = "proto2";\nmessage M { optional constructor a = 1; }\n	{"dependency":[],"publicDependency":[],"weakDependency":[],"messageType":[{"name":"M","field":[{"name":"a","number":1,"label":"LABEL_OPTIONAL"}],"nestedType":[],"enumType":[],"oneofDecl":[],"extension":[]}],"enumType":[],"service":[],"extension":[],"syntax":"proto2"}	{"dependency":[],"publicDependency":[],"weakDependency":[],"messageType":[{"name":"M","field":[{"name":"a","number":1,"label":"LABEL_OPTIONAL","typeName":"constructor"}],"nestedType":[],"enumType":[],"oneofDecl":[],"extension":[]}],"enumType":[],"service":[],"extension":[],"syntax":"proto2"}	{"dependency":[],"publicDependency":[],"weakDependency":[],"messageType":[{"name":"M","field":[{"name":"a","number":1,"label":"LABEL_OPTIONAL","typeName":"constructor"}],"nestedType":[],"enumType":[],"oneofDecl":[],"extension":[]}],"enumType":[],"service":[],"extension":[],"syntax":"proto2"}	TS defect: SCALAR_TYPES[name] reaches Object.prototype - repair in ts/src/build-descriptor.ts
+#
+# --- the Go defects ------------------------------------------------------
+# Rust agrees with the canonical TypeScript on each of these four, and Go
+# does not. They are recorded here rather than in Rust's DIVERGENCE.md
+# entries because the port that differs from canonical is Go.
+#
+#   1. A field option named `__proto__` is dropped by TypeScript, because
+#      `map[name] = value` on a bare object with a primitive value sets the
+#      prototype and creates no property. Rust drops it deliberately for
+#      the same reason. A Go map keeps it. (An `option __proto__ = ...;`
+#      STATEMENT is a different path in all three and survives everywhere:
+#      the canonical form there is a computed-key object literal, which
+#      does create an own property.)
+#   2. `Number("-0x10")` is NaN: ECMA-262 allows no sign before a
+#      NonDecimalIntegerLiteral, so the literal is kept as text. Go's
+#      jsNumber strips the sign first and answers -16.
+#   3. `Number("1_0")` is NaN: a numeric separator is a source-literal
+#      feature and not part of StringToNumber, so the field number is NaN
+#      and the descriptor's JSON writes null. Go's toInt answers 10.
+#      (`1_0` is accepted at all only because the shared tabnas lexer is
+#      more permissive than .proto here; see test/protobuf-suite.)
+#   4. A proto3 `optional group` is proto3-optional in TypeScript, which
+#      synthesises the `_g` oneof for it. Go's buildGroup discards the flag.
+syntax = "proto3";\nmessage M { int32 a = 1 [__proto__ = 2]; }\n	{"dependency":[],"publicDependency":[],"weakDependency":[],"messageType":[{"name":"M","field":[{"name":"a","number":1,"label":"LABEL_OPTIONAL","type":"TYPE_INT32"}],"nestedType":[],"enumType":[],"oneofDecl":[],"extension":[]}],"enumType":[],"service":[],"extension":[],"syntax":"proto3"}	{"dependency":[],"publicDependency":[],"weakDependency":[],"messageType":[{"name":"M","field":[{"name":"a","number":1,"label":"LABEL_OPTIONAL","type":"TYPE_INT32","options":{"__proto__":2}}],"nestedType":[],"enumType":[],"oneofDecl":[],"extension":[]}],"enumType":[],"service":[],"extension":[],"syntax":"proto3"}	{"dependency":[],"publicDependency":[],"weakDependency":[],"messageType":[{"name":"M","field":[{"name":"a","number":1,"label":"LABEL_OPTIONAL","type":"TYPE_INT32"}],"nestedType":[],"enumType":[],"oneofDecl":[],"extension":[]}],"enumType":[],"service":[],"extension":[],"syntax":"proto3"}	Go defect: a field option named __proto__ survives a Go map - repair in go/build_descriptor.go
+syntax = "proto2";\nmessage M { optional int32 a = 1 [x = -0x10]; }\n	{"dependency":[],"publicDependency":[],"weakDependency":[],"messageType":[{"name":"M","field":[{"name":"a","number":1,"label":"LABEL_OPTIONAL","type":"TYPE_INT32","options":{"x":"-0x10"}}],"nestedType":[],"enumType":[],"oneofDecl":[],"extension":[]}],"enumType":[],"service":[],"extension":[],"syntax":"proto2"}	{"dependency":[],"publicDependency":[],"weakDependency":[],"messageType":[{"name":"M","field":[{"name":"a","number":1,"label":"LABEL_OPTIONAL","type":"TYPE_INT32","options":{"x":-16}}],"nestedType":[],"enumType":[],"oneofDecl":[],"extension":[]}],"enumType":[],"service":[],"extension":[],"syntax":"proto2"}	{"dependency":[],"publicDependency":[],"weakDependency":[],"messageType":[{"name":"M","field":[{"name":"a","number":1,"label":"LABEL_OPTIONAL","type":"TYPE_INT32","options":{"x":"-0x10"}}],"nestedType":[],"enumType":[],"oneofDecl":[],"extension":[]}],"enumType":[],"service":[],"extension":[],"syntax":"proto2"}	Go defect: Number() takes no sign before a hex literal - repair in go/build_descriptor.go
+syntax = "proto2";\nmessage M { optional int32 a = 1_0; }\n	{"dependency":[],"publicDependency":[],"weakDependency":[],"messageType":[{"name":"M","field":[{"name":"a","number":null,"label":"LABEL_OPTIONAL","type":"TYPE_INT32"}],"nestedType":[],"enumType":[],"oneofDecl":[],"extension":[]}],"enumType":[],"service":[],"extension":[],"syntax":"proto2"}	{"dependency":[],"publicDependency":[],"weakDependency":[],"messageType":[{"name":"M","field":[{"name":"a","number":10,"label":"LABEL_OPTIONAL","type":"TYPE_INT32"}],"nestedType":[],"enumType":[],"oneofDecl":[],"extension":[]}],"enumType":[],"service":[],"extension":[],"syntax":"proto2"}	{"dependency":[],"publicDependency":[],"weakDependency":[],"messageType":[{"name":"M","field":[{"name":"a","number":null,"label":"LABEL_OPTIONAL","type":"TYPE_INT32"}],"nestedType":[],"enumType":[],"oneofDecl":[],"extension":[]}],"enumType":[],"service":[],"extension":[],"syntax":"proto2"}	Go defect: Number() rejects a digit separator - repair in go/build_descriptor.go
+syntax = "proto3";\nmessage M { optional group G = 1 { } }\n	{"dependency":[],"publicDependency":[],"weakDependency":[],"messageType":[{"name":"M","field":[{"name":"g","number":1,"label":"LABEL_OPTIONAL","proto3Optional":true,"type":"TYPE_GROUP","typeName":"G","oneofIndex":0}],"nestedType":[{"name":"G","field":[],"nestedType":[],"enumType":[],"oneofDecl":[],"extension":[]}],"enumType":[],"oneofDecl":[{"name":"_g"}],"extension":[]}],"enumType":[],"service":[],"extension":[],"syntax":"proto3"}	{"dependency":[],"publicDependency":[],"weakDependency":[],"messageType":[{"name":"M","field":[{"name":"g","number":1,"label":"LABEL_OPTIONAL","type":"TYPE_GROUP","typeName":"G"}],"nestedType":[{"name":"G","field":[],"nestedType":[],"enumType":[],"oneofDecl":[],"extension":[]}],"enumType":[],"oneofDecl":[],"extension":[]}],"enumType":[],"service":[],"extension":[],"syntax":"proto3"}	{"dependency":[],"publicDependency":[],"weakDependency":[],"messageType":[{"name":"M","field":[{"name":"g","number":1,"label":"LABEL_OPTIONAL","type":"TYPE_GROUP","typeName":"G","proto3Optional":true,"oneofIndex":0}],"nestedType":[{"name":"G","field":[],"nestedType":[],"enumType":[],"oneofDecl":[],"extension":[]}],"enumType":[],"oneofDecl":[{"name":"_g"}],"extension":[]}],"enumType":[],"service":[],"extension":[],"syntax":"proto3"}	Go defect: buildGroup drops proto3Optional - repair in go/build_descriptor.go

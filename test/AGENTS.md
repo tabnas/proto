@@ -28,19 +28,37 @@ order do not affect the comparison.
 
 - TypeScript: `ts/test/parity.test.ts` — `makeRunner(...).dir(...)`.
 - Go: `go/parity_test.go` — `support.Runner{...}.Dir(t, dir)`.
+- Rust: `rs/tests/parity_test.rs` — `Runner::new_with_row(...).dir(...)`.
 
-Both are a dozen lines holding only what is specific to proto: how to
-build the parser for a row's options. Everything else — finding
+All three are a dozen lines holding only what is specific to proto: how
+to build the parser for a row's options. Everything else — finding
 `test/spec`, reading the file, decoding escapes, the `ERROR:` contract,
 the comparison, the `<file>:<line>` in a failure message — comes from
 [`@tabnas/support`](https://github.com/tabnas/support) and its Go half, so
 the two loaders cannot drift from each other either.
 
-Both discover files by directory listing: adding a `.tsv` here runs it in
-both runtimes without touching either runner. An empty fixture, and a spec
-directory with no fixtures in it, both **fail** — a runner that reports
-green having run nothing is indistinguishable from coverage that was never
-there.
+All three discover files by directory listing: adding a `.tsv` here runs
+it in every runtime without touching a runner. An empty fixture, and a
+spec directory with no fixtures in it, both **fail** — a runner that
+reports green having run nothing is indistinguishable from coverage that
+was never there.
+
+## `divergent.tsv` is NOT in `spec/`, deliberately
+
+[`../test/divergent.tsv`](divergent.tsv) is the divergence register: one
+row per input where the three ports DISAGREE, with a cell per runtime.
+It sits beside `spec/` rather than in it precisely because the runners
+above run every file in `spec/` by listing, and every row of the register
+is expected to disagree with one of them.
+
+A fixture fails when behaviour REGRESSES. The register fails BOTH ways:
+when a port is repaired to agree with the others, the row still claims
+they differ, so the suite goes red and names the row to delete. Today
+`rs/tests/divergent_test.rs` runs it, reading the `rust` column through
+`tabnas_support::Register`; the `ts` and `go` cells are measured and
+recorded, and adding a runner in those two runtimes is how they stop
+being a record and start being a test. The prose and the measured tables
+live in [`../DIVERGENCE.md`](../DIVERGENCE.md).
 
 ## The files
 

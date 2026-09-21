@@ -15,8 +15,9 @@ into [FileDescriptorProto][fdp]-shaped JSON, using the
 Docs, guides, the error reference and the playground: **[tabnas.dev](https://tabnas.dev)**.
 
 The TypeScript implementation lives in [`ts/`](ts). See
-[`ts/README.md`](ts/README.md) for usage and API. A Go port that tracks it
-lives in [`go/`](go); both run the shared fixtures in
+[`ts/README.md`](ts/README.md) for usage and API. Ports that track it live
+in [`go/`](go) and [`rs/`](rs), the latter documented in
+[`rs/README.md`](rs/README.md); all three run the shared fixtures in
 [`test/spec`](test/spec).
 
 ```js
@@ -62,7 +63,9 @@ statement, including the two declared output-shape deviations from protoc.
 proto-grammar/        # ABNF grammar: common.abnf + per-version deltas
 ts/                   # TypeScript implementation (plugin + descriptor walk)
 go/                   # Go port, tracking ts/
-test/spec/            # shared .tsv fixtures, run by BOTH runtimes
+rs/                   # Rust port, tracking ts/
+test/spec/            # shared .tsv fixtures, run by EVERY runtime
+test/divergent.tsv    # where the ports disagree, executed
 test/protobuf-suite/  # vendored protoc parser_unittest conformance corpus
 ```
 
