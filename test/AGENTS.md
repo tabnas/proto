@@ -30,6 +30,13 @@ order do not affect the comparison.
 - Go: `go/parity_test.go` — `support.Runner{...}.Dir(t, dir)`.
 - Rust: `rs/tests/parity_test.rs` — `Runner::new_with_row(...).dir(...)`.
 
+All three compare a result after a JSON round trip, which is what the
+table above means by "absent fields and field order do not affect the
+comparison": Go passes `jsonFlatten`, Rust `to_value`, TypeScript a
+`normalize` that stringifies and reparses. A runner missing that step
+compares a live object against a cell, so a `NaN` field number never
+equals the `null` the cell records.
+
 All three are a dozen lines holding only what is specific to proto: how
 to build the parser for a row's options. Everything else — finding
 `test/spec`, reading the file, decoding escapes, the `ERROR:` contract,
@@ -53,12 +60,12 @@ is expected to disagree with one of them.
 
 A fixture fails when behaviour REGRESSES. The register fails BOTH ways:
 when a port is repaired to agree with the others, the row still claims
-they differ, so the suite goes red and names the row to delete. Today
-`rs/tests/divergent_test.rs` runs it, reading the `rust` column through
-`tabnas_support::Register`; the `ts` and `go` cells are measured and
-recorded, and adding a runner in those two runtimes is how they stop
-being a record and start being a test. The prose and the measured tables
-live in [`../DIVERGENCE.md`](../DIVERGENCE.md).
+they differ, so the suite goes red and names the row to delete. All three
+columns are executed: `ts/test/divergent.test.ts` reads the `ts` column,
+`go/divergent_test.go` the `go` column and `rs/tests/divergent_test.rs`
+the `rust` column, each through its runtime's half of
+`tabnas_support::Register`. The prose lives in
+[`../DIVERGENCE.md`](../DIVERGENCE.md).
 
 ## The files
 
@@ -77,18 +84,41 @@ separately, against the goldens, by
 matches protoc, and Go matches TypeScript. Regenerate it rather than
 hand-editing, and only after the conformance test is green.
 
+## What the corpus does not reach
+
+The fixtures and the vendored protoc corpus together were green on every
+row while five descriptor details were wrong, so the count of rows is
+not a measure of coverage. What they missed, and what the rows added in
+2026-09 cover, is one shape: a NAME that collides with the grammar's own
+text.
+
+- A declared name that occurs inside its own leading keyword (`message
+  m`, `oneof o`, `enum n`, `package e`). The whole declaration was
+  dropped, with no error.
+- An enum value name ending in its own number (`A1 = 1`), or beginning
+  with a statement keyword (`optionX = 1`).
+- A type name beginning with a modifier (`streaming.Request` after
+  `rpc`), or spelt like a scalar behind a leading dot (`.int32`).
+- A declaration kind whose options nobody looked for (`oneof`).
+
+Every `.proto` protoc's own corpus writes uses names chosen to read
+well, so none of these appear in it. When adding a fixture, prefer a
+name that collides with the syntax around it over one that reads
+naturally: the second kind is already covered many times over.
+
 ## Rules
 
 - Prefer adding a fixture here over a one-off in-language assertion when a
-  case is expressible as source → descriptor. That is what keeps the two
+  case is expressible as source → descriptor. That is what keeps the three
   runtimes honest against each other.
-- TypeScript is canonical. If the two runtimes disagree, the TS behaviour is
-  the expected value — unless Go has exposed a genuine TS defect, in which
-  case fix TS first and pin the corrected behaviour here.
-- A new fixture must pass in BOTH runtimes: run `go test ./...` (from `go/`)
-  and `npm test` (from `ts/`) before considering it done.
+- TypeScript is canonical. If the runtimes disagree, the TS behaviour is
+  the expected value — unless a port has exposed a genuine TS defect, in
+  which case fix TS first and pin the corrected behaviour here.
+- A new fixture must pass in ALL THREE runtimes: run `npm test` (from
+  `ts/`), `go test ./...` (from `go/`) and `cargo test --all-targets`
+  (from `rs/`) before considering it done.
 
-## Harness rules (both runtimes)
+## Harness rules (all runtimes)
 
 These are the ways a suite can pass while measuring nothing. Each has bitten
 this repo; do not reintroduce them.

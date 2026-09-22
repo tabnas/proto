@@ -57,17 +57,29 @@ Same order of authority as the repository guide, with one addition.
    same loader `ts/test/parity.test.ts` and `go/parity_test.go` use, so
    the three cannot drift on what a row means.
 2. **The protoc corpus passes**, `tests/protobuf_conformance_test.rs`,
-   with nothing skipped and the same contracts and normalisation the
-   other two runners apply.
+   with the same lanes, contracts and normalisation the other two
+   runners apply: `valid` (71 in-scope cases, compared against protoc's
+   goldens), `accept-only` (50, parse without failing) and the
+   `leniency` probes. Two things are NOT run, in every runtime alike and
+   for the reasons `../AGENTS.md` gives: the 11 `valid` cases declaring
+   a protoc-internal edition, with the exclusion set asserted to be
+   exactly those, and the whole `invalid` lane, because `common.abnf` is
+   a permissive union and rejection is not part of the contract. Both
+   counts are ratcheted in the test, so a corpus that shrinks cannot
+   pass by measuring less.
 3. **The generated grammar matches its source.** `src/grammar.rs` is
    written by `../ts/embed-grammar.js`, guarded on `rs/src` existing.
    After editing any `.abnf` file run `npm run embed` from `ts/` AND
    `make generate` for Go. `tests/embed_test.rs` compares the Rust copy
    with the files on disk and with both other runtimes' embeds.
-4. **The four version sites agree**: `ts/package.json`, `VERSION` in
-   `ts/src/proto.ts`, `const VERSION` in `go/proto.go` and the
-   `Cargo.toml` / `pub const VERSION` pair here.
-   `tests/version_test.rs` fails the build on drift.
+4. **The five version sites agree**: `ts/package.json`, `VERSION` in
+   `ts/src/proto.ts`, `const VERSION` in `go/proto.go`, `version` in
+   `Cargo.toml` here and `pub const VERSION` in `src/lib.rs`.
+   `tests/version_test.rs` fails the build on drift, and the release
+   procedure in `../AGENTS.md` names the same five with the check that
+   catches each. Bumping `Cargo.toml` moves `Cargo.lock`'s entry for
+   this crate too, which `../ci/rust/run.sh` compares before it runs
+   anything.
 5. **Every divergence is recorded AND executed.**
    `../DIVERGENCE.md` carries the prose and the measured tables;
    `../test/divergent.tsv` carries the rows, and
@@ -102,6 +114,44 @@ with the reason written at the point it appears:
   crate's are Unicode-aware. None of them is handed to a regexp engine;
   each is written out, with the pattern it replaces quoted above it.
 
+## Reading `src` is allowed; DECIDING from it is not
+
+`src` is the node's tokens run together, and the walk reads values out of
+it wherever abnf inlined the rule that would have carried them: the
+leading field type, the first `reserved` range, an option name inside
+`[...]`. That is reading a value the tree does not hold, and it is safe,
+because whole-word tokens make the boundaries unambiguous.
+
+What is NOT safe is answering a STRUCTURAL question by searching that
+text, and issue #31 is the class. A search finds a copy, not the copy:
+`(stream` matched the start of `streaming.Request`, `=-` inside an
+option took an enum value negative, `kw` found the `m` of `message`
+rather than the message named `m`. Each had a node or a gap that held
+the answer already.
+
+Use `nrule`, `child`, `children`, `child_rules`, `kw` and `gaps`. `gaps`
+is the one to reach for when the answer is a bare terminal the grammar
+never turns into a node: it gives the text between two adjacent rule
+children, scanning from the end so each child is bounded by the child
+after it.
+
+What still reads `src`, and why each one stays:
+
+- `ranges` and `reserved_names` parse a statement's text, because the
+  leading `range` and a single-item name list are inlined and there is
+  no node at all. Both consume the whole text rather than searching it.
+- `option_name_of` falls back to the text when `optionName` was inlined,
+  anchored at the END on `=<constant>`; anchoring at the start would
+  find the `1` of `file_opt1`.
+- `detect_version` reads the `syntax` / `edition` declaration out of the
+  source before any walk, which is the point of it.
+- The dispatch tests (`kw(node).starts_with("message")` and the rest)
+  read the KEYWORD, which is a gap and not a search. They were unsound
+  only while `kw` itself searched forward.
+
+`build_descriptor.rs` has no other `contains`, `find` or index over
+flattened source deciding a structural question, as of 2026-09-22.
+
 ## Untrusted input, and the one bound this port adds
 
 Everything in the repository guide applies. The addition is a NESTING
@@ -111,6 +161,16 @@ out ABORTS the process, where a JavaScript one raises something a caller
 can catch. `parse` counts braces outside strings and comments and refuses
 a document past the cap before the engine builds a tree that deep, and
 `build_file` refuses one it is handed directly.
+
+Refusing a CST is the weaker half, and it is not the protection: the
+tree already exists by then, and a `Value` nesting far enough aborts as
+it DROPS. What protects a caller is never building one, so every entry
+point taking SOURCE runs the check. `parse_with(&parser, src, opts)` is
+the reusable form, for the caller holding an instance from `make`, and
+`preflight(src)` is the check alone, for the caller who wants the CST
+from the engine's own `parse`. The README recommended that raw route
+without either, which is issue #30: a fast path around the crate's own
+guard, reachable from untrusted input.
 
 The number is MEASURED, and the measurement is in the constant's doc
 comment. Re-measure rather than copying it if the walk changes shape, and

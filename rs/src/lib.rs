@@ -72,7 +72,7 @@ pub use detect_version::{
 };
 pub use error::ProtoError;
 pub use grammar::GRAMMAR_TEXT;
-pub use node::{child, child_rules, children, kw, nrule, nsrc};
+pub use node::{child, child_rules, children, gaps, gaps_before, kw, nrule, nsrc};
 
 /// This crate's version. It MUST equal `ts/package.json` "version": the
 /// release orchestrator rewrites both, and `tests/version_test.rs` fails
@@ -124,11 +124,17 @@ impl Default for ProtoOptions {
 /// Use [`to_descriptor`] to turn that CST into a [`FileDescriptorProto`].
 /// The Rust spelling of the canonical `tn.use(Proto)`.
 ///
+/// Driving the engine's own `parse` skips the nesting [`preflight`], so
+/// a caller handing it untrusted source runs that check first; see
+/// [`preflight`] for what the tree costs without it.
+///
 /// ```
 /// fn main() -> Result<(), Box<dyn std::error::Error>> {
 ///     let mut parser = tabnas_proto::engine();
 ///     tabnas_proto::proto(&mut parser)?;
-///     let cst = parser.parse("syntax = \"proto3\";")?;
+///     let source = "syntax = \"proto3\";";
+///     tabnas_proto::preflight(source)?;
+///     let cst = parser.parse(source)?;
 ///     let file = tabnas_proto::to_descriptor(&cst, None)?;
 ///     assert_eq!(file.syntax.as_deref(), Some("proto3"));
 ///     Ok(())
@@ -188,12 +194,13 @@ pub fn engine() -> Tabnas {
 /// counterpart of `new Tabnas().use(Proto)` and the Go `Proto(j)`.
 ///
 /// Compiling the grammar dominates a parse, so build one and reuse it.
+/// Read each document through [`parse_with`], which runs the nesting
+/// [`preflight`] the engine's own `parse` does not.
 ///
 /// ```
 /// fn main() -> Result<(), Box<dyn std::error::Error>> {
 ///     let parser = tabnas_proto::make();
-///     let cst = parser.parse("message M {}")?;
-///     let file = tabnas_proto::to_descriptor(&cst, None)?;
+///     let file = tabnas_proto::parse_with(&parser, "message M {}", None)?;
 ///     // No declaration and no option: protoc's default is proto2.
 ///     assert_eq!(file.syntax.as_deref(), Some("proto2"));
 ///     Ok(())
@@ -218,6 +225,11 @@ fn shared() -> &'static Tabnas {
 
 /// Turn a parsed proto CST into a [`FileDescriptorProto`], resolving the
 /// version from the file's declaration and the supplied options.
+///
+/// The walk refuses a CST nesting past [`MAX_NESTING_DEPTH`], but by
+/// then the tree EXISTS, and a `tabnas::Value` that deep aborts the
+/// process when it drops. A caller who parsed the source itself runs
+/// [`preflight`] on that source first; [`parse_with`] does both.
 pub fn to_descriptor(
     cst: &Value,
     options: Option<&ProtoOptions>,
@@ -230,6 +242,77 @@ pub fn to_descriptor(
     };
     let version = resolve_version(declared, opts.version, opts.reconcile)?;
     build_file(cst, version)
+}
+
+/// Refuse a `.proto` source that nests deeper than
+/// [`MAX_NESTING_DEPTH`], before anything builds a tree that deep.
+///
+/// [`parse`] and [`parse_with`] run this themselves. It is public for
+/// the caller who drives the engine directly, through [`make`] or
+/// [`proto`] on an instance of their own: the engine's `parse` builds a
+/// [`tabnas::Value`] tree that mirrors the document, and that value
+/// DROPS recursively, so a deep enough document aborts the process even
+/// when the descriptor walk refuses it. An abort cannot be caught, so
+/// the check has to come before the tree exists.
+///
+/// The depth is counted in braces, skipping the string literals and
+/// comments the lexer skips. Over-counting is safe here and
+/// under-counting is not, so an unterminated string or comment counts
+/// every brace inside it; the engine rejects that source anyway.
+///
+/// ```
+/// fn main() -> Result<(), Box<dyn std::error::Error>> {
+///     let cap = tabnas_proto::MAX_NESTING_DEPTH;
+///     let parser = tabnas_proto::make();
+///
+///     let deep = format!("{}{}", "message M {".repeat(cap + 1), "}".repeat(cap + 1));
+///     assert!(tabnas_proto::preflight(&deep).is_err());
+///
+///     // At the cap the document is accepted, and the engine may run.
+///     let ok = format!("{}{}", "message M {".repeat(cap), "}".repeat(cap));
+///     tabnas_proto::preflight(&ok)?;
+///     let cst = parser.parse(&ok)?;
+///     assert_eq!(tabnas_proto::nrule(&cst), "proto");
+///     Ok(())
+/// }
+/// ```
+pub fn preflight(src: &str) -> Result<(), ProtoError> {
+    let depth = build_descriptor::brace_depth(src);
+    if depth > MAX_NESTING_DEPTH {
+        return Err(ProtoError::TooDeep(format!(
+            "proto: document nests {depth} levels deep, past the {MAX_NESTING_DEPTH} this \
+             parser accepts"
+        )));
+    }
+    Ok(())
+}
+
+/// Parse a `.proto` source string on a parser the caller holds.
+///
+/// The high-throughput path. Compiling the grammar dominates a parse by
+/// orders of magnitude, so a caller reading many documents builds one
+/// instance with [`make`] and passes it here, rather than driving the
+/// engine directly: this runs the same [`preflight`] [`parse`] runs, and
+/// the engine's own `parse` does not.
+///
+/// ```
+/// fn main() -> Result<(), Box<dyn std::error::Error>> {
+///     let parser = tabnas_proto::make();
+///     for source in ["syntax = \"proto2\";", "edition = \"2023\";"] {
+///         let file = tabnas_proto::parse_with(&parser, source, None)?;
+///         assert!(file.syntax.is_some());
+///     }
+///     Ok(())
+/// }
+/// ```
+pub fn parse_with(
+    parser: &Tabnas,
+    src: &str,
+    options: Option<&ProtoOptions>,
+) -> Result<FileDescriptorProto, ProtoError> {
+    preflight(src)?;
+    let cst = parser.parse(src)?;
+    to_descriptor(&cst, options)
 }
 
 /// Parse a `.proto` source string to a [`FileDescriptorProto`].
@@ -248,13 +331,5 @@ pub fn to_descriptor(
 /// A document nesting deeper than [`MAX_NESTING_DEPTH`] is refused before
 /// the engine builds a tree that deep; see that constant.
 pub fn parse(src: &str, options: Option<&ProtoOptions>) -> Result<FileDescriptorProto, ProtoError> {
-    let depth = build_descriptor::brace_depth(src);
-    if depth > MAX_NESTING_DEPTH {
-        return Err(ProtoError::TooDeep(format!(
-            "proto: document nests {depth} levels deep, past the {MAX_NESTING_DEPTH} this \
-             parser accepts"
-        )));
-    }
-    let cst = shared().parse(src)?;
-    to_descriptor(&cst, options)
+    parse_with(shared(), src, options)
 }

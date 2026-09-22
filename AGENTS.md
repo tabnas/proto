@@ -32,7 +32,8 @@ ts/
   src/descriptor.ts    # output types + scalar-type table
   src/detect-version.ts    # syntax/edition detection + reconciliation
   test/                # node:test (proto, version-detect, doc-examples,
-                       #   parity over test/spec, protobuf-conformance,
+                       #   parity over test/spec, divergent: the register's
+                       #   ts column, protobuf-conformance,
                        #   version: exported VERSION == package.json)
 go/
   grammar_gen.go       # Go counterpart of embed-grammar.js (go generate)
@@ -41,6 +42,7 @@ go/
   descriptor.go        # port of ts/src/descriptor.ts
   detect_version.go    # port of ts/src/detect-version.ts
   parity_test.go       # runs the same test/spec/*.tsv fixtures
+  divergent_test.go    # the divergence register's `go` column
   protobuf_conformance_test.go  # protoc corpus in Go: valid / accept-only /
                        #   leniency, same contracts as the TS runner
   version_test.go      # VERSION const == ts/package.json "version"
@@ -150,8 +152,12 @@ What "correct" means here, in order of authority:
    and `rs/tests/parity_test.rs` — a row green in one runtime and red in
    another is a failure, not a discrepancy.
 2. **The protobuf conformance contracts hold in every runtime.** The
-   vendored protoc corpus (`test/protobuf-suite/`) runs with nothing
-   skipped; the measured figures under "Conformance" below are a claim
+   vendored protoc corpus (`test/protobuf-suite/`) runs in the same lanes
+   in all three: `valid` against protoc's goldens, `accept-only`, and the
+   lexer-leniency probes. Two parts of the corpus are outside the gate,
+   both deliberately and both described under "Conformance" below: the 11
+   `valid` cases declaring a protoc-internal edition, and the whole
+   `invalid` lane. The measured figures under "Conformance" are a claim
    about this package — changing behaviour means re-measuring and updating
    them in the same commit, not later.
 3. **The generated grammars match their source.** `ts/src/grammar.ts`,
@@ -161,11 +167,13 @@ What "correct" means here, in order of authority:
    TypeScript and Rust copies) AND `make generate` (`go generate ./...` in
    `go/`) — never edit the generated files by hand, and regenerate every
    side in the same change. `rs/tests/embed_test.rs` compares all three.
-4. **The version constants agree** — `ts/package.json` `"version"`,
-   `VERSION` in `ts/src/proto.ts`, `const VERSION` in `go/proto.go`, and
-   the `version` / `pub const VERSION` pair in `rs/`.
-   `ts/test/version.test.ts`, `go/version_test.go` and
-   `rs/tests/version_test.rs` fail the build if they drift.
+4. **The version constants agree** — FIVE sites: `ts/package.json`
+   `"version"`, `VERSION` in `ts/src/proto.ts`, `const VERSION` in
+   `go/proto.go`, `version` in `rs/Cargo.toml` and `pub const VERSION` in
+   `rs/src/lib.rs`. `ts/test/version.test.ts`, `go/version_test.go` and
+   `rs/tests/version_test.rs` fail the build if they drift. The release
+   step below carries the same list, per site and per check; keep the two
+   in step.
 
 ## Releasing
 
@@ -190,9 +198,30 @@ accepts the publish. Pushing a tag by hand is the orchestrator's path
 
 The steps, in order:
 
-1. Bump all **three** version sites together — `ts/package.json`, `VERSION`
-   in `ts/src/proto.ts` and `const VERSION` in `go/proto.go`. Drift is
-   caught by `ts/test/version.test.ts` and `go/version_test.go`.
+1. Bump all **five** version sites together, and know which check catches
+   which:
+
+   | Site | Caught by |
+   |---|---|
+   | `ts/package.json` `"version"` | `ts/test/version.test.ts` |
+   | `VERSION` in `ts/src/proto.ts` | `ts/test/version.test.ts` |
+   | `const VERSION` in `go/proto.go` | `go/version_test.go` |
+   | `version` in `rs/Cargo.toml` | `rs/tests/version_test.rs` |
+   | `pub const VERSION` in `rs/src/lib.rs` | `rs/tests/version_test.rs` |
+
+   The Rust pair joined the invariant with the port, and this step named
+   only the first three for a while: following it left both Rust values
+   stale and turned `rs/tests/version_test.rs` red.
+
+   **The Rust check is not automatic yet.** `ci/workflows/rust.yml` is
+   staged under ADR-8 and runs nowhere until a maintainer promotes it, so
+   nothing on a pull request tells you the Rust sites drifted. Run
+   `ci/rust/run.sh` yourself on the bump commit; the TypeScript and Go
+   checks run in `ci.yml` as usual.
+
+   Bumping `rs/Cargo.toml` also moves `rs/Cargo.lock`'s entry for this
+   crate, which `ci/rust/run.sh` compares before it runs anything. Run
+   `cargo update --workspace` in `rs/` and commit the lock with the bump.
 2. Verify against the **published** dependencies rather than your checkout.
    The release runner installs fresh from the registry; a working tree
    usually does not, so reproduce that before believing anything:
@@ -388,10 +417,11 @@ either:
 - `publish-ts` runs a local `npm publish`, which goes out over a token and
   bypasses the OIDC trusted publishing the workflow uses.
 - `publish-go V=x.y.z` breaks the version invariant: it `sed`s and stages
-  **only** `go/proto.go`, leaving `ts/package.json` and `VERSION` in
-  `ts/src/proto.ts` on the previous version — the exact state the version
-  tests exist to reject. Its `test-go` prerequisite also runs *before* the
-  `sed`, so what it verifies is not what it tags.
+  **only** `go/proto.go`, leaving `ts/package.json`, `VERSION` in
+  `ts/src/proto.ts` and both Rust sites on the previous version — the
+  exact state the version tests exist to reject. Its `test-go`
+  prerequisite also runs *before* the `sed`, so what it verifies is not
+  what it tags.
 
 They stay in the Makefile because removing them is a separate change.
 
@@ -447,6 +477,12 @@ name-resolution pass. Specifically:
 - A named field type cannot be told apart from an enum without resolution,
   so `type` is left **unset** and only `typeName` is recorded, as written.
   Only scalars (and `group`, which is syntactically known) get a `type`.
+  A **leading dot makes the reference fully qualified**, so `.int32` names
+  a type at the root and is a `typeName`, never the scalar `int32`; protoc
+  accepts `message int32 {}` and records it the same way. The rule holds
+  for a map key and value too.
+- A `oneof` carries its own option statements, in `oneofDecl[i].options`,
+  as protoc's `OneofOptions` does.
 - `map<K,V>` expands to a repeated field + a synthesised `…Entry` nested
   message with `options.mapEntry = true`; the entry name is the field name
   CamelCased with `_` removed (`map_field` -> `MapFieldEntry`), and
@@ -484,11 +520,15 @@ Everything else that diverges from `protoc` is a bug.
 
 The bar: **protoc 35.1's own parser test corpus**, extracted from upstream
 `src/google/protobuf/compiler/parser_unittest.cc` and vendored under
-`test/protobuf-suite/` (see its AGENTS.md). `ts/test/protobuf-conformance.test.ts`
-and `go/protobuf_conformance_test.go` each run it against protoc's goldens,
-with the same contracts and the same normalisation — nothing is skipped, and
-the corpus is in-repo so it needs no network. Counts below are per runtime and
-were re-measured 2026-08-09; both runtimes give the same answer:
+`test/protobuf-suite/` (see its AGENTS.md). `ts/test/protobuf-conformance.test.ts`,
+`go/protobuf_conformance_test.go` and `rs/tests/protobuf_conformance_test.rs`
+each run it against protoc's goldens, with the same contracts and the same
+normalisation, and the corpus is in-repo so it needs no network. What the
+three lanes below say about coverage holds identically in all three runtimes,
+the two exemptions included: the 11 `valid` cases on a protoc-internal edition
+are excluded, and the `invalid` lane is not a gate. Counts below are per
+runtime and were re-measured 2026-08-09; all three runtimes give the same
+answer:
 
 - `valid` (82 cases): source + the descriptor protoc's parser produces.
   **71/71 in-scope pass.** The 11 excluded declare protoc-internal editions

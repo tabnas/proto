@@ -58,12 +58,16 @@ pub fn kw(node: &Value) -> &str {
     let Some(first) = kids.first() else {
         return src;
     };
-    // `indexOf` returning -1 and returning 0 are the same answer here,
-    // as they are in the canonical `i <= 0 ? '' : ...`.
-    match src.find(nsrc(first)) {
-        None | Some(0) => "",
-        Some(at) => &src[..at],
+    if nsrc(first).is_empty() {
+        return "";
     }
+    // Located by [`gaps`], not by a forward search for the child's text.
+    // A forward search finds the FIRST copy, which for `message m {}` is
+    // the `m` of `message` itself: `kw` came back empty and the statement
+    // was dispatched as neither a message nor anything else, so the
+    // declaration vanished from the descriptor. `oneof o`, `enum n`,
+    // `service e` and `package e` went the same way.
+    gaps(node)[0]
 }
 
 /// The first rule child with this rule name.
@@ -76,6 +80,58 @@ pub fn children<'a>(node: &'a Value, rule: &str) -> Vec<&'a Value> {
     child_rules(node)
         .into_iter()
         .filter(|kid| nrule(kid) == rule)
+        .collect()
+}
+
+/// The source text immediately ahead of each rule child, one entry per
+/// member of [`child_rules`] and in the same order.
+///
+/// `src` is the node's tokens run together, so every child's text is a
+/// contiguous slice of it, but SEARCHING for that text can land on the
+/// wrong copy. In the enum element `A1=1;` the `fieldNumber` node's `1`
+/// also occurs inside the name ahead of it, and in `rpc M (stream A)`
+/// the `stream` modifier is a bare terminal that never becomes a node.
+/// The scan therefore runs from the END: each child is bounded above by
+/// the child after it, so the last occurrence below that bound is the
+/// child itself. That leaves the text between two children exactly,
+/// which is where the grammar's own terminals (`=`, `-`, `(`, `stream`,
+/// `returns`) are, and reading one of those is a structural question
+/// answered from the tree rather than a pattern matched against the
+/// whole statement.
+pub fn gaps(node: &Value) -> Vec<&str> {
+    let kids = child_rules(node);
+    let src = nsrc(node);
+    let mut at = vec![0usize; kids.len()];
+    let mut hi = src.len();
+    for index in (0..kids.len()).rev() {
+        let text = nsrc(kids[index]);
+        let found = if text.is_empty() || text.len() > hi {
+            None
+        } else {
+            src[..hi].rfind(text)
+        };
+        at[index] = found.unwrap_or(hi);
+        hi = at[index];
+    }
+    let mut out = Vec::with_capacity(kids.len());
+    let mut end = 0usize;
+    for (index, kid) in kids.iter().enumerate() {
+        let start = at[index].max(end);
+        out.push(&src[end..start]);
+        end = start + nsrc(kid).len();
+    }
+    out
+}
+
+/// The gaps ahead of the children carrying this rule name, in source
+/// order. See [`gaps`].
+pub fn gaps_before<'a>(node: &'a Value, rule: &str) -> Vec<&'a str> {
+    let kids = child_rules(node);
+    gaps(node)
+        .into_iter()
+        .zip(kids)
+        .filter(|(_, kid)| nrule(kid) == rule)
+        .map(|(gap, _)| gap)
         .collect()
 }
 

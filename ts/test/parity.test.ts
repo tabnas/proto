@@ -33,6 +33,13 @@ makeRunner({
   // parse failure the engine gives a code to. A bare `ERROR` still accepts
   // any failure.
   matchError: (err: any, want) => String(err?.message).includes(want),
+
+  // Compare after a JSON round trip: absent fields and key order do not
+  // affect the comparison, and a number JSON cannot hold arrives as
+  // `null` in every runtime. The Go runner's `jsonFlatten` and the Rust
+  // runner's `to_value` are the same step, so all three compare a row
+  // the way test/AGENTS.md says a row is compared.
+  normalize: (value) => JSON.parse(JSON.stringify(value)),
 })
   // `findSpecDir` walks up from this file — `dist-test/` at runtime — to the
   // repo root's `test/spec`, so moving the suite does not mean recounting

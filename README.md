@@ -48,9 +48,12 @@ The output is checked against **protoc 35.1's own parser test corpus**,
 extracted from upstream `parser_unittest.cc` and vendored under
 [`test/protobuf-suite`](test/protobuf-suite): all 71 in-scope `valid` cases
 (source + the exact descriptor protoc's parser produces) and all 50
-`accept-only` cases pass, with nothing skipped. The 11 excluded cases
+`accept-only` cases pass, in every runtime. The other 11 `valid` cases
 declare protoc-internal editions (`UNSTABLE`, `99998_TEST_ONLY`) outside the
-proto2 / proto3 / 2023 / 2024 support this package claims.
+proto2 / proto3 / 2023 / 2024 support this package claims, and are excluded,
+with the exclusion set asserted to be exactly those. The corpus also carries
+an `invalid` lane of 96 cases, which is not a gate in any runtime, for the
+reason the next paragraph gives.
 
 The grammar is a permissive *union* of the four versions, so rejecting
 version-illegal input is deliberately not part of the contract: recognition
