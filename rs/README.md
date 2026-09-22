@@ -41,19 +41,25 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 
 `parse` builds one parser on first use and reuses it. Compiling the ABNF
 and installing the rule set costs orders of magnitude more than a parse,
-so for anything but a one-off call build an instance once and keep it:
+so for anything but a one-off call build an instance once and keep it,
+and read each document with `parse_with`:
 
 ```rust
 fn main() -> Result<(), Box<dyn std::error::Error>> {
     let parser = tabnas_proto::make();
     for source in ["syntax = \"proto2\";", "edition = \"2023\";"] {
-        let cst = parser.parse(source)?;
-        let file = tabnas_proto::to_descriptor(&cst, None)?;
+        let file = tabnas_proto::parse_with(&parser, source, None)?;
         assert!(file.syntax.is_some());
     }
     Ok(())
 }
 ```
+
+`parse_with` is the fast path and it is the guarded one: it runs the
+nesting preflight described under [Untrusted input](#untrusted-input),
+which the engine's own `parse` does not. Calling `parser.parse` and
+`to_descriptor` by hand skips that check, and a document nesting deeply
+enough aborts the process before either of them returns.
 
 The descriptor serializes to the JSON shape `protoc --descriptor_set_out`
 produces: camelCase names, enum values as their string names, and the
@@ -157,11 +163,17 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     let mut direct = tabnas_proto::engine();
     tabnas_proto::proto(&mut direct)?;
-    let cst = direct.parse("message M {}")?;
+    let source = "message M {}";
+    tabnas_proto::preflight(source)?;
+    let cst = direct.parse(source)?;
     assert_eq!(tabnas_proto::nrule(&cst), "proto");
     Ok(())
 }
 ```
+
+An instance driven this way returns a CST rather than a descriptor, so
+nothing else can run the nesting check for it: call `preflight` on the
+source first, as above.
 
 Use `engine()` rather than a bare `tabnas::Tabnas::new()`: it sets the
 retained backtracking history the union grammar needs, and the engine's
@@ -212,6 +224,17 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     Ok(())
 }
 ```
+
+Every entry point that takes SOURCE runs that check: `parse` and
+`parse_with`. `preflight` is the check on its own, for a caller that
+holds the engine and wants the CST. The entry points that take a CST,
+`to_descriptor` and `build_file`, refuse a tree past the cap as well,
+but by then the tree exists, and a `tabnas::Value` nesting far enough
+aborts the process as it DROPS. Measured on this port, on the 1 MiB
+stack a spawned `std::thread` gets by default: a debug build refuses and
+drops a 900-level document, and aborts on a 1000-level one, having
+already refused to walk it. The refusal is not the protection; parsing
+no such tree is.
 
 The cap counts braces outside string literals and comments, so a document
 that merely mentions braces is not refused for nesting.

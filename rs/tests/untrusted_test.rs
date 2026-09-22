@@ -16,7 +16,7 @@ mod common;
 
 use std::time::Instant;
 
-use tabnas_proto::{parse, MAX_NESTING_DEPTH};
+use tabnas_proto::{make, parse, parse_with, preflight, MAX_NESTING_DEPTH};
 
 /// `message M { message M { ... } }`, nested `depth` levels.
 fn nested(depth: usize) -> String {
@@ -240,4 +240,62 @@ fn a_long_range_list_is_read_whole() {
     // Message reserved ranges are half-open: `1 to 5` is [1,6).
     assert_eq!((reserved[0].start, reserved[0].end), (1.0, 6.0));
     assert_eq!((reserved[99].start, reserved[99].end), (991.0, 996.0));
+}
+
+/// The reusable fast path carries the same bound as `parse`.
+///
+/// This is the route the README recommends to a caller reading many
+/// documents, which is the caller most likely to be handed untrusted
+/// ones. Before `parse_with` existed the documentation sent that caller
+/// to the engine's own `parse`, which builds the tree first and cannot
+/// refuse it: a deep enough document ABORTED the process, and an abort
+/// is not something a caller can catch.
+#[test]
+fn the_reusable_path_carries_the_same_bound() {
+    let parser = make();
+
+    // AT the cap, and one under, and the whole document arrives.
+    for depth in [MAX_NESTING_DEPTH - 1, MAX_NESTING_DEPTH] {
+        let file = parse_with(&parser, &nested(depth), None)
+            .unwrap_or_else(|error| panic!("{depth} levels should parse: {error}"));
+        let mut message = &file.message_type[0];
+        let mut levels = 1;
+        while let Some(inner) = message.nested_type.first() {
+            message = inner;
+            levels += 1;
+        }
+        assert_eq!(levels, depth);
+    }
+
+    for depth in [MAX_NESTING_DEPTH + 1, 10 * MAX_NESTING_DEPTH] {
+        let error = parse_with(&parser, &nested(depth), None)
+            .expect_err("past the cap is refused on the reusable path too");
+        assert!(error.to_string().contains("nests"), "for {depth}: {error}");
+    }
+
+    // Both routes answer the same way, so neither is the fast one and
+    // the safe one.
+    let deep = nested(MAX_NESTING_DEPTH + 1);
+    assert_eq!(
+        parse_with(&parser, &deep, None).unwrap_err().to_string(),
+        parse(&deep, None).unwrap_err().to_string(),
+    );
+}
+
+/// The check on its own, for a caller that wants the CST.
+#[test]
+fn preflight_refuses_at_the_cap_and_accepts_under_it() {
+    preflight(&nested(MAX_NESTING_DEPTH - 1)).expect("one under the cap");
+    preflight(&nested(MAX_NESTING_DEPTH)).expect("exactly the cap");
+
+    let error = preflight(&nested(MAX_NESTING_DEPTH + 1)).expect_err("one past the cap");
+    assert!(error.to_string().contains("nests"), "{error}");
+
+    // The depth it counts is the source's, not the descriptor's, so the
+    // braces it skips are the ones the lexer skips.
+    preflight(&format!(
+        "option a = \"{}\";",
+        "{".repeat(10 * MAX_NESTING_DEPTH)
+    ))
+    .expect("braces inside a string literal do not nest anything");
 }

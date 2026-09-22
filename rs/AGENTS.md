@@ -112,6 +112,16 @@ can catch. `parse` counts braces outside strings and comments and refuses
 a document past the cap before the engine builds a tree that deep, and
 `build_file` refuses one it is handed directly.
 
+Refusing a CST is the weaker half, and it is not the protection: the
+tree already exists by then, and a `Value` nesting far enough aborts as
+it DROPS. What protects a caller is never building one, so every entry
+point taking SOURCE runs the check. `parse_with(&parser, src, opts)` is
+the reusable form, for the caller holding an instance from `make`, and
+`preflight(src)` is the check alone, for the caller who wants the CST
+from the engine's own `parse`. The README recommended that raw route
+without either, which is issue #30: a fast path around the crate's own
+guard, reachable from untrusted input.
+
 The number is MEASURED, and the measurement is in the constant's doc
 comment. Re-measure rather than copying it if the walk changes shape, and
 keep `tests/untrusted_test.rs` parsing AT the cap: a cap nobody tests at
