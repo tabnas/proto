@@ -10,6 +10,7 @@
 import {
   FileDescriptorProto, DescriptorProto, FieldDescriptorProto,
   EnumDescriptorProto, ServiceDescriptorProto, MethodDescriptorProto,
+  OneofDescriptorProto,
   DescriptorRange, SymbolVisibility, OptionValue, FieldLabel, SCALAR_TYPES,
   MAX_FIELD_NUMBER_END, MAX_MESSAGE_SET_END, MAX_ENUM_NUMBER,
 } from './descriptor'
@@ -36,6 +37,50 @@ function kw(n: Node): string {
 
 function child(n: Node, rule: string): Node | undefined {
   return R(n).find((k) => k.rule === rule)
+}
+
+// The source text immediately ahead of each rule child, one entry per
+// member of `R(n)` and in the same order.
+//
+// `src` is the node's tokens run together, so every child's text is a
+// contiguous slice of it — but SEARCHING for that text can land on the
+// wrong copy. In the enum element `A1=1;` the `fieldNumber` node's `1`
+// also occurs inside the name ahead of it, and in `rpc M (stream A)` the
+// `stream` modifier is a bare terminal that never becomes a node. The
+// scan therefore runs from the END: each child is bounded above by the
+// child after it, so the last occurrence below that bound is the child
+// itself. That leaves the text between two children exactly, which is
+// where the grammar's own terminals (`=`, `-`, `(`, `stream`, `returns`)
+// are, and reading one of those is a structural question answered from
+// the tree rather than a pattern matched against the whole statement.
+function gaps(n: Node): string[] {
+  const kids = R(n)
+  const src = n.src
+  const at: number[] = new Array(kids.length)
+  let hi = src.length
+  for (let i = kids.length - 1; 0 <= i; i--) {
+    const text = kids[i].src
+    const found = '' === text ? -1 : src.lastIndexOf(text, hi - text.length)
+    at[i] = 0 <= found ? found : hi
+    hi = at[i]
+  }
+  const out: string[] = []
+  let end = 0
+  for (let i = 0; i < kids.length; i++) {
+    const start = at[i] < end ? end : at[i]
+    out.push(src.slice(end, start))
+    end = start + kids[i].src.length
+  }
+  return out
+}
+
+// The gaps ahead of the children carrying this rule name, in source order.
+function gapsBefore(n: Node, rule: string): string[] {
+  const kids = R(n)
+  const g = gaps(n)
+  const out: string[] = []
+  for (let i = 0; i < kids.length; i++) if (kids[i].rule === rule) out.push(g[i])
+  return out
 }
 
 function unquote(s: string): string {
@@ -134,8 +179,11 @@ function fieldLabel(
 }
 
 function fieldTypeName(typeText: string): Pick<FieldDescriptorProto, 'type' | 'typeName'> {
-  const bare = typeText.replace(/^\./, '')
-  const scalar = SCALAR_TYPES[bare]
+  // A LEADING DOT makes the reference fully qualified, so `.int32` names a
+  // type called `int32` at the root and is never the scalar `int32`.
+  // protoc accepts `message int32 {}` and records `.int32` as the field's
+  // type name; only an unqualified spelling may reach the scalar table.
+  const scalar = typeText.startsWith('.') ? undefined : SCALAR_TYPES[typeText]
   if (scalar) return { type: scalar }
   // A named reference: could be a message OR an enum, and telling them
   // apart needs symbol resolution this parser deliberately does not do.
@@ -276,22 +324,33 @@ function buildMapField(
 function buildEnum(n: Node): EnumDescriptorProto {
   const e: EnumDescriptorProto = { name: child(n, 'ident')?.src ?? '', value: [] }
   for (const el of R(n).filter((k) => k.rule === 'enumElement')) {
-    const k = kw(el)
-    if (k.startsWith('reserved')) {
+    // An enum body is the one place where the statement kind CANNOT come
+    // from the leading keyword: `enumField` inlines its name, so `kw` on
+    // `optionX = 1;` is `optionX=` and a prefix test reads it as an
+    // option statement. The first child's rule name says what the
+    // statement is without guessing — `optionName` for an option,
+    // `ranges` or `fieldNames` for a `reserved`, `fieldNumber` for a
+    // value.
+    const first = R(el)[0]
+    const rule = first?.rule
+    if ('ranges' === rule || 'fieldNames' === rule) {
       // Enum reserved ranges are INCLUSIVE and span the whole int32 space.
       addReserved(el, e, { exclusive: false, max: MAX_ENUM_NUMBER })
       continue
     }
-    if (k.startsWith('option')) {
+    if ('optionName' === rule) {
       e.options = { ...(e.options || {}), ...optionFrom(el) }
       continue
     }
-    // enumField: ident "=" ["-"] fieldNumber  -> name is the kw before "="
-    const name = k.replace(/=.*$/, '')
-    const num = child(el, 'fieldNumber')
-    if (name && num) {
-      const neg = /=-/.test(el.src.replace(/\s+/g, ''))
-      const v = { name, number: (neg ? -1 : 1) * Number(num.src) }
+    if ('fieldNumber' !== rule) continue
+    // enumField: ident "=" ["-"] fieldNumber. Both the name and the sign
+    // are in the text ahead of the number node, and nowhere else: reading
+    // the whole element instead takes an OPTION's minus sign as the
+    // value's, so `A = 1 [(x) = -2]` becomes -1.
+    const gap = gapsBefore(el, 'fieldNumber')[0] ?? ''
+    const name = gap.replace(/=.*$/, '')
+    if (name) {
+      const v = { name, number: (gap.endsWith('-') ? -1 : 1) * Number(first.src) }
       const vo = plainOptions(child(el, 'fieldOptions'))
       e.value.push(vo ? { ...v, options: vo } : v)
     }
@@ -459,9 +518,16 @@ function addVisible(
 function addOneof(el: Node, version: ProtoVersion, msg: DescriptorProto): void {
   const name = child(el, 'ident')?.src ?? ''
   const index = msg.oneofDecl.length
-  msg.oneofDecl.push({ name })
+  // protoc gives a oneof its own `OneofOptions`, and every other
+  // declaration kind here keeps its option statements, so the oneof's are
+  // recorded rather than dropped.
+  const decl: OneofDescriptorProto = { name }
+  msg.oneofDecl.push(decl)
   for (const of of R(el).filter((k) => k.rule === 'oneofElement')) {
-    if (kw(of).startsWith('option')) continue
+    if (kw(of).startsWith('option')) {
+      decl.options = { ...(decl.options || {}), ...optionFrom(of) }
+      continue
+    }
     if (';' === of.src) continue
     const f = isGroup(of) ? buildGroup(of, version, msg) : buildField(of, version)
     f.oneofIndex = index
@@ -495,19 +561,19 @@ function buildService(n: Node): ServiceDescriptorProto {
 function buildRpc(el: Node): MethodDescriptorProto {
   const ids = R(el).filter((k) => k.rule === 'ident')
   const types = R(el).filter((k) => k.rule === 'messageType')
-  const flat = el.src.replace(/\s+/g, '')
   const m: MethodDescriptorProto = {
     name: ids[0] ? ids[0].src : '',
     inputType: types[0] ? types[0].src : '',
     outputType: types[1] ? types[1].src : '',
   }
-  // Split request vs response on the `returns` keyword so a `(stream …)`
-  // is attributed to the right side even when in/out types are identical.
-  const ri = flat.indexOf('returns(')
-  const request = ri >= 0 ? flat.slice(0, ri) : flat
-  const response = ri >= 0 ? flat.slice(ri) : ''
-  if (/\(stream/.test(request)) m.clientStreaming = true
-  if (/\(stream/.test(response)) m.serverStreaming = true
+  // `stream` is a bare terminal, so it never becomes a node — but it sits
+  // immediately ahead of the type it modifies, which is exactly what the
+  // gap holds. Searching the statement for `(stream` instead marks an
+  // ordinary type whose name merely BEGINS with those letters, so
+  // `rpc M (streaming.Request)` came back client-streaming.
+  const modifiers = gapsBefore(el, 'messageType')
+  if (modifiers[0]?.endsWith('stream')) m.clientStreaming = true
+  if (modifiers[1]?.endsWith('stream')) m.serverStreaming = true
   for (const o of R(el).filter((k) => k.rule === 'optionStmt')) {
     m.options = { ...(m.options || {}), ...optionFrom(o) }
   }
