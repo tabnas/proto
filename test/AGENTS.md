@@ -109,15 +109,16 @@ naturally: the second kind is already covered many times over.
 ## Rules
 
 - Prefer adding a fixture here over a one-off in-language assertion when a
-  case is expressible as source → descriptor. That is what keeps the two
+  case is expressible as source → descriptor. That is what keeps the three
   runtimes honest against each other.
-- TypeScript is canonical. If the two runtimes disagree, the TS behaviour is
-  the expected value — unless Go has exposed a genuine TS defect, in which
-  case fix TS first and pin the corrected behaviour here.
-- A new fixture must pass in BOTH runtimes: run `go test ./...` (from `go/`)
-  and `npm test` (from `ts/`) before considering it done.
+- TypeScript is canonical. If the runtimes disagree, the TS behaviour is
+  the expected value — unless a port has exposed a genuine TS defect, in
+  which case fix TS first and pin the corrected behaviour here.
+- A new fixture must pass in ALL THREE runtimes: run `npm test` (from
+  `ts/`), `go test ./...` (from `go/`) and `cargo test --all-targets`
+  (from `rs/`) before considering it done.
 
-## Harness rules (both runtimes)
+## Harness rules (all runtimes)
 
 These are the ways a suite can pass while measuring nothing. Each has bitten
 this repo; do not reintroduce them.

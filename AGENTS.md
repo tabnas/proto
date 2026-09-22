@@ -152,8 +152,12 @@ What "correct" means here, in order of authority:
    and `rs/tests/parity_test.rs` — a row green in one runtime and red in
    another is a failure, not a discrepancy.
 2. **The protobuf conformance contracts hold in every runtime.** The
-   vendored protoc corpus (`test/protobuf-suite/`) runs with nothing
-   skipped; the measured figures under "Conformance" below are a claim
+   vendored protoc corpus (`test/protobuf-suite/`) runs in the same lanes
+   in all three: `valid` against protoc's goldens, `accept-only`, and the
+   lexer-leniency probes. Two parts of the corpus are outside the gate,
+   both deliberately and both described under "Conformance" below: the 11
+   `valid` cases declaring a protoc-internal edition, and the whole
+   `invalid` lane. The measured figures under "Conformance" are a claim
    about this package — changing behaviour means re-measuring and updating
    them in the same commit, not later.
 3. **The generated grammars match their source.** `ts/src/grammar.ts`,
@@ -516,11 +520,15 @@ Everything else that diverges from `protoc` is a bug.
 
 The bar: **protoc 35.1's own parser test corpus**, extracted from upstream
 `src/google/protobuf/compiler/parser_unittest.cc` and vendored under
-`test/protobuf-suite/` (see its AGENTS.md). `ts/test/protobuf-conformance.test.ts`
-and `go/protobuf_conformance_test.go` each run it against protoc's goldens,
-with the same contracts and the same normalisation — nothing is skipped, and
-the corpus is in-repo so it needs no network. Counts below are per runtime and
-were re-measured 2026-08-09; both runtimes give the same answer:
+`test/protobuf-suite/` (see its AGENTS.md). `ts/test/protobuf-conformance.test.ts`,
+`go/protobuf_conformance_test.go` and `rs/tests/protobuf_conformance_test.rs`
+each run it against protoc's goldens, with the same contracts and the same
+normalisation, and the corpus is in-repo so it needs no network. What the
+three lanes below say about coverage holds identically in all three runtimes,
+the two exemptions included: the 11 `valid` cases on a protoc-internal edition
+are excluded, and the `invalid` lane is not a gate. Counts below are per
+runtime and were re-measured 2026-08-09; all three runtimes give the same
+answer:
 
 - `valid` (82 cases): source + the descriptor protoc's parser produces.
   **71/71 in-scope pass.** The 11 excluded declare protoc-internal editions
