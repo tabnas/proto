@@ -114,6 +114,44 @@ with the reason written at the point it appears:
   crate's are Unicode-aware. None of them is handed to a regexp engine;
   each is written out, with the pattern it replaces quoted above it.
 
+## Reading `src` is allowed; DECIDING from it is not
+
+`src` is the node's tokens run together, and the walk reads values out of
+it wherever abnf inlined the rule that would have carried them: the
+leading field type, the first `reserved` range, an option name inside
+`[...]`. That is reading a value the tree does not hold, and it is safe,
+because whole-word tokens make the boundaries unambiguous.
+
+What is NOT safe is answering a STRUCTURAL question by searching that
+text, and issue #31 is the class. A search finds a copy, not the copy:
+`(stream` matched the start of `streaming.Request`, `=-` inside an
+option took an enum value negative, `kw` found the `m` of `message`
+rather than the message named `m`. Each had a node or a gap that held
+the answer already.
+
+Use `nrule`, `child`, `children`, `child_rules`, `kw` and `gaps`. `gaps`
+is the one to reach for when the answer is a bare terminal the grammar
+never turns into a node: it gives the text between two adjacent rule
+children, scanning from the end so each child is bounded by the child
+after it.
+
+What still reads `src`, and why each one stays:
+
+- `ranges` and `reserved_names` parse a statement's text, because the
+  leading `range` and a single-item name list are inlined and there is
+  no node at all. Both consume the whole text rather than searching it.
+- `option_name_of` falls back to the text when `optionName` was inlined,
+  anchored at the END on `=<constant>`; anchoring at the start would
+  find the `1` of `file_opt1`.
+- `detect_version` reads the `syntax` / `edition` declaration out of the
+  source before any walk, which is the point of it.
+- The dispatch tests (`kw(node).starts_with("message")` and the rest)
+  read the KEYWORD, which is a gap and not a search. They were unsound
+  only while `kw` itself searched forward.
+
+`build_descriptor.rs` has no other `contains`, `find` or index over
+flattened source deciding a structural question, as of 2026-09-22.
+
 ## Untrusted input, and the one bound this port adds
 
 Everything in the repository guide applies. The addition is a NESTING
