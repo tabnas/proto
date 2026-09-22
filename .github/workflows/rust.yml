@@ -89,12 +89,12 @@ jobs:
       # this fails on a change that needs a newer compiler instead of
       # passing here and breaking for anyone honouring rust-version.
       #
-      # NOTE for promotion: the other actions here are SHA-pinned, this
-      # one is not. It matches the form tabnas/parser's own staged
-      # ci/workflows/rust.yml uses; pin it to a SHA at promotion time if
-      # the org prefers that uniformly.
+      # Pinned by digest like every other action here. `@stable` is a
+      # BRANCH in this action's repo, not a release tag, so it moved under
+      # the workflow; the toolchain it installs is still chosen by the
+      # `toolchain:` input below, which the pin does not affect.
       - name: Set up Rust MSRV
-        uses: dtolnay/rust-toolchain@stable
+        uses: dtolnay/rust-toolchain@6bed0761d98439e5a578e2877258200ad565ba87  # stable @ 2026-09-22
         with:
           toolchain: '1.85'
           components: rustfmt, clippy
