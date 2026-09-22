@@ -88,16 +88,20 @@ jobs:
       # Pinned to the MSRV in rs/Cargo.toml rather than to `stable`, so
       # this fails on a change that needs a newer compiler instead of
       # passing here and breaking for anyone honouring rust-version.
+      # rustup, NOT dtolnay/rust-toolchain: these repos allow only
+      # GitHub-owned and verified-creator actions (allowed_actions:
+      # selected, patterns_allowed: []), so that action is refused before
+      # any job starts -- the run reports startup_failure, which reads as
+      # a broken workflow file rather than a blocked action. The runners
+      # ship rustup, so the action was buying nothing here.
       #
-      # Pinned by digest like every other action here. `@stable` is a
-      # BRANCH in this action's repo, not a release tag, so it moved under
-      # the workflow; the toolchain it installs is still chosen by the
-      # `toolchain:` input below, which the pin does not affect.
+      # `default` is what makes the MSRV the toolchain the gate runs
+      # under; installing it alone leaves cargo on the runner's
+      # pre-installed stable.
       - name: Set up Rust MSRV
-        uses: dtolnay/rust-toolchain@6bed0761d98439e5a578e2877258200ad565ba87  # stable @ 2026-09-22
-        with:
-          toolchain: '1.85'
-          components: rustfmt, clippy
+        run: |
+          rustup toolchain install 1.85 --profile minimal --component rustfmt,clippy
+          rustup default 1.85
 
       # Everything lives in the script so this file and a contributor's
       # local run cannot say different things.
