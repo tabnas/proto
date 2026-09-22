@@ -84,6 +84,28 @@ separately, against the goldens, by
 matches protoc, and Go matches TypeScript. Regenerate it rather than
 hand-editing, and only after the conformance test is green.
 
+## What the corpus does not reach
+
+The fixtures and the vendored protoc corpus together were green on every
+row while five descriptor details were wrong, so the count of rows is
+not a measure of coverage. What they missed, and what the rows added in
+2026-09 cover, is one shape: a NAME that collides with the grammar's own
+text.
+
+- A declared name that occurs inside its own leading keyword (`message
+  m`, `oneof o`, `enum n`, `package e`). The whole declaration was
+  dropped, with no error.
+- An enum value name ending in its own number (`A1 = 1`), or beginning
+  with a statement keyword (`optionX = 1`).
+- A type name beginning with a modifier (`streaming.Request` after
+  `rpc`), or spelt like a scalar behind a leading dot (`.int32`).
+- A declaration kind whose options nobody looked for (`oneof`).
+
+Every `.proto` protoc's own corpus writes uses names chosen to read
+well, so none of these appear in it. When adding a fixture, prefer a
+name that collides with the syntax around it over one that reads
+naturally: the second kind is already covered many times over.
+
 ## Rules
 
 - Prefer adding a fixture here over a one-off in-language assertion when a
