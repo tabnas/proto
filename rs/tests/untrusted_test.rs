@@ -284,7 +284,7 @@ fn the_reusable_path_carries_the_same_bound() {
 
 /// The check on its own, for a caller that wants the CST.
 #[test]
-fn preflight_refuses_at_the_cap_and_accepts_under_it() {
+fn preflight_accepts_at_the_cap_and_refuses_past_it() {
     preflight(&nested(MAX_NESTING_DEPTH - 1)).expect("one under the cap");
     preflight(&nested(MAX_NESTING_DEPTH)).expect("exactly the cap");
 
