@@ -628,10 +628,13 @@ fn gaps_hold_the_terminals_between_two_rule_children() {
     // Every gap and every child's own text, concatenated in order, is the
     // node's whole source: nothing is skipped and nothing is counted
     // twice.
-    let rebuilt: String = gaps(values[0])
+    let rebuilt = gaps(values[0])
         .into_iter()
         .zip(child_rules(values[0]))
-        .map(|(gap, kid)| format!("{gap}{}", nsrc(kid)))
-        .collect();
+        .fold(String::new(), |mut acc, (gap, kid)| {
+            acc.push_str(gap);
+            acc.push_str(nsrc(kid));
+            acc
+        });
     assert_eq!(rebuilt, "A1=1[(x)=-2]");
 }

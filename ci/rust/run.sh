@@ -62,6 +62,13 @@ if [[ -n "$MSRV" ]]; then
   fi
   if [[ -n "$TOOLCHAIN" ]]; then
     CARGO=(cargo "+$TOOLCHAIN")
+    # Say which toolchain ran, POSITIVELY, not only which one is missing.
+    # The absence warning below is useless for telling a green run from a
+    # run that never happened here: a contributor who reaches for plain
+    # `cargo clippy` instead of this script gets the newer toolchain,
+    # sees green, and reports this gate as passing. Printing the selected
+    # toolchain makes the two runs tell themselves apart in the log.
+    echo "using MSRV toolchain $TOOLCHAIN" >&2
   else
     echo "warning: MSRV $MSRV is not installed; running on $(rustc --version 2>/dev/null)" >&2
     echo "         install it with: rustup toolchain install $MSRV" >&2
