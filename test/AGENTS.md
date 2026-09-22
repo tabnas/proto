@@ -30,6 +30,13 @@ order do not affect the comparison.
 - Go: `go/parity_test.go` — `support.Runner{...}.Dir(t, dir)`.
 - Rust: `rs/tests/parity_test.rs` — `Runner::new_with_row(...).dir(...)`.
 
+All three compare a result after a JSON round trip, which is what the
+table above means by "absent fields and field order do not affect the
+comparison": Go passes `jsonFlatten`, Rust `to_value`, TypeScript a
+`normalize` that stringifies and reparses. A runner missing that step
+compares a live object against a cell, so a `NaN` field number never
+equals the `null` the cell records.
+
 All three are a dozen lines holding only what is specific to proto: how
 to build the parser for a row's options. Everything else — finding
 `test/spec`, reading the file, decoding escapes, the `ERROR:` contract,
@@ -53,12 +60,12 @@ is expected to disagree with one of them.
 
 A fixture fails when behaviour REGRESSES. The register fails BOTH ways:
 when a port is repaired to agree with the others, the row still claims
-they differ, so the suite goes red and names the row to delete. Today
-`rs/tests/divergent_test.rs` runs it, reading the `rust` column through
-`tabnas_support::Register`; the `ts` and `go` cells are measured and
-recorded, and adding a runner in those two runtimes is how they stop
-being a record and start being a test. The prose and the measured tables
-live in [`../DIVERGENCE.md`](../DIVERGENCE.md).
+they differ, so the suite goes red and names the row to delete. All three
+columns are executed: `ts/test/divergent.test.ts` reads the `ts` column,
+`go/divergent_test.go` the `go` column and `rs/tests/divergent_test.rs`
+the `rust` column, each through its runtime's half of
+`tabnas_support::Register`. The prose lives in
+[`../DIVERGENCE.md`](../DIVERGENCE.md).
 
 ## The files
 

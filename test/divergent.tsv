@@ -16,12 +16,12 @@ input	ts	go	rust	why
 # own repair with nothing red, which is how the 2026-08 fleet audit found
 # 29 recorded claims contradicted by execution.
 #
-# Run by rs/tests/divergent_test.rs, which reads the `rust` column through
-# tabnas_support::Register. The `ts` and `go` cells were MEASURED on
-# 2026-09-21 against this checkout (ts/src via Node 22 type stripping, and
-# go/ via `go test`), not copied from prose. TypeScript and Go have no
-# runner for this file yet; adding one is how those two columns stop being
-# a record and start being a test.
+# Every column is EXECUTED: ts/test/divergent.test.ts reads `ts`,
+# go/divergent_test.go reads `go` and rs/tests/divergent_test.rs reads
+# `rust`, each through its runtime's half of the shared Register. Until
+# 2026-09-22 only `rust` ran and the other two were measured by hand; a
+# recorded measurement goes stale the moment a port moves, and nothing
+# says so.
 #
 # --- the TypeScript prototype-chain defect -------------------------------
 # `SCALAR_TYPES[bare]` is a bare object literal indexed by text from the

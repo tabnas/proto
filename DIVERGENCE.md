@@ -7,15 +7,20 @@ the shared fixtures in [`test/spec`](test/spec) plus protoc's own parser
 corpus in [`test/protobuf-suite`](test/protobuf-suite) hold all three to
 the same answers everywhere else.
 
-**Every entry here is MEASURED and EXECUTED.** The measurements were taken
-on 2026-09-21 against this checkout: TypeScript through Node 22 type
-stripping over `ts/src`, Go through `go test`, Rust through
-`cargo test`. The rows live in [`test/divergent.tsv`](test/divergent.tsv)
-and run from `rs/tests/divergent_test.rs` through
-`tabnas_support::Register`, which fails when a port stops doing what a row
+**Every entry here is MEASURED and EXECUTED, in every runtime.** The rows
+live in [`test/divergent.tsv`](test/divergent.tsv), one cell per runtime,
+and all three cells now run: `ts/test/divergent.test.ts` reads the `ts`
+column, `go/divergent_test.go` the `go` column and
+`rs/tests/divergent_test.rs` the `rust` column, each through its half of
+the shared `Register`. It fails when a port stops doing what its cell
 says AND when a divergence is repaired, so a row cannot outlive the thing
 it records. A divergence a fixture row cannot express is pinned by a named
 Rust test instead, and says so.
+
+Until 2026-09-22 only the Rust column ran, and the other two were
+measured by hand and written down. A recorded measurement is prose with
+numbers in it: it goes stale the moment a port moves, and nothing says
+so. All three columns are executed now, which is what ADR-14 asks for.
 
 There is no prose-only claim in this file, by construction.
 
