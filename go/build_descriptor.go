@@ -74,6 +74,64 @@ func child(n map[string]any, rule string) map[string]any {
 	return nil
 }
 
+// gaps returns the source text immediately ahead of each rule child, one
+// entry per member of childRules(n) and in the same order.
+//
+// src is the node's tokens run together, so every child's text is a
+// contiguous slice of it — but SEARCHING for that text can land on the wrong
+// copy. In the enum element `A1=1;` the fieldNumber node's `1` also occurs
+// inside the name ahead of it, and in `rpc M (stream A)` the `stream`
+// modifier is a bare terminal that never becomes a node. The scan therefore
+// runs from the END: each child is bounded above by the child after it, so
+// the last occurrence below that bound is the child itself. That leaves the
+// text between two children exactly, which is where the grammar's own
+// terminals (`=`, `-`, `(`, `stream`, `returns`) are, and reading one of
+// those is a structural question answered from the tree rather than a
+// pattern matched against the whole statement.
+func gaps(n map[string]any) []string {
+	kids := childRules(n)
+	src := nsrc(n)
+	at := make([]int, len(kids))
+	hi := len(src)
+	for i := len(kids) - 1; i >= 0; i-- {
+		text := nsrc(kids[i])
+		found := -1
+		if text != "" && len(text) <= hi {
+			found = strings.LastIndex(src[:hi], text)
+		}
+		if found < 0 {
+			found = hi
+		}
+		at[i] = found
+		hi = found
+	}
+	out := make([]string, len(kids))
+	end := 0
+	for i, k := range kids {
+		start := at[i]
+		if start < end {
+			start = end
+		}
+		out[i] = src[end:start]
+		end = start + len(nsrc(k))
+	}
+	return out
+}
+
+// gapsBefore returns the gaps ahead of the children carrying this rule name,
+// in source order.
+func gapsBefore(n map[string]any, rule string) []string {
+	kids := childRules(n)
+	g := gaps(n)
+	var out []string
+	for i, k := range kids {
+		if nrule(k) == rule {
+			out = append(out, g[i])
+		}
+	}
+	return out
+}
+
 // ---- small helpers --------------------------------------------------------
 
 var (
@@ -304,9 +362,14 @@ func fieldLabel(labelNode map[string]any, version ProtoVersion) (label string, p
 }
 
 func fieldTypeName(typeText string) (typ, typeName string) {
-	bare := strings.TrimPrefix(typeText, ".")
-	if scalar, ok := ScalarTypes[bare]; ok {
-		return scalar, ""
+	// A LEADING DOT makes the reference fully qualified, so `.int32` names a
+	// type called `int32` at the root and is never the scalar `int32`. protoc
+	// accepts `message int32 {}` and records `.int32` as the field's type
+	// name; only an unqualified spelling may reach the scalar table.
+	if !strings.HasPrefix(typeText, ".") {
+		if scalar, ok := ScalarTypes[typeText]; ok {
+			return scalar, ""
+		}
 	}
 	// A named reference: could be a message OR an enum, and telling them apart
 	// needs symbol resolution this parser deliberately does not do. protoc
@@ -468,14 +531,24 @@ func buildEnum(n map[string]any) EnumDescriptorProto {
 		if nrule(el) != "enumElement" {
 			continue
 		}
-		k := kw(el)
-		if strings.HasPrefix(k, "reserved") {
+		// An enum body is the one place where the statement kind CANNOT come
+		// from the leading keyword: enumField inlines its name, so kw on
+		// `optionX = 1;` is `optionX=` and a prefix test reads it as an option
+		// statement. The first child's rule name says what the statement is
+		// without guessing — optionName for an option, ranges or fieldNames
+		// for a `reserved`, fieldNumber for a value.
+		kids := childRules(el)
+		if len(kids) == 0 {
+			continue
+		}
+		first := kids[0]
+		switch nrule(first) {
+		case "ranges", "fieldNames":
 			// Enum reserved ranges are INCLUSIVE and span the whole int32 space.
 			addReserved(el, &e.ReservedRange, &e.ReservedName,
 				rangeOpts{exclusive: false, max: MaxEnumNumber})
 			continue
-		}
-		if strings.HasPrefix(k, "option") {
+		case "optionName":
 			if e.Options == nil {
 				e.Options = map[string]OptionValue{}
 			}
@@ -483,20 +556,29 @@ func buildEnum(n map[string]any) EnumDescriptorProto {
 				e.Options[kk] = vv
 			}
 			continue
+		case "fieldNumber":
+		default:
+			continue
 		}
-		// enumField: ident "=" ["-"] fieldNumber  -> name is the kw before "="
-		name := k
+		// enumField: ident "=" ["-"] fieldNumber. Both the name and the sign
+		// are in the text ahead of the number node, and nowhere else: reading
+		// the whole element instead takes an OPTION's minus sign as the
+		// value's, so `A = 1 [(x) = -2]` became -1.
+		gap := ""
+		if g := gapsBefore(el, "fieldNumber"); len(g) > 0 {
+			gap = g[0]
+		}
+		name := gap
 		if i := strings.Index(name, "="); i >= 0 {
 			name = name[:i]
 		}
-		num := child(el, "fieldNumber")
-		if name != "" && num != nil {
-			n := toInt(nsrc(num))
-			if strings.Contains(stripWS(nsrc(el)), "=-") {
-				n = -n
+		if name != "" {
+			num := toInt(nsrc(first))
+			if strings.HasSuffix(gap, "-") {
+				num = -num
 			}
 			e.Value = append(e.Value, EnumValueDescriptorProto{
-				Name: name, Number: n, Options: plainOptions(child(el, "fieldOptions")),
+				Name: name, Number: num, Options: plainOptions(child(el, "fieldOptions")),
 			})
 		}
 	}
@@ -731,12 +813,25 @@ func addVisible(el map[string]any, k string, version ProtoVersion,
 func addOneof(el map[string]any, version ProtoVersion, msg *DescriptorProto) {
 	name := srcOr(child(el, "ident"))
 	index := len(msg.OneofDecl)
+	// protoc gives a oneof its own OneofOptions, and every other declaration
+	// kind here keeps its option statements, so the oneof's are recorded
+	// rather than dropped.
 	msg.OneofDecl = append(msg.OneofDecl, OneofDescriptorProto{Name: name})
+	// Held aside rather than written through a pointer into OneofDecl: the
+	// loop below builds group members, which append to the message, and a
+	// re-allocated slice would leave that pointer addressing the old array.
+	var declOptions map[string]OptionValue
 	for _, of := range childRules(el) {
 		if nrule(of) != "oneofElement" {
 			continue
 		}
 		if strings.HasPrefix(kw(of), "option") {
+			if declOptions == nil {
+				declOptions = map[string]OptionValue{}
+			}
+			for kk, vv := range optionFrom(of) {
+				declOptions[kk] = vv
+			}
 			continue
 		}
 		if nsrc(of) == ";" {
@@ -753,6 +848,7 @@ func addOneof(el map[string]any, version ProtoVersion, msg *DescriptorProto) {
 		f.Proto3Optional = false // explicit oneof members aren't proto3-optional
 		msg.Field = append(msg.Field, f)
 	}
+	msg.OneofDecl[index].Options = declOptions
 }
 
 func addExtend(el map[string]any, version ProtoVersion, into *[]FieldDescriptorProto) {
@@ -816,22 +912,21 @@ func buildRpc(el map[string]any) MethodDescriptorProto {
 			types = append(types, k)
 		}
 	}
-	flat := stripWS(nsrc(el))
 	m := MethodDescriptorProto{
 		Name:       srcAt(ids, 0),
 		InputType:  srcAt(types, 0),
 		OutputType: srcAt(types, 1),
 	}
-	// Split request vs response on the `returns` keyword so a `(stream …)` is
-	// attributed to the right side even when in/out types are identical.
-	request, response := flat, ""
-	if ri := strings.Index(flat, "returns("); ri >= 0 {
-		request, response = flat[:ri], flat[ri:]
-	}
-	if strings.Contains(request, "(stream") {
+	// `stream` is a bare terminal, so it never becomes a node — but it sits
+	// immediately ahead of the type it modifies, which is exactly what the gap
+	// holds. Searching the statement for `(stream` instead marks an ordinary
+	// type whose name merely BEGINS with those letters, so
+	// `rpc M (streaming.Request)` came back client-streaming.
+	modifiers := gapsBefore(el, "messageType")
+	if len(modifiers) > 0 && strings.HasSuffix(modifiers[0], "stream") {
 		m.ClientStreaming = true
 	}
-	if strings.Contains(response, "(stream") {
+	if len(modifiers) > 1 && strings.HasSuffix(modifiers[1], "stream") {
 		m.ServerStreaming = true
 	}
 	for _, o := range childRules(el) {
