@@ -58,12 +58,16 @@ pub fn kw(node: &Value) -> &str {
     let Some(first) = kids.first() else {
         return src;
     };
-    // `indexOf` returning -1 and returning 0 are the same answer here,
-    // as they are in the canonical `i <= 0 ? '' : ...`.
-    match src.find(nsrc(first)) {
-        None | Some(0) => "",
-        Some(at) => &src[..at],
+    if nsrc(first).is_empty() {
+        return "";
     }
+    // Located by [`gaps`], not by a forward search for the child's text.
+    // A forward search finds the FIRST copy, which for `message m {}` is
+    // the `m` of `message` itself: `kw` came back empty and the statement
+    // was dispatched as neither a message nor anything else, so the
+    // declaration vanished from the descriptor. `oneof o`, `enum n`,
+    // `service e` and `package e` went the same way.
+    gaps(node)[0]
 }
 
 /// The first rule child with this rule name.

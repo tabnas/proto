@@ -52,16 +52,22 @@ func childRules(n map[string]any) []map[string]any {
 // kw is the keyword(s) consumed before this node's first child — the part of
 // src ahead of the first child's src. For `message Foo {…}` the first child
 // is `Foo`, so kw is `message`; for an unlabelled field it is "".
+//
+// The first child is located by gaps, not by a forward search for its text. A
+// forward search finds the FIRST copy, which for `message m {}` is the `m` of
+// `message` itself: kw came back "" and the statement was dispatched as
+// neither a message nor anything else, so the declaration vanished from the
+// descriptor. `oneof o`, `enum n`, `service e` and `package e` went the same
+// way.
 func kw(n map[string]any) string {
 	k := childRules(n)
 	if len(k) == 0 {
 		return nsrc(n)
 	}
-	i := strings.Index(nsrc(n), nsrc(k[0]))
-	if i <= 0 {
+	if nsrc(k[0]) == "" {
 		return ""
 	}
-	return nsrc(n)[:i]
+	return gaps(n)[0]
 }
 
 // child finds the first rule child with the given rule name (nil if absent).

@@ -28,11 +28,18 @@ function R(n: Node | undefined | null): Node[] {
 // The keyword(s) consumed before this node's first child — the part of
 // `src` ahead of the first child's `src`. For `message Foo {…}` the first
 // child is `Foo`, so `kw` is `message`; for an unlabelled field it is ``.
+//
+// The first child is located by `gaps`, not by a forward search for its
+// text. A forward search finds the FIRST copy, which for `message m {}`
+// is the `m` of `message` itself: `kw` came back `` and the statement
+// was dispatched as neither a message nor anything else, so the
+// declaration vanished from the descriptor. `oneof o`, `enum n` and
+// `service e` went the same way.
 function kw(n: Node): string {
   const k = R(n)
   if (0 === k.length) return n.src
-  const i = n.src.indexOf(k[0].src)
-  return i <= 0 ? '' : n.src.slice(0, i)
+  if ('' === k[0].src) return ''
+  return gaps(n)[0]
 }
 
 function child(n: Node, rule: string): Node | undefined {
