@@ -57,8 +57,16 @@ Same order of authority as the repository guide, with one addition.
    same loader `ts/test/parity.test.ts` and `go/parity_test.go` use, so
    the three cannot drift on what a row means.
 2. **The protoc corpus passes**, `tests/protobuf_conformance_test.rs`,
-   with nothing skipped and the same contracts and normalisation the
-   other two runners apply.
+   with the same lanes, contracts and normalisation the other two
+   runners apply: `valid` (71 in-scope cases, compared against protoc's
+   goldens), `accept-only` (50, parse without failing) and the
+   `leniency` probes. Two things are NOT run, in every runtime alike and
+   for the reasons `../AGENTS.md` gives: the 11 `valid` cases declaring
+   a protoc-internal edition, with the exclusion set asserted to be
+   exactly those, and the whole `invalid` lane, because `common.abnf` is
+   a permissive union and rejection is not part of the contract. Both
+   counts are ratcheted in the test, so a corpus that shrinks cannot
+   pass by measuring less.
 3. **The generated grammar matches its source.** `src/grammar.rs` is
    written by `../ts/embed-grammar.js`, guarded on `rs/src` existing.
    After editing any `.abnf` file run `npm run embed` from `ts/` AND

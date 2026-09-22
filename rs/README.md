@@ -287,6 +287,24 @@ runtimes to the rest.
   default instance behind a `OnceLock`, where the canonical `parse`
   builds a fresh engine per call. Parsing reads instance state and builds
   a fresh context, so the shared instance is safe for concurrent use.
+- **The exported surface is a superset.** Everything `@tabnas/proto`
+  exports has a counterpart here, under the Rust spelling: `Proto` is
+  `plugin()` and `proto()`, `toDescriptor` is `to_descriptor`, and the
+  descriptor types, `SCALAR_TYPES` and the three `MAX_` constants carry
+  their own names. The additions exist because a Rust caller cannot
+  reach for a JavaScript object: `engine()` and `make()` build an
+  instance with the rewind history the union grammar needs,
+  `parse_with` and `preflight` carry the nesting bound onto a caller's
+  own instance, `build_file` takes an already-resolved version,
+  `GRAMMAR_TEXT`, `PLUGIN_NAME` and `REWIND_HISTORY` name what the
+  canonical plugin sets inline, and `nrule`, `nsrc`, `kw`, `child`,
+  `children`, `child_rules`, `gaps` and `gaps_before` are the CST
+  accessors `ts/src/build-descriptor.ts` keeps to itself. None of them
+  changes a parse result.
+- **There is no command line tool**, in either runtime.
+  `@tabnas/proto` declares no `bin`, so neither does this crate; the
+  `tabnas` CLI in [`@tabnas/mcp`](https://github.com/tabnas/mcp) is
+  where a command line lives.
 
 ## Build and test
 
@@ -302,12 +320,19 @@ including formatting, clippy and the lockfile check, run
 `ci/rust/run.sh`.
 
 The suite runs every shared `../test/spec/*.tsv` fixture through the
-shared runner, the whole of protoc's vendored parser corpus with nothing
-skipped, and the divergence register. Beside them are the in-language
-tests: the descriptor shape, version detection and reconciliation, the
-exported helpers, the version sites, the embedded grammar against the
-files on disk and against both other runtimes' copies, and the untrusted
-input boundaries.
+shared runner, protoc's vendored parser corpus, and this crate's column
+of the divergence register. The corpus runs in the same lanes the other
+two runtimes run it in: `valid` against protoc's own goldens,
+`accept-only` for source protoc's parser accepts without publishing one,
+and the lexer-leniency probes. The `invalid` lane is not a gate in any
+runtime, because the grammar is a permissive union and rejecting
+version-illegal input is deliberately not part of the contract, and 11
+`valid` cases declaring a protoc-internal edition are excluded, with the
+exclusion set asserted to be exactly those. Beside them are the
+in-language tests: the descriptor shape, version detection and
+reconciliation, the exported helpers, the CST accessors, the version
+sites, the embedded grammar against the files on disk and against both
+other runtimes' copies, and the untrusted input boundaries.
 
 Every example in this file is compiled and run as a doctest, so a stale
 one fails the build.

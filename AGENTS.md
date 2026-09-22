@@ -473,6 +473,12 @@ name-resolution pass. Specifically:
 - A named field type cannot be told apart from an enum without resolution,
   so `type` is left **unset** and only `typeName` is recorded, as written.
   Only scalars (and `group`, which is syntactically known) get a `type`.
+  A **leading dot makes the reference fully qualified**, so `.int32` names
+  a type at the root and is a `typeName`, never the scalar `int32`; protoc
+  accepts `message int32 {}` and records it the same way. The rule holds
+  for a map key and value too.
+- A `oneof` carries its own option statements, in `oneofDecl[i].options`,
+  as protoc's `OneofOptions` does.
 - `map<K,V>` expands to a repeated field + a synthesised `…Entry` nested
   message with `options.mapEntry = true`; the entry name is the field name
   CamelCased with `_` removed (`map_field` -> `MapFieldEntry`), and
