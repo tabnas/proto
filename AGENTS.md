@@ -161,11 +161,13 @@ What "correct" means here, in order of authority:
    TypeScript and Rust copies) AND `make generate` (`go generate ./...` in
    `go/`) — never edit the generated files by hand, and regenerate every
    side in the same change. `rs/tests/embed_test.rs` compares all three.
-4. **The version constants agree** — `ts/package.json` `"version"`,
-   `VERSION` in `ts/src/proto.ts`, `const VERSION` in `go/proto.go`, and
-   the `version` / `pub const VERSION` pair in `rs/`.
-   `ts/test/version.test.ts`, `go/version_test.go` and
-   `rs/tests/version_test.rs` fail the build if they drift.
+4. **The version constants agree** — FIVE sites: `ts/package.json`
+   `"version"`, `VERSION` in `ts/src/proto.ts`, `const VERSION` in
+   `go/proto.go`, `version` in `rs/Cargo.toml` and `pub const VERSION` in
+   `rs/src/lib.rs`. `ts/test/version.test.ts`, `go/version_test.go` and
+   `rs/tests/version_test.rs` fail the build if they drift. The release
+   step below carries the same list, per site and per check; keep the two
+   in step.
 
 ## Releasing
 
@@ -190,9 +192,30 @@ accepts the publish. Pushing a tag by hand is the orchestrator's path
 
 The steps, in order:
 
-1. Bump all **three** version sites together — `ts/package.json`, `VERSION`
-   in `ts/src/proto.ts` and `const VERSION` in `go/proto.go`. Drift is
-   caught by `ts/test/version.test.ts` and `go/version_test.go`.
+1. Bump all **five** version sites together, and know which check catches
+   which:
+
+   | Site | Caught by |
+   |---|---|
+   | `ts/package.json` `"version"` | `ts/test/version.test.ts` |
+   | `VERSION` in `ts/src/proto.ts` | `ts/test/version.test.ts` |
+   | `const VERSION` in `go/proto.go` | `go/version_test.go` |
+   | `version` in `rs/Cargo.toml` | `rs/tests/version_test.rs` |
+   | `pub const VERSION` in `rs/src/lib.rs` | `rs/tests/version_test.rs` |
+
+   The Rust pair joined the invariant with the port, and this step named
+   only the first three for a while: following it left both Rust values
+   stale and turned `rs/tests/version_test.rs` red.
+
+   **The Rust check is not automatic yet.** `ci/workflows/rust.yml` is
+   staged under ADR-8 and runs nowhere until a maintainer promotes it, so
+   nothing on a pull request tells you the Rust sites drifted. Run
+   `ci/rust/run.sh` yourself on the bump commit; the TypeScript and Go
+   checks run in `ci.yml` as usual.
+
+   Bumping `rs/Cargo.toml` also moves `rs/Cargo.lock`'s entry for this
+   crate, which `ci/rust/run.sh` compares before it runs anything. Run
+   `cargo update --workspace` in `rs/` and commit the lock with the bump.
 2. Verify against the **published** dependencies rather than your checkout.
    The release runner installs fresh from the registry; a working tree
    usually does not, so reproduce that before believing anything:
@@ -388,10 +411,11 @@ either:
 - `publish-ts` runs a local `npm publish`, which goes out over a token and
   bypasses the OIDC trusted publishing the workflow uses.
 - `publish-go V=x.y.z` breaks the version invariant: it `sed`s and stages
-  **only** `go/proto.go`, leaving `ts/package.json` and `VERSION` in
-  `ts/src/proto.ts` on the previous version — the exact state the version
-  tests exist to reject. Its `test-go` prerequisite also runs *before* the
-  `sed`, so what it verifies is not what it tags.
+  **only** `go/proto.go`, leaving `ts/package.json`, `VERSION` in
+  `ts/src/proto.ts` and both Rust sites on the previous version — the
+  exact state the version tests exist to reject. Its `test-go`
+  prerequisite also runs *before* the `sed`, so what it verifies is not
+  what it tags.
 
 They stay in the Makefile because removing them is a separate change.
 

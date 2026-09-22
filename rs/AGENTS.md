@@ -64,10 +64,14 @@ Same order of authority as the repository guide, with one addition.
    After editing any `.abnf` file run `npm run embed` from `ts/` AND
    `make generate` for Go. `tests/embed_test.rs` compares the Rust copy
    with the files on disk and with both other runtimes' embeds.
-4. **The four version sites agree**: `ts/package.json`, `VERSION` in
-   `ts/src/proto.ts`, `const VERSION` in `go/proto.go` and the
-   `Cargo.toml` / `pub const VERSION` pair here.
-   `tests/version_test.rs` fails the build on drift.
+4. **The five version sites agree**: `ts/package.json`, `VERSION` in
+   `ts/src/proto.ts`, `const VERSION` in `go/proto.go`, `version` in
+   `Cargo.toml` here and `pub const VERSION` in `src/lib.rs`.
+   `tests/version_test.rs` fails the build on drift, and the release
+   procedure in `../AGENTS.md` names the same five with the check that
+   catches each. Bumping `Cargo.toml` moves `Cargo.lock`'s entry for
+   this crate too, which `../ci/rust/run.sh` compares before it runs
+   anything.
 5. **Every divergence is recorded AND executed.**
    `../DIVERGENCE.md` carries the prose and the measured tables;
    `../test/divergent.tsv` carries the rows, and
