@@ -22,7 +22,7 @@ use crate::descriptor::{
 use crate::detect_version::{edition_enum, is_edition, ProtoVersion};
 use crate::error::ProtoError;
 use crate::jsnum::{is_js_whitespace, js_number};
-use crate::node::{child, child_rules, children, kw, nrule, nsrc, src_or};
+use crate::node::{child, child_rules, children, gaps_before, kw, nrule, nsrc, src_or};
 
 /// How deep a document may nest before the walk refuses it.
 ///
@@ -310,9 +310,14 @@ fn field_label(label: Option<&Value>, version: ProtoVersion) -> (FieldLabel, boo
 }
 
 fn field_type_name(type_text: &str) -> (Option<FieldType>, Option<String>) {
-    let bare = type_text.strip_prefix('.').unwrap_or(type_text);
-    if let Some(scalar) = scalar_type(bare) {
-        return (Some(scalar), None);
+    // A LEADING DOT makes the reference fully qualified, so `.int32` names
+    // a type called `int32` at the root and is never the scalar `int32`.
+    // protoc accepts `message int32 {}` and records `.int32` as the field's
+    // type name; only an unqualified spelling may reach the scalar table.
+    if !type_text.starts_with('.') {
+        if let Some(scalar) = scalar_type(type_text) {
+            return (Some(scalar), None);
+        }
     }
     // A named reference: could be a message OR an enum, and telling them
     // apart needs symbol resolution this parser deliberately does not do.
@@ -489,39 +494,55 @@ fn build_map_field(node: &Value, into: &mut DescriptorProto) -> FieldDescriptorP
 fn build_enum(node: &Value) -> EnumDescriptorProto {
     let mut out = EnumDescriptorProto::new(src_or(child(node, "ident")));
     for element in children(node, "enumElement") {
-        let keyword = kw(element);
-        if keyword.starts_with("reserved") {
-            // Enum reserved ranges are INCLUSIVE and span the whole int32
-            // space.
-            add_reserved(
-                element,
-                &mut out.reserved_range,
-                &mut out.reserved_name,
-                RangeOpts {
-                    exclusive: false,
-                    max: MAX_ENUM_NUMBER,
-                },
-            );
-            continue;
-        }
-        if keyword.starts_with("option") {
-            merge_option(&mut out.options, element);
-            continue;
-        }
-        // `enumField: ident "=" ["-"] fieldNumber`, so the name is the
-        // keyword before the `=`.
-        let name = strip_from_equals(keyword);
-        let Some(number) = child(element, "fieldNumber") else {
+        // An enum body is the one place where the statement kind CANNOT
+        // come from the leading keyword: `enumField` inlines its name, so
+        // `kw` on `optionX = 1;` is `optionX=` and a prefix test reads it
+        // as an option statement. The first child's rule name says what
+        // the statement is without guessing: `optionName` for an option,
+        // `ranges` or `fieldNames` for a `reserved`, `fieldNumber` for a
+        // value.
+        let kids = child_rules(element);
+        let Some(first) = kids.first() else {
             continue;
         };
+        match nrule(first) {
+            "ranges" | "fieldNames" => {
+                // Enum reserved ranges are INCLUSIVE and span the whole
+                // int32 space.
+                add_reserved(
+                    element,
+                    &mut out.reserved_range,
+                    &mut out.reserved_name,
+                    RangeOpts {
+                        exclusive: false,
+                        max: MAX_ENUM_NUMBER,
+                    },
+                );
+                continue;
+            }
+            "optionName" => {
+                merge_option(&mut out.options, element);
+                continue;
+            }
+            "fieldNumber" => {}
+            _ => continue,
+        }
+        // `enumField: ident "=" ["-"] fieldNumber`. Both the name and the
+        // sign are in the text ahead of the number node, and nowhere else:
+        // reading the whole element instead takes an OPTION's minus sign
+        // as the value's, so `A = 1 [(x) = -2]` became -1.
+        let gap = gaps_before(element, "fieldNumber")
+            .first()
+            .copied()
+            .unwrap_or("");
+        let name = strip_from_equals(gap);
         if name.is_empty() {
             continue;
         }
-        let negative = strip_ws(nsrc(element)).contains("=-");
-        let value = number_of(Some(number));
+        let value = number_of(Some(first));
         out.value.push(EnumValueDescriptorProto {
             name: name.to_string(),
-            number: if negative { -value } else { value },
+            number: if gap.ends_with('-') { -value } else { value },
             options: plain_options(child(element, "fieldOptions")),
         });
     }
@@ -949,12 +970,19 @@ fn add_oneof(
 ) {
     let name = src_or(child(element, "ident")).to_string();
     let index = message.oneof_decl.len();
+    // protoc gives a oneof its own `OneofOptions`, and every other
+    // declaration kind here keeps its option statements, so the oneof's
+    // are recorded rather than dropped. Held aside rather than written
+    // through a borrow of `oneof_decl`: the loop below builds group
+    // members, which push onto the same message.
     message.oneof_decl.push(OneofDescriptorProto {
         name,
         options: None,
     });
+    let mut decl_options: Option<Options> = None;
     for member in children(element, "oneofElement") {
         if kw(member).starts_with("option") {
+            merge_option(&mut decl_options, member);
             continue;
         }
         if ";" == nsrc(member) {
@@ -970,6 +998,7 @@ fn add_oneof(
         field.proto3_optional = false;
         message.field.push(field);
     }
+    message.oneof_decl[index].options = decl_options;
 }
 
 fn add_extend(element: &Value, version: ProtoVersion, into: &mut Vec<FieldDescriptorProto>) {
@@ -1010,7 +1039,6 @@ fn build_service(node: &Value) -> ServiceDescriptorProto {
 fn build_rpc(element: &Value) -> MethodDescriptorProto {
     let ids = children(element, "ident");
     let types = children(element, "messageType");
-    let flat = strip_ws(nsrc(element));
     let mut method = MethodDescriptorProto {
         name: ids
             .first()
@@ -1025,17 +1053,16 @@ fn build_rpc(element: &Value) -> MethodDescriptorProto {
         server_streaming: false,
         options: None,
     };
-    // Split request from response on the `returns` keyword so a
-    // `(stream ...)` is attributed to the right side even when the in and
-    // out types are identical.
-    let (request, response) = match flat.find("returns(") {
-        Some(at) => (&flat[..at], &flat[at..]),
-        None => (flat.as_str(), ""),
-    };
-    if request.contains("(stream") {
+    // `stream` is a bare terminal, so it never becomes a node, but it sits
+    // immediately ahead of the type it modifies, which is exactly what the
+    // gap holds. Searching the statement for `(stream` instead marks an
+    // ordinary type whose name merely BEGINS with those letters, so
+    // `rpc M (streaming.Request)` came back client-streaming.
+    let modifiers = gaps_before(element, "messageType");
+    if modifiers.first().is_some_and(|gap| gap.ends_with("stream")) {
         method.client_streaming = true;
     }
-    if response.contains("(stream") {
+    if modifiers.get(1).is_some_and(|gap| gap.ends_with("stream")) {
         method.server_streaming = true;
     }
     for option in children(element, "optionStmt") {

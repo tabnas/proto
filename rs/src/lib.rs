@@ -72,7 +72,7 @@ pub use detect_version::{
 };
 pub use error::ProtoError;
 pub use grammar::GRAMMAR_TEXT;
-pub use node::{child, child_rules, children, kw, nrule, nsrc};
+pub use node::{child, child_rules, children, gaps, gaps_before, kw, nrule, nsrc};
 
 /// This crate's version. It MUST equal `ts/package.json` "version": the
 /// release orchestrator rewrites both, and `tests/version_test.rs` fails

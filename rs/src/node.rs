@@ -79,6 +79,58 @@ pub fn children<'a>(node: &'a Value, rule: &str) -> Vec<&'a Value> {
         .collect()
 }
 
+/// The source text immediately ahead of each rule child, one entry per
+/// member of [`child_rules`] and in the same order.
+///
+/// `src` is the node's tokens run together, so every child's text is a
+/// contiguous slice of it, but SEARCHING for that text can land on the
+/// wrong copy. In the enum element `A1=1;` the `fieldNumber` node's `1`
+/// also occurs inside the name ahead of it, and in `rpc M (stream A)`
+/// the `stream` modifier is a bare terminal that never becomes a node.
+/// The scan therefore runs from the END: each child is bounded above by
+/// the child after it, so the last occurrence below that bound is the
+/// child itself. That leaves the text between two children exactly,
+/// which is where the grammar's own terminals (`=`, `-`, `(`, `stream`,
+/// `returns`) are, and reading one of those is a structural question
+/// answered from the tree rather than a pattern matched against the
+/// whole statement.
+pub fn gaps(node: &Value) -> Vec<&str> {
+    let kids = child_rules(node);
+    let src = nsrc(node);
+    let mut at = vec![0usize; kids.len()];
+    let mut hi = src.len();
+    for index in (0..kids.len()).rev() {
+        let text = nsrc(kids[index]);
+        let found = if text.is_empty() || text.len() > hi {
+            None
+        } else {
+            src[..hi].rfind(text)
+        };
+        at[index] = found.unwrap_or(hi);
+        hi = at[index];
+    }
+    let mut out = Vec::with_capacity(kids.len());
+    let mut end = 0usize;
+    for (index, kid) in kids.iter().enumerate() {
+        let start = at[index].max(end);
+        out.push(&src[end..start]);
+        end = start + nsrc(kid).len();
+    }
+    out
+}
+
+/// The gaps ahead of the children carrying this rule name, in source
+/// order. See [`gaps`].
+pub fn gaps_before<'a>(node: &'a Value, rule: &str) -> Vec<&'a str> {
+    let kids = child_rules(node);
+    gaps(node)
+        .into_iter()
+        .zip(kids)
+        .filter(|(_, kid)| nrule(kid) == rule)
+        .map(|(gap, _)| gap)
+        .collect()
+}
+
 /// A node's `src`, or `""` when there is no node.
 pub fn src_or(node: Option<&Value>) -> &str {
     node.map_or("", nsrc)

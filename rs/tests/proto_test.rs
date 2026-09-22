@@ -11,10 +11,10 @@
 mod common;
 
 use tabnas_proto::{
-    build_file, declared_version_src, edition_enum, is_edition, make, parse, proto,
-    resolve_version, scalar_type, to_descriptor, DescriptorProto, FieldDescriptorProto, FieldLabel,
-    FieldType, FileDescriptorProto, OptionValue, ProtoOptions, ProtoVersion, SymbolVisibility,
-    SCALAR_TYPES,
+    build_file, child, child_rules, children, declared_version_src, edition_enum, gaps,
+    gaps_before, is_edition, make, nsrc, parse, proto, resolve_version, scalar_type, to_descriptor,
+    DescriptorProto, FieldDescriptorProto, FieldLabel, FieldType, FileDescriptorProto, OptionValue,
+    ProtoOptions, ProtoVersion, SymbolVisibility, SCALAR_TYPES,
 };
 
 fn must_parse(src: &str, options: Option<&ProtoOptions>) -> FileDescriptorProto {
@@ -596,4 +596,42 @@ fn a_field_number_serializes_as_an_integer() {
     let file = must_parse("message M { optional int32 a = 1_0; }", None);
     let json = serde_json::to_string(&file).expect("a descriptor is JSON");
     assert!(json.contains("\"number\":null,"), "got {json}");
+}
+
+// The CST accessors are exported, and `gaps` is the one that decides
+// where a bare terminal sat: `stream` ahead of a `messageType`, the `-`
+// ahead of an enum value's `fieldNumber`. Both are invisible to a search
+// over the flattened statement, which is what these replaced.
+#[test]
+fn gaps_hold_the_terminals_between_two_rule_children() {
+    let parser = make();
+
+    let cst = parser
+        .parse("service S { rpc M (stream streaming.Request) returns (streaming.Reply); }")
+        .expect("the rpc parses");
+    let service = child(&cst, "topLevelDef").expect("a service");
+    let element = child(service, "serviceElement").expect("an rpc");
+    assert_eq!(
+        gaps_before(element, "messageType"),
+        vec!["(stream", ")returns("],
+        "the modifier belongs to the request only",
+    );
+
+    let cst = parser
+        .parse("enum E { A1 = 1 [(x) = -2]; B = -3; }")
+        .expect("the enum parses");
+    let enum_def = child(&cst, "topLevelDef").expect("an enum");
+    let values = children(enum_def, "enumElement");
+    assert_eq!(gaps_before(values[0], "fieldNumber"), vec!["A1="]);
+    assert_eq!(gaps_before(values[1], "fieldNumber"), vec!["B=-"]);
+
+    // Every gap and every child's own text, concatenated in order, is the
+    // node's whole source: nothing is skipped and nothing is counted
+    // twice.
+    let rebuilt: String = gaps(values[0])
+        .into_iter()
+        .zip(child_rules(values[0]))
+        .map(|(gap, kid)| format!("{gap}{}", nsrc(kid)))
+        .collect();
+    assert_eq!(rebuilt, "A1=1[(x)=-2]");
 }
