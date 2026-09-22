@@ -1,0 +1,105 @@
+# PROPOSED workflow -- lives in ci/workflows/ for review; move to
+# .github/workflows/rust.yml to activate, per admin DECISIONS.md ADR-8.
+#
+# The Rust gate. Standalone rather than an arm of ci.yml, because ci.yml
+# calls the org-shared polyglot workflow and that takes no Rust input:
+# promoting this file needs no change in tabnas/.github.
+name: Rust
+
+# Runs on EVERY branch push, not just main, and the path lists are
+# written out twice.
+#
+# Both are deliberate, for the reasons docs.yml records: GitHub Actions
+# has no YAML anchors, so a version sharing one list between the two
+# triggers does not run at all; and restricting `push` to main while
+# leaning on `pull_request` leaves a gate that reaches a pull request
+# green because it never executed.
+#
+# The path lists name everything the gate READS, which is wider than
+# rs/: the crate's tests read the shared fixtures and the vendored protoc
+# corpus, the version test reads ts/package.json and both other runtimes'
+# constants, the embed test reads the five grammar files and both other
+# embeds, and the embedder itself writes the Rust block.
+on:
+  # `branches` is set explicitly. A `push` trigger that names neither
+  # branches nor tags also matches TAG pushes, and Actions does not
+  # evaluate `paths` for a tag ref -- so without this, release.yml
+  # pushing `ts/v…` and `go/v…` would run this whole gate once per tag,
+  # on a ref where the path filters mean nothing.
+  push:
+    branches: [ '**' ]
+    paths:
+      - 'rs/**'
+      - 'proto-grammar/**'
+      - 'ts/embed-grammar.js'
+      - 'ts/src/**'
+      - 'ts/package.json'
+      - 'go/proto.go'
+      - 'go/grammar.go'
+      - 'go/grammar_gen.go'
+      - 'test/**'
+      - 'ci/rust/**'
+      - '.github/workflows/rust.yml'
+  pull_request:
+    paths:
+      - 'rs/**'
+      - 'proto-grammar/**'
+      - 'ts/embed-grammar.js'
+      - 'ts/src/**'
+      - 'ts/package.json'
+      - 'go/proto.go'
+      - 'go/grammar.go'
+      - 'go/grammar_gen.go'
+      - 'test/**'
+      - 'ci/rust/**'
+      - '.github/workflows/rust.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  rust:
+    runs-on: ubuntu-latest
+    steps:
+      # Checked out into a NAMED directory. rs/Cargo.toml takes the
+      # engine as `path = "../../parser/rs"` and the ABNF compiler as
+      # `path = "../../abnf/rs"`, which resolve relative to rs/, so both
+      # have to sit beside this checkout rather than inside it. A bare
+      # `actions/checkout` into the workspace root leaves nowhere for a
+      # sibling to go.
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09  # v5.1.0
+        with:
+          path: proto
+
+      # Sibling main branches, not releases: none of these crates is
+      # published, so this is the only resolution there is. `bnf` gets no
+      # entry in rs/Cargo.toml, because it is `abnf` that depends on it,
+      # but cargo reads the whole manifest graph before it compiles
+      # anything, so the checkout has to be here. `support` carries the
+      # shared fixture runner and is a dev-dependency.
+      - name: Clone the sibling crates
+        run: |
+          git clone --depth 1 https://github.com/tabnas/parser.git parser
+          git clone --depth 1 https://github.com/tabnas/abnf.git abnf
+          git clone --depth 1 https://github.com/tabnas/bnf.git bnf
+          git clone --depth 1 https://github.com/tabnas/support.git support
+
+      # Pinned to the MSRV in rs/Cargo.toml rather than to `stable`, so
+      # this fails on a change that needs a newer compiler instead of
+      # passing here and breaking for anyone honouring rust-version.
+      #
+      # NOTE for promotion: the other actions here are SHA-pinned, this
+      # one is not. It matches the form tabnas/parser's own staged
+      # ci/workflows/rust.yml uses; pin it to a SHA at promotion time if
+      # the org prefers that uniformly.
+      - name: Set up Rust MSRV
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          toolchain: '1.85'
+          components: rustfmt, clippy
+
+      # Everything lives in the script so this file and a contributor's
+      # local run cannot say different things.
+      - name: Rust gate
+        run: proto/ci/rust/run.sh
