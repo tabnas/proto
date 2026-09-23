@@ -2,7 +2,7 @@
 
 // Package main builds the C-ABI shared library: libtabnasproto.
 //
-// tabnas-clib-template: v1 (stamped by admin tasks/adopt-clib.sh;
+// tabnas-clib-template: v2 (stamped by admin tasks/adopt-clib.sh;
 // edit the template and re-stamp, not this file).
 //
 //	go build -buildmode=c-shared -o libtabnasproto.so ./clib

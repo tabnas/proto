@@ -1,6 +1,6 @@
 /* tabnas.h — the uniform C ABI of the per-format tabnas clibs (ADR-12).
  *
- * tabnas-clib-template: v1
+ * tabnas-clib-template: v2
  *
  * Every per-format library (libtabnasjson, libtabnastoml, …) exports
  * exactly these five symbols; the format is fixed at build time by
