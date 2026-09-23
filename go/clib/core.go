@@ -2,7 +2,7 @@
 
 // core.go — the library's behaviour, in plain Go.
 //
-// tabnas-clib-template: v2 (stamped by admin tasks/adopt-clib.sh
+// tabnas-clib-template: v3 (stamped by admin tasks/adopt-clib.sh
 // from tasks/clib-template/; edit the template and re-stamp, not this
 // file — admin's verify gate fails on a stale stamp).
 //
@@ -29,10 +29,20 @@ import (
 )
 
 const (
-	templateVersion = "v2"
+	templateVersion = "v3"
 	libName         = "libtabnasproto"
 	formatName      = "proto"
 	valueOut        = true
+
+	// optsDefined is true only for a library whose rollout row defines
+	// what tabnas_grammar's argument means (the tsv `opts` column). Then
+	// the argument is handed to newParser as `opts`, and the construct
+	// alone decides what to accept — including (NULL, 0). The engine's
+	// own library is the case that needs it: it has no grammar until
+	// the caller supplies one, so its argument is a serialized
+	// GrammarSpec. For every other row it is false and the argument
+	// stays reserved (see loadGrammar).
+	optsDefined = false
 )
 
 // One ready-to-parse engine for this format. Engines are not safe for
@@ -66,8 +76,16 @@ var _ = &sharedMu // referenced only by opt-in constructs
 // correctness decision, not a convenience: lexing configuration is part
 // of the accepted language, and format plugins keep format-specific
 // behaviour as closures, which cannot cross a data boundary at all.
+// (The engine's own library is the one exception, by construction: it
+// ships no grammar to install, so it loads the caller's serialized
+// spec from opts — see optsDefined.)
 // The body is the per-repo column of admin tasks/clib-rollout.tsv.
-func newParser() (parseFn, error) {
+//
+// opts is tabnas_grammar's argument, verbatim. Constructs of rows with
+// no `opts` column never see anything but "" or an empty object, and
+// ignore it; a row that defines options must validate it here, since
+// nothing upstream does.
+func newParser(opts string) (parseFn, error) {
 	j := host.Make(); if err := plug.Proto(j); err != nil { return nil, err }; return func(src string) (any, error) { cst, err := j.Parse(src); if err != nil { return nil, err }; return plug.ToDescriptor(cst, nil) }, nil
 }
 
@@ -116,16 +134,32 @@ func errPayload(err error) any {
 	return map[string]any{"message": firstLine(err.Error())}
 }
 
+// isInternal reports an engine-RECOVERED failure. The engine turns a
+// panic inside a plugin callback or matcher into an error with code
+// "internal" (the Go engine's reserved code) rather than letting it
+// escape, so it reaches this package as an ordinary error. It is still
+// the engine failing, not the input being rejected: a failed call
+// (ok:false), exactly like a panic that reaches safeParse.
+func isInternal(err error) bool {
+	var d struct {
+		Code string `json:"code"`
+	}
+	b, jerr := json.Marshal(err)
+	return jerr == nil && json.Unmarshal(b, &d) == nil && d.Code == "internal"
+}
+
 // loadGrammar builds a parser instance and returns a handle to it.
 //
-// optsJSON is RESERVED: the uniform ABI (ADR-12) gives every format
-// clib the same signature, and options are the obvious future use of
-// the grammar argument a fixed-format library otherwise would not
-// need. Until a version of this template defines them, anything but
-// empty/{} is refused loudly — silently ignoring options would let a
-// caller believe a configuration took effect when it did not.
+// optsJSON is RESERVED unless the row defines it (optsDefined): the
+// uniform ABI (ADR-12) gives every format clib the same signature, and
+// options are the obvious future use of the grammar argument a
+// fixed-format library otherwise would not need. Until a row defines
+// them, anything but empty/{} is refused loudly — silently ignoring
+// options would let a caller believe a configuration took effect when
+// it did not. A row that defines them owns the whole argument, and its
+// construct refuses what it cannot honour.
 func loadGrammar(optsJSON string) string {
-	if optsJSON != "" {
+	if !optsDefined && optsJSON != "" {
 		var o map[string]any
 		// err covers non-JSON and non-object shapes; the nil check
 		// covers the JSON document `null`, which unmarshals into a nil
@@ -138,7 +172,7 @@ func loadGrammar(optsJSON string) string {
 				libName+" accepts no options yet; pass NULL (or {})")
 		}
 	}
-	p, err := safeNew()
+	p, err := safeNew(optsJSON)
 	if err != nil {
 		return failDoc("grammar", firstLine(err.Error()))
 	}
@@ -153,13 +187,13 @@ func loadGrammar(optsJSON string) string {
 // safeNew contains construction panics. Parts of the compiler pipeline
 // panic on inputs they cannot handle; panicking across a C ABI aborts
 // the host process, which is never the right failure for a library.
-func safeNew() (p parseFn, err error) {
+func safeNew(opts string) (p parseFn, err error) {
 	defer func() {
 		if r := recover(); r != nil {
 			err = &panicErr{r}
 		}
 	}()
-	return newParser()
+	return newParser(opts)
 }
 
 type panicErr struct{ v any }
@@ -195,7 +229,7 @@ func parseWith(handle int64, src string) string {
 	g.mu.Unlock()
 
 	if err != nil {
-		if _, isPanic := err.(*panicErr); isPanic {
+		if _, isPanic := err.(*panicErr); isPanic || isInternal(err) {
 			return failDoc("internal", firstLine(err.Error()))
 		}
 		return reply(map[string]any{

@@ -2,7 +2,7 @@
 
 // Package main builds the C-ABI shared library: libtabnasproto.
 //
-// tabnas-clib-template: v2 (stamped by admin tasks/adopt-clib.sh;
+// tabnas-clib-template: v3 (stamped by admin tasks/adopt-clib.sh;
 // edit the template and re-stamp, not this file).
 //
 //	go build -buildmode=c-shared -o libtabnasproto.so ./clib
@@ -64,7 +64,8 @@ func tabnas_version() *C.char {
 }
 
 // tabnas_grammar builds a proto parser and returns a handle to it.
-// The argument is an options JSON document — RESERVED; pass (NULL, 0).
+// The argument is an options JSON document — RESERVED, pass (NULL, 0),
+// unless this library's README defines it.
 //
 //export tabnas_grammar
 func tabnas_grammar(opts *C.char, optsLen C.int) *C.char {

@@ -1,7 +1,7 @@
 # Stamped by admin tasks/adopt-clib.sh (ADR-12); staged to
 # ci/clib-release.yml and promoted to .github/workflows/ per ADR-8.
 #
-# tabnas-clib-template: v2
+# tabnas-clib-template: v3
 #
 # The GitHub Release and the C artifacts for libtabnasproto (ADR-19).
 #
@@ -116,7 +116,13 @@ jobs:
             --jq 'any(.assets[]; .name == "manifest.json")')"
           [ "$HAS" = true ] || { echo "::error::$TAG has no manifest.json — leaving it unpublished"; exit 1; }
           if [ "$(gh release view "$TAG" --repo "$GITHUB_REPOSITORY" --json isDraft --jq .isDraft)" = true ]; then
-            gh release edit "$TAG" --repo "$GITHUB_REPOSITORY" --draft=false
+            # "Latest" only for the highest version on this tag line, so a
+            # backfill or late repair of an older tag does not displace it.
+            HIGHEST="$(gh api "repos/$GITHUB_REPOSITORY/git/matching-refs/tags/${TAG%%/v*}/v" --paginate \
+              --jq '.[].ref' | sed 's#^refs/tags/##' | sort -V | tail -1)"
+            LATEST=true
+            [ "$HIGHEST" = "$TAG" ] || LATEST=false
+            gh release edit "$TAG" --repo "$GITHUB_REPOSITORY" --draft=false --latest="$LATEST"
             echo "published Release $TAG"
           else
             echo "Release $TAG is already published"

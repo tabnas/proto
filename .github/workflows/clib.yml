@@ -2,7 +2,7 @@
 # file is written to <repo>/ci/clib.yml for a maintainer to promote via
 # admin/rollout/apply-ci-folders.sh.
 #
-# tabnas-clib-template: v2
+# tabnas-clib-template: v3
 #
 # PR gate for the clib: build the shared library on the portable lane's
 # host and run the contract tests under -race. Artifact production for

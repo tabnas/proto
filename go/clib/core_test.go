@@ -2,7 +2,7 @@
 
 // The library's contract, tested where it is testable.
 //
-// tabnas-clib-template: v2 (stamped by admin tasks/adopt-clib.sh;
+// tabnas-clib-template: v3 (stamped by admin tasks/adopt-clib.sh;
 // edit the template and re-stamp, not this file).
 //
 // The cgo shim in tabnas_c.go cannot be unit-tested (Go forbids cgo in
@@ -20,6 +20,11 @@ import (
 const (
 	validSample   = "syntax = \"proto3\";\nmessage M { int32 a = 1; }\n"
 	invalidSample = "message {\n"
+
+	// optsSample is the tabnas_grammar argument every handle below is
+	// built from: the tsv `opts` column, "" for a row that defines no
+	// options (which is (NULL, 0) at the C boundary).
+	optsSample = ""
 )
 
 func decode(t *testing.T, doc string) map[string]any {
@@ -33,7 +38,7 @@ func decode(t *testing.T, doc string) map[string]any {
 
 func loadHandle(t *testing.T) int64 {
 	t.Helper()
-	m := decode(t, loadGrammar(""))
+	m := decode(t, loadGrammar(optsSample))
 	if m["ok"] != true {
 		t.Fatalf("loadGrammar failed: %v", m)
 	}
@@ -101,6 +106,9 @@ func TestUnknownHandle(t *testing.T) {
 }
 
 func TestOptionsReserved(t *testing.T) {
+	if optsDefined {
+		t.Skip("this library defines its options; see TestDefinedOptionsRefuseJunk")
+	}
 	if m := decode(t, loadGrammar("{}")); m["ok"] != true {
 		t.Fatalf("empty options object refused: %v", m)
 	}
@@ -117,6 +125,23 @@ func TestOptionsReserved(t *testing.T) {
 	}
 	if m := decode(t, loadGrammar("[1]")); m["ok"] != false {
 		t.Fatalf("array options accepted: %v", m)
+	}
+}
+
+// A row that defines its options owns the argument, so the reservation
+// above does not apply — but the construct must still refuse a document
+// it cannot read, rather than build a handle from nothing.
+func TestDefinedOptionsRefuseJunk(t *testing.T) {
+	if !optsDefined {
+		t.Skip("options are reserved; see TestOptionsReserved")
+	}
+	if optsSample == "" {
+		t.Fatal("a row that defines options must supply an opts sample")
+	}
+	for _, junk := range []string{"not json", "[1]"} {
+		if m := decode(t, loadGrammar(junk)); m["ok"] != false {
+			t.Fatalf("junk options %q accepted: %v", junk, m)
+		}
 	}
 }
 
