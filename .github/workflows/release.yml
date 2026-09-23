@@ -43,6 +43,16 @@
 # caches module versions immutably. A go/vX.Y.Z naming the wrong commit
 # is permanent; bump to the next patch rather than moving it.
 #
+# THE GITHUB RELEASE AND THE C LIBRARIES (ADR-19). Once go/v<version>
+# is on the remote, the clib job calls clib-release.yml, which creates
+# the GitHub Release on that tag as a draft, builds and attaches the
+# shared libraries and manifest.json, and only then publishes it. So a
+# dispatch ships all three: npm, the Go module and the C artifacts. It is
+# a reusable-workflow call because a Release created with GITHUB_TOKEN
+# starts no workflow run, so an on-release trigger would never fire. A
+# failed C build unpublishes nothing: it leaves a draft Release for a
+# clib-release.yml dispatch (darwin_only: false) to finish.
+#
 # Actions are pinned to full commit SHAs with the corresponding release
 # as a trailing comment, on the lowest major whose `runs.using` is
 # node24 (ADR-16).
@@ -69,6 +79,8 @@ jobs:
     permissions:
       id-token: write   # OIDC -> npm; cannot write refs
       contents: write   # GITHUB_TOKEN -> tags; cannot publish
+    outputs:
+      clib-tag: ${{ steps.clib.outputs.tag }}
     steps:
       - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09  # v5.1.0
         with:
@@ -175,3 +187,26 @@ jobs:
             git tag "$T" "${{ steps.tags.outputs.anchor }}"
           done
           git push --atomic origin ${{ steps.tags.outputs.missing }}
+
+      # ADR-19: hand the Go tag to the clib job. Read it from the REMOTE,
+      # not from the step above: a push-path run tagged nothing itself, and
+      # a dispatch with go: false has no Go tag for the C build to check out.
+      - name: Hand the Go tag to the C release
+        id: clib
+        run: |
+          T="go/v${{ steps.v.outputs.version }}"
+          if git ls-remote --exit-code --tags origin "refs/tags/$T" >/dev/null; then
+            echo "tag=$T" >> "$GITHUB_OUTPUT"
+          else
+            echo "::notice::$T is not on the remote — no GitHub Release or C artifacts this run"
+          fi
+
+  # The GitHub Release and the C artifacts (ADR-19; see the header).
+  clib:
+    needs: publish-npm
+    if: ${{ needs.publish-npm.outputs.clib-tag != '' }}
+    permissions:
+      contents: write   # GITHUB_TOKEN -> the Release and its assets
+    uses: ./.github/workflows/clib-release.yml
+    with:
+      tag: ${{ needs.publish-npm.outputs.clib-tag }}

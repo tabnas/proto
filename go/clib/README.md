@@ -1,6 +1,6 @@
 # libtabnasproto — the proto parser as a C ABI
 
-<!-- tabnas-clib-template: v1 — stamped by admin tasks/adopt-clib.sh;
+<!-- tabnas-clib-template: v2 — stamped by admin tasks/adopt-clib.sh;
      edit the template and re-stamp, not this file. -->
 
 The proto format parser as a C shared library, so languages with no
@@ -20,7 +20,7 @@ ZIG=/path/to/zig ./build.sh all
 
 | Function | Returns |
 |---|---|
-| `tabnas_version()` | `{"ok":true,"lib":"libtabnasproto","format":"proto","template":"v1"}` |
+| `tabnas_version()` | `{"ok":true,"lib":"libtabnasproto","format":"proto","template":"v2"}` |
 | `tabnas_grammar(opts, len)` | `{"ok":true,"handle":N}` — opts reserved, pass `(NULL, 0)` |
 | `tabnas_parse(handle, src, len)` | `{"ok":true,"accept":true[,"value":…]}` or `{"ok":true,"accept":false,"error":{…}}` |
 | `tabnas_grammar_free(handle)` | — |
