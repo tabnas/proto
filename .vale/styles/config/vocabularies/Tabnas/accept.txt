@@ -9,12 +9,14 @@
 # other as a misspelling.
 
 [Aa]bnf
+[Aa]ccessors
 [Bb]ooleans
 [Cc]amelCase
 [Cc]atchable
 [Cc]lippy
 [Dd]octest
 [Ee]num
+[Gg]oldens
 [Ii]nlined
 [Ii]nlines
 [Ii]nlining
@@ -28,6 +30,7 @@
 [Pp]rotoc
 [Rr]ecurses
 [Rr]untimes
+[Ss]uperset
 [Tt]abnas
 [Tt]okenisation
 [Tt]okenises
