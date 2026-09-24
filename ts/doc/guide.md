@@ -2,7 +2,7 @@
 
 Task-focused recipes. Each block is runnable.
 
-## Read fields, numbers, labels and types
+## Read fields, numbers, labels, and types
 
 ```js
 const { parse } = require('@tabnas/proto')
