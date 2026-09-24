@@ -82,7 +82,7 @@ pub use node::{child, child_rules, children, gaps, gaps_before, kw, nrule, nsrc}
 /// release orchestrator rewrites both, and `tests/version_test.rs` fails
 /// the build if they drift. Mirrors `VERSION` in `ts/src/proto.ts` and
 /// `const VERSION` in `go/proto.go`.
-pub const VERSION: &str = "0.5.0";
+pub const VERSION: &str = "0.5.1";
 
 /// The plugin's name on an instance, and the key its option bag hangs
 /// under.
