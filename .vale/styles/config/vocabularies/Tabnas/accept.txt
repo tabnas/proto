@@ -7,27 +7,42 @@
 # CASE PAIRS ARE ONE ENTRY, WRITTEN AS A REGEX. Two plain lines make
 # Vale enforce one spelling over the other, and it then reports the
 # other as a misspelling.
+#
+# AN ACRONYM PUTS ITS CAPITALS IN THE SAME ENTRY: `(?:[Jj]son|JSON)`.
+# Vale 3.9.2 and later enforce an entry's case through Vale.Terms, so
+# `[Jj]son` alone reports every `JSON` as "Use '[Jj]son' instead of
+# 'JSON'", and a separate `JSON` line does not help: the `[Jj]son`
+# entry still claims the word.
+#
+# A NAME WITH ONE CORRECT CASE IS ONE EXACT ENTRY: `TS`, `DOMPurify`.
+# The widened form above is for a name also written in lower case, as
+# a package name is. An exact entry makes Vale report any other case
+# of the name ("Use 'TS' instead of 'ts'"), which is the point.
+#
+# AN ENTRY MATCHES A WHOLE WORD. `[Ee]nder` accepts `ender` and not
+# `enders`, so a plural or a possessive is an entry of its own.
 
-[Aa]bnf
+(?:[Aa]bnf|ABNF)
 [Aa]ccessors
 [Bb]ooleans
 [Cc]amelCase
 [Cc]atchable
-[Cc]lippy
+Clippy
 [Dd]octest
 [Ee]num
+[Ee]nums
 [Gg]oldens
 [Ii]nlined
 [Ii]nlines
 [Ii]nlining
 [Ll]exer
 [Ll]ockfile
-[Nn]pm
+npm
 [Oo]neof
 [Oo]neofs
-[Pp]aull
+Paull
 [Pp]rotobuf
-[Pp]rotoc
+protoc
 [Rr]ecurses
 [Rr]untimes
 [Ss]uperset

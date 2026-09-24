@@ -77,7 +77,10 @@ signedNumber   = [ "-" / "+" ] NR
 signedIdent    = "-" fullIdent
 boolLit        = VL
 messageValue   = "{" *messageValueEntry "}"
-messageValueEntry = ident [ ":" ] constant [ "," / ";" ]
+; Text format writes a string value as one or more adjacent literals and
+; concatenates them: `a: "foo" "bar"`. The first alternative takes two or
+; more, so a single literal is a `constant`, as any other value is.
+messageValueEntry = ident [ ":" ] ( strLit 1*strLit / constant ) [ "," / ";" ]
 
 messageType    = [ "." ] fullIdent
 fullIdent      = ident *( "." ident )

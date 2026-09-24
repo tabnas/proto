@@ -316,7 +316,7 @@ cargo test --all-targets && cargo test --doc
 ```
 
 Or, from the repository root, `make test-rs`. For what CI would say,
-including formatting, clippy and the lockfile check, run
+including formatting, Clippy and the lockfile check, run
 `ci/rust/run.sh`.
 
 The suite runs every shared `../test/spec/*.tsv` fixture through the

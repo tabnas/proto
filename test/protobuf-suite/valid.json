@@ -82,6 +82,181 @@
   }
  },
  {
+  "name": "ParseMessageTest.AggregateValueWithoutNormalization",
+  "helper": "ExpectParsesTo",
+  "input": "message TestMessage {\noption (foo) = {   a:\n  100  };\n}",
+  "expected": {
+   "messageType": [
+    {
+     "name": "TestMessage",
+     "options": {
+      "uninterpretedOption": [
+       {
+        "aggregateValue": "   a:\n  100  ",
+        "name": [
+         {
+          "isExtension": true,
+          "namePart": "foo"
+         }
+        ]
+       }
+      ]
+     }
+    }
+   ]
+  }
+ },
+ {
+  "name": "ParseMessageTest.AggregateValueComplex",
+  "helper": "ExpectParsesTo",
+  "input": "message TestMessage {\n  option (foo) = {\n   outer: {\n      inner: 1\n    }\n  };\n}",
+  "expected": {
+   "messageType": [
+    {
+     "name": "TestMessage",
+     "options": {
+      "uninterpretedOption": [
+       {
+        "aggregateValue": "\n   outer: {\n      inner: 1\n    }\n  ",
+        "name": [
+         {
+          "isExtension": true,
+          "namePart": "foo"
+         }
+        ]
+       }
+      ]
+     }
+    }
+   ]
+  }
+ },
+ {
+  "name": "ParseMessageTest.AggregateValueTrailingWhitespace",
+  "helper": "ExpectParsesTo",
+  "input": "message TestMessage {\n  option (foo) = { a: 1    \n    b: 2   };\n}\n",
+  "expected": {
+   "messageType": [
+    {
+     "name": "TestMessage",
+     "options": {
+      "uninterpretedOption": [
+       {
+        "aggregateValue": " a: 1    \n    b: 2   ",
+        "name": [
+         {
+          "isExtension": true,
+          "namePart": "foo"
+         }
+        ]
+       }
+      ]
+     }
+    }
+   ]
+  }
+ },
+ {
+  "name": "ParseMessageTest.AggregateValueMultilineString",
+  "helper": "ExpectParsesTo",
+  "input": "message TestMessage {\n  option (foo) = { a: \"foo\"\n                      \"bar\" };\n}\n",
+  "expected": {
+   "messageType": [
+    {
+     "name": "TestMessage",
+     "options": {
+      "uninterpretedOption": [
+       {
+        "aggregateValue": " a: \"foo\"\n                      \"bar\" ",
+        "name": [
+         {
+          "isExtension": true,
+          "namePart": "foo"
+         }
+        ]
+       }
+      ]
+     }
+    }
+   ]
+  }
+ },
+ {
+  "name": "ParseMessageTest.AggregateValueWithInlineBlockComment",
+  "helper": "ExpectParsesTo",
+  "input": "message TestMessage {\n  option (foo) = { a: /* bla */ 1 };\n}\n",
+  "expected": {
+   "messageType": [
+    {
+     "name": "TestMessage",
+     "options": {
+      "uninterpretedOption": [
+       {
+        "aggregateValue": " a:           1 ",
+        "name": [
+         {
+          "isExtension": true,
+          "namePart": "foo"
+         }
+        ]
+       }
+      ]
+     }
+    }
+   ]
+  }
+ },
+ {
+  "name": "ParseMessageTest.AggregateValueWithSingleLineComment",
+  "helper": "ExpectParsesTo",
+  "input": "message TestMessage {\n  option (foo) = {\n    // This is a comment\n    a: 1\n  };\n}\n",
+  "expected": {
+   "messageType": [
+    {
+     "name": "TestMessage",
+     "options": {
+      "uninterpretedOption": [
+       {
+        "aggregateValue": "\n    \n    a: 1\n  ",
+        "name": [
+         {
+          "isExtension": true,
+          "namePart": "foo"
+         }
+        ]
+       }
+      ]
+     }
+    }
+   ]
+  }
+ },
+ {
+  "name": "ParseMessageTest.AggregateValueWithMultilineBlockComment",
+  "helper": "ExpectParsesTo",
+  "input": "message TestMessage {\n  option (foo) = {\n    /* line 1\n       line 2\n       line 3 */\n    a: 1\n  };\n}\n",
+  "expected": {
+   "messageType": [
+    {
+     "name": "TestMessage",
+     "options": {
+      "uninterpretedOption": [
+       {
+        "aggregateValue": "\n    \n\n                \n    a: 1\n  ",
+        "name": [
+         {
+          "isExtension": true,
+          "namePart": "foo"
+         }
+        ]
+       }
+      ]
+     }
+    }
+   ]
+  }
+ },
+ {
   "name": "ParseMessageTest.SimpleFields",
   "helper": "ExpectParsesTo",
   "input": "message TestMessage {\n  required int32 foo = 15;\n  optional int32 bar = 34;\n  repeated int32 baz = 3;\n}\n",

@@ -1,6 +1,3 @@
-# PROPOSED workflow -- lives in ci/workflows/ for review; move to
-# .github/workflows/rust.yml to activate, per admin DECISIONS.md ADR-8.
-#
 # The Rust gate. Standalone rather than an arm of ci.yml, because ci.yml
 # calls the org-shared polyglot workflow and that takes no Rust input:
 # promoting this file needs no change in tabnas/.github.

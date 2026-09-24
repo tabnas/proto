@@ -4,9 +4,10 @@
 // at the repo root (see ../../test/AGENTS.md).
 //
 // The fixture loader, the escape codec, the `ERROR:` contract and the row
-// loop all come from @tabnas/support, whose Go half `go/parity_test.go`
-// uses to run the SAME files — so the two implementations cannot drift
-// without one of them going red, and neither can the two loaders.
+// loop all come from @tabnas/support, whose Go and Rust counterparts
+// `go/parity_test.go` and `rs/tests/parity_test.rs` use to run the SAME
+// files — so the three implementations cannot drift without one of them
+// going red, and neither can the three loaders.
 //
 // What is left here is only what is specific to proto: the row's options,
 // and what an `ERROR:` cell means.
@@ -44,5 +45,5 @@ makeRunner({
   // `findSpecDir` walks up from this file — `dist-test/` at runtime — to the
   // repo root's `test/spec`, so moving the suite does not mean recounting
   // `..` hops. `dir` then auto-discovers every fixture in it, so adding a
-  // .tsv runs it in both runtimes without touching either runner.
+  // .tsv runs it in every runtime without touching a runner.
   .dir(findSpecDir(__dirname))

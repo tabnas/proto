@@ -9,14 +9,28 @@ be run from TypeScript.
 ## Provenance
 
 Extracted from upstream protobuf
-`src/google/protobuf/compiler/parser_unittest.cc` at **v35.1**, cross-checked
-against the `protoc 35.1` binary. Each case keeps its upstream test name
+`src/google/protobuf/compiler/parser_unittest.cc` at **v36.2** (commit
+`2c74169b`), cross-checked against the `protoc 36.2` binary and against the
+parser built from that tag. Each case keeps its upstream test name
 (`ParseMessageTest.SimpleMessage`, …) so it can be traced back.
 
 The corpus JSON is vendored — the suite runs offline, in CI, with no
 fetch step. The protoc binary/zip and the original `parser_unittest.cc`
 are **not** committed (they are large and are upstream's to distribute);
 `.gitignore` keeps them out. Nothing in the test run needs them.
+
+## Refreshing it
+
+The corpus tracks upstream's latest protobuf release. `tools/` holds the
+extractor that writes it and the checks that hold it to protoc, and
+[`tools/README.md`](tools/README.md) is the procedure: extract with
+`tools/extract.py` and `tools/lanes.py` in a throwaway virtual environment
+holding the PyPI `protobuf` of the same release, cross-check with the
+protoc binary (`tools/crosscheck.py`, `tools/probes.py`) and with protoc's
+own parser (`tools/oracle/`, `tools/oracle-check.py`), then move every
+count that records the corpus and regenerate `test/spec/protobuf-suite.tsv`
+with `tools/suite-tsv.js`. Run on the same inputs, the scripts reproduce
+the v35.1 and the v36.2 corpora byte for byte.
 
 ## Lanes
 
@@ -35,13 +49,14 @@ are **not** committed (they are large and are upstream's to distribute);
 `leniency`. It never skips: the corpus is in-repo, so an absent file is a
 failure, not a silent pass.
 
-`go/protobuf_conformance_test.go` runs the same three lanes with the same
-contracts and the same normalisation, so Go is measured against protoc's
-goldens directly rather than transitively. (`test/spec/protobuf-suite.tsv`
-also feeds the `valid` lane to Go, but its `expected` column is *this
-parser's* output — it proves Go matches TypeScript, not that Go matches
-protoc, and it covers neither `accept-only` nor `leniency`.) It never skips
-either.
+`go/protobuf_conformance_test.go` and `rs/tests/protobuf_conformance_test.rs`
+run the same three lanes with the same contracts and the same
+normalisation, so Go and Rust are measured against protoc's goldens
+directly rather than transitively. (`test/spec/protobuf-suite.tsv` also
+feeds the `valid` lane to both, but its `expected` column is *this
+parser's* output — it proves a port matches TypeScript, not that it
+matches protoc, and it covers neither `accept-only` nor `leniency`.)
+Neither skips either.
 
 `invalid` is deliberately **not** a pass/fail gate. `proto-grammar/common.abnf`
 is a permissive union across proto2/proto3/editions and per-version legality

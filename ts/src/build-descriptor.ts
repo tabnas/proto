@@ -16,7 +16,9 @@ import {
 } from './descriptor'
 import { ProtoVersion, isEdition } from './detect-version'
 
-type Node = { rule?: string; src: string; kids?: Node[] }
+// `aggregate` is set on an aggregate value's `constant` node only: the
+// text protoc records for it, which `src` cannot give (see ./aggregate.ts).
+type Node = { rule?: string; src: string; kids?: Node[]; aggregate?: string }
 
 // Children that are real rule nodes (terminals fold into `src`). An empty
 // `.proto` is a legal (if useless) file and parses to no node at all, so
@@ -98,6 +100,9 @@ function unquote(s: string): string {
 // ---- constants / option values -------------------------------------------
 
 function constantValue(n: Node): OptionValue {
+  // An aggregate (`{ a: 1 }`) is the text between its braces, as protoc
+  // records it in `aggregate_value`.
+  if ('string' === typeof n.aggregate) return n.aggregate
   const s = n.src
   if ('true' === s) return true
   if ('false' === s) return false

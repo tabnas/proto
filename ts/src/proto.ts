@@ -10,6 +10,7 @@ import { abnf } from '@tabnas/abnf'
 
 import { grammarText } from './grammar'
 import { buildFile } from './build-descriptor'
+import { recordAggregate } from './aggregate'
 import {
   ProtoVersion, declaredVersion, resolveVersion,
 } from './detect-version'
@@ -37,6 +38,11 @@ const Proto = ((tn: AnyTabnas, _options?: Partial<ProtoOptions>) => {
     start: 'proto',
     wordKeywords: true,
   })
+  // An aggregate value (`option (f) = { a: 1 };`) is recorded as the text
+  // between its braces, which the CST's `src` does not keep: the lexer
+  // drops whitespace and comments. This action reads it from the source
+  // while the brace tokens are to hand; see ./aggregate.ts.
+  tn.rule('constant', (rs: any) => rs.ac(recordAggregate))
 }) as {
   (tn: AnyTabnas, options?: Partial<ProtoOptions>): void
   defaults: ProtoOptions
@@ -68,7 +74,7 @@ function parse(src: string, options?: Partial<ProtoOptions>): FileDescriptorProt
 // VERSION is this package's version. It MUST equal package.json "version":
 // the release orchestrator rewrites both, and test/version.test.ts fails the
 // build if they drift. Mirrors `const VERSION` in go/proto.go.
-const VERSION = '0.4.7'
+const VERSION = '0.5.0'
 
 export { Proto, parse, toDescriptor, VERSION }
 export type { ProtoVersion }

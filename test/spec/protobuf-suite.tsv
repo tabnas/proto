@@ -2,11 +2,12 @@ input	expected	opts
 # GENERATED — regenerate, do not hand-edit.
 #
 # The in-scope `valid` lane of the vendored protoc parser corpus
-# (test/protobuf-suite/valid.json), one row per case, so BOTH runtimes run
+# (test/protobuf-suite/valid.json), one row per case, so EVERY runtime runs
 # the whole corpus. The `expected` column is this parser's output; that it
 # equals protoc's own golden is asserted separately, against the protoc
-# goldens themselves, by ts/test/protobuf-conformance.test.ts. Together the
-# two say: TypeScript matches protoc, and Go matches TypeScript.
+# goldens themselves, by each runtime's conformance runner. Together the
+# two say: TypeScript matches protoc, and Go and Rust match TypeScript.
+# Written by test/protobuf-suite/tools/suite-tsv.js.
 #
 # Out-of-scope cases (protoc-internal UNSTABLE / NNNNN_TEST_ONLY editions)
 # are omitted; see test/protobuf-suite/AGENTS.md.
@@ -18,6 +19,20 @@ message TestMessage {\n  required int32 foo = 1;\n}\n	{"dependency":[],"publicDe
 syntax = "proto2";\nmessage TestMessage {\n  required int32 foo = 1;\n}\n	{"dependency":[],"publicDependency":[],"weakDependency":[],"messageType":[{"name":"TestMessage","field":[{"name":"foo","number":1,"label":"LABEL_REQUIRED","type":"TYPE_INT32"}],"nestedType":[],"enumType":[],"oneofDecl":[],"extension":[]}],"enumType":[],"service":[],"extension":[],"syntax":"proto2"}
 # ParseMessageTest.ExplicitRequiredSyntaxIdentifier
 syntax = "proto2";\nmessage TestMessage {\n  required int32 foo = 1;\n}\n	{"dependency":[],"publicDependency":[],"weakDependency":[],"messageType":[{"name":"TestMessage","field":[{"name":"foo","number":1,"label":"LABEL_REQUIRED","type":"TYPE_INT32"}],"nestedType":[],"enumType":[],"oneofDecl":[],"extension":[]}],"enumType":[],"service":[],"extension":[],"syntax":"proto2"}
+# ParseMessageTest.AggregateValueWithoutNormalization
+message TestMessage {\noption (foo) = {   a:\n  100  };\n}	{"dependency":[],"publicDependency":[],"weakDependency":[],"messageType":[{"name":"TestMessage","field":[],"nestedType":[],"enumType":[],"oneofDecl":[],"extension":[],"options":{"(foo)":"   a:\n  100  "}}],"enumType":[],"service":[],"extension":[],"syntax":"proto2"}
+# ParseMessageTest.AggregateValueComplex
+message TestMessage {\n  option (foo) = {\n   outer: {\n      inner: 1\n    }\n  };\n}	{"dependency":[],"publicDependency":[],"weakDependency":[],"messageType":[{"name":"TestMessage","field":[],"nestedType":[],"enumType":[],"oneofDecl":[],"extension":[],"options":{"(foo)":"\n   outer: {\n      inner: 1\n    }\n  "}}],"enumType":[],"service":[],"extension":[],"syntax":"proto2"}
+# ParseMessageTest.AggregateValueTrailingWhitespace
+message TestMessage {\n  option (foo) = { a: 1    \n    b: 2   };\n}\n	{"dependency":[],"publicDependency":[],"weakDependency":[],"messageType":[{"name":"TestMessage","field":[],"nestedType":[],"enumType":[],"oneofDecl":[],"extension":[],"options":{"(foo)":" a: 1    \n    b: 2   "}}],"enumType":[],"service":[],"extension":[],"syntax":"proto2"}
+# ParseMessageTest.AggregateValueMultilineString
+message TestMessage {\n  option (foo) = { a: "foo"\n                      "bar" };\n}\n	{"dependency":[],"publicDependency":[],"weakDependency":[],"messageType":[{"name":"TestMessage","field":[],"nestedType":[],"enumType":[],"oneofDecl":[],"extension":[],"options":{"(foo)":" a: \"foo\"\n                      \"bar\" "}}],"enumType":[],"service":[],"extension":[],"syntax":"proto2"}
+# ParseMessageTest.AggregateValueWithInlineBlockComment
+message TestMessage {\n  option (foo) = { a: /* bla */ 1 };\n}\n	{"dependency":[],"publicDependency":[],"weakDependency":[],"messageType":[{"name":"TestMessage","field":[],"nestedType":[],"enumType":[],"oneofDecl":[],"extension":[],"options":{"(foo)":" a:           1 "}}],"enumType":[],"service":[],"extension":[],"syntax":"proto2"}
+# ParseMessageTest.AggregateValueWithSingleLineComment
+message TestMessage {\n  option (foo) = {\n    // This is a comment\n    a: 1\n  };\n}\n	{"dependency":[],"publicDependency":[],"weakDependency":[],"messageType":[{"name":"TestMessage","field":[],"nestedType":[],"enumType":[],"oneofDecl":[],"extension":[],"options":{"(foo)":"\n    \n    a: 1\n  "}}],"enumType":[],"service":[],"extension":[],"syntax":"proto2"}
+# ParseMessageTest.AggregateValueWithMultilineBlockComment
+message TestMessage {\n  option (foo) = {\n    /* line 1\n       line 2\n       line 3 */\n    a: 1\n  };\n}\n	{"dependency":[],"publicDependency":[],"weakDependency":[],"messageType":[{"name":"TestMessage","field":[],"nestedType":[],"enumType":[],"oneofDecl":[],"extension":[],"options":{"(foo)":"\n    \n\n                \n    a: 1\n  "}}],"enumType":[],"service":[],"extension":[],"syntax":"proto2"}
 # ParseMessageTest.SimpleFields
 message TestMessage {\n  required int32 foo = 15;\n  optional int32 bar = 34;\n  repeated int32 baz = 3;\n}\n	{"dependency":[],"publicDependency":[],"weakDependency":[],"messageType":[{"name":"TestMessage","field":[{"name":"foo","number":15,"label":"LABEL_REQUIRED","type":"TYPE_INT32"},{"name":"bar","number":34,"label":"LABEL_OPTIONAL","type":"TYPE_INT32"},{"name":"baz","number":3,"label":"LABEL_REPEATED","type":"TYPE_INT32"}],"nestedType":[],"enumType":[],"oneofDecl":[],"extension":[]}],"enumType":[],"service":[],"extension":[],"syntax":"proto2"}
 # ParseMessageTest.PrimitiveFieldTypes

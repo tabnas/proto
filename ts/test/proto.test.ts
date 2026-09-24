@@ -4,7 +4,8 @@
 import { describe, it } from 'node:test'
 import assert from 'node:assert'
 
-const { parse } = require('..')
+const { parse, toDescriptor, Proto } = require('..')
+const { Tabnas } = require('@tabnas/parser')
 
 describe('proto3', () => {
   const fdp = parse(`syntax = "proto3";
@@ -177,5 +178,50 @@ message  M  {
 `)
     const mini = parse('syntax="proto3";message M{int32 a=1;repeated string b=2;}')
     assert.deepEqual(pretty.messageType, mini.messageType)
+  })
+})
+
+describe('aggregate option values', () => {
+  // protoc records the text between the braces, comments turned to the
+  // spaces and newlines that keep each token where it was (protoc 36.2's
+  // parser gives exactly this string for this source).
+  const src =
+    'message M {\n  option (f) = {\n    a: 1 // one\n    b { c: "x" /* two */ }\n  };\n}\n'
+  const text = '\n    a: 1 \n    b { c: "x"           }\n  '
+
+  // The rules under the entry whose `src` is `entry`: the CST shape of
+  // one value inside the braces.
+  const entryKids = (n: any, entry: string): any =>
+    'messageValueEntry' === n?.rule && entry === n.src
+      ? n.kids.map((k: any) => k.rule)
+      : (n?.kids || []).map((k: any) => entryKids(k, entry)).find((k: any) => k)
+
+  it('records the text between the braces, as protoc does', () => {
+    assert.equal(parse(src).messageType[0].options['(f)'], text)
+  })
+
+  it('records the same text through toDescriptor on a reused engine', () => {
+    // The walk has only the CST, so the text has to be on the CST: the
+    // plugin puts it on the aggregate's `constant` node as `aggregate`,
+    // and leaves `src` the tokens run together, as on every node.
+    const tn = new Tabnas({ rewind: { history: 8192 } }).use(Proto)
+    const cst = tn.parse(src)
+    assert.equal(toDescriptor(cst).messageType[0].options['(f)'], text)
+    const find = (n: any): any =>
+      'constant' === n?.rule ? n : (n?.kids || []).map(find).find((k: any) => k)
+    const node = find(cst)
+    assert.equal(node.src, '{a:1b{c:"x"}}')
+    assert.equal(node.aggregate, text)
+    // A value inside the braces is a `constant`, a single string included.
+    assert.deepEqual(entryKids(cst, 'c:"x"'), ['constant'])
+  })
+
+  it('takes a string value written as adjacent literals', () => {
+    const adjacent = 'message M { option (f) = { a: "x" "y" }; }'
+    const fdp = parse(adjacent)
+    assert.equal(fdp.messageType[0].options['(f)'], ' a: "x" "y" ')
+    // Two or more literals are the entry's `strLit` children, one each.
+    const tn = new Tabnas({ rewind: { history: 8192 } }).use(Proto)
+    assert.deepEqual(entryKids(tn.parse(adjacent), 'a:"x""y"'), ['strLit', 'strLit'])
   })
 })

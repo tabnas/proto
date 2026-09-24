@@ -53,6 +53,28 @@ that precedes the node's first child, and reads inlined values (a leading
 type, the first `reserved` range) from the node's `src`. Whole-word
 tokenisation is what makes that `src` reading unambiguous.
 
+## The one value read from the source
+
+An option can take a text-format message as its value:
+`option (my_option) = { name: "x" size: 2 };`. `protoc`'s parser does
+not read that message. It keeps the text between the braces as the
+option's `aggregate_value`, and the text-format parser reads it later,
+once it knows the option's type.
+
+That text keeps its layout. Whitespace and newlines stay as written, and
+each comment becomes the newlines and spaces that leave the next token on
+the line and column it started on, because text format has no `//` or
+`/* */` comments. A comment directly ahead of the closing brace leaves
+nothing.
+
+The parse tree has no copy of that text: the lexer has already dropped
+the whitespace and the comments, so `src` holds the tokens run together.
+The plugin therefore reads the text from the source during the parse,
+while the brace tokens are in hand, and leaves it on the aggregate's
+`constant` node as `aggregate`. `toDescriptor` takes the value from
+there, which is why an engine you built yourself gives the same answer as
+`parse`.
+
 ## Versions
 
 The resolved version (from the `syntax` / `edition` declaration, reconciled
@@ -62,7 +84,6 @@ descriptor details such as `proto3Optional`.
 
 ## Out of scope (for now)
 
-A Go port (mirroring the `@tabnas/zon` / `@tabnas/abnf` dual-runtime
-layout), edition *feature* resolution (for example `features.field_presence`
+Edition *feature* resolution (for example `features.field_presence`
 driving presence defaults; features are recorded verbatim in `options`),
 cross-file type resolution, and the protobuf text/wire formats.

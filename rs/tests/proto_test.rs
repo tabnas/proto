@@ -498,6 +498,95 @@ fn to_descriptor_resolves_the_version_from_the_cst() {
     assert_eq!(file.edition.as_deref(), Some("EDITION_2024"));
 }
 
+// An aggregate value is the text between its braces, which the CST's
+// `src` cannot give: the lexer drops whitespace and comments. The plugin
+// puts the text on the aggregate's `constant` node as `aggregate`, so a
+// caller who drives the engine and calls `to_descriptor` gets what
+// `parse` gets. The C library takes that path. The rules themselves are
+// rows of `test/spec/aggregate.tsv`.
+#[test]
+fn an_aggregate_reads_the_same_through_to_descriptor() {
+    let source =
+        "message M {\n  option (f) = {\n    a: 1 // one\n    b { c: \"x\" /* two */ }\n  };\n}\n";
+    // protoc 36.2's own parser gives exactly this string for this source.
+    let text = "\n    a: 1 \n    b { c: \"x\"           }\n  ";
+    let want = OptionValue::Str(text.to_string());
+    let option = |file: &FileDescriptorProto| {
+        file.message_type[0]
+            .options
+            .as_ref()
+            .and_then(|options| options.get("(f)"))
+            .cloned()
+    };
+
+    assert_eq!(option(&must_parse(source, None)), Some(want.clone()));
+
+    let parser = make();
+    let cst = parser.parse(source).expect("parse");
+    let file = to_descriptor(&cst, None).expect("descriptor");
+    assert_eq!(option(&file), Some(want));
+
+    fn constant(node: &tabnas::Value) -> Option<&tabnas::Value> {
+        if "constant" == tabnas_proto::nrule(node) {
+            return Some(node);
+        }
+        child_rules(node).into_iter().find_map(constant)
+    }
+    let node = constant(&cst).expect("a constant node");
+    assert_eq!(
+        nsrc(node),
+        "{a:1b{c:\"x\"}}",
+        "src stays the tokens run together"
+    );
+    match node {
+        tabnas::Value::Object(entries) => assert_eq!(
+            entries.get("aggregate"),
+            Some(&tabnas::Value::String(text.to_string()))
+        ),
+        _ => panic!("the constant node is not an object"),
+    }
+
+    // A value inside the braces is a `constant`, a single string included.
+    assert_eq!(entry_kids(&cst, "c:\"x\""), Some(vec!["constant"]));
+}
+
+#[test]
+fn an_aggregate_takes_a_string_value_written_as_adjacent_literals() {
+    let source = "message M { option (f) = { a: \"x\" \"y\" }; }";
+    let file = must_parse(source, None);
+    assert_eq!(
+        file.message_type[0]
+            .options
+            .as_ref()
+            .and_then(|options| options.get("(f)"))
+            .cloned(),
+        Some(OptionValue::Str(" a: \"x\" \"y\" ".to_string()))
+    );
+
+    // Two or more literals are the entry's `strLit` children, one each.
+    let cst = make().parse(source).expect("parse");
+    assert_eq!(
+        entry_kids(&cst, "a:\"x\"\"y\""),
+        Some(vec!["strLit", "strLit"])
+    );
+}
+
+// The rules under the entry whose `src` is `entry`: the CST shape of one
+// value inside the braces.
+fn entry_kids<'a>(node: &'a tabnas::Value, entry: &str) -> Option<Vec<&'a str>> {
+    if "messageValueEntry" == tabnas_proto::nrule(node) && entry == nsrc(node) {
+        return Some(
+            child_rules(node)
+                .into_iter()
+                .map(tabnas_proto::nrule)
+                .collect(),
+        );
+    }
+    child_rules(node)
+        .into_iter()
+        .find_map(|kid| entry_kids(kid, entry))
+}
+
 #[test]
 fn the_grammar_text_carries_every_source_file() {
     assert!(!tabnas_proto::GRAMMAR_TEXT.is_empty());

@@ -13,7 +13,10 @@ Parse a `.proto` source string. Builds a fresh engine per call.
 ### `Proto` (Tabnas plugin)
 
 `new Tabnas().use(Proto)` installs the union grammar; `tn.parse(src)` then
-returns the raw `{rule, src, kids}` CST. `Proto.defaults` is
+returns the raw `{rule, src, kids}` CST. A node's `src` holds its tokens
+run together and no whitespace. The `constant` node of an aggregate option
+value also carries `aggregate`, the text the descriptor records for that
+value, described under Options below. `Proto.defaults` is
 `{ version: null, reconcile: true }`. The plugin installs `@tabnas/abnf`
 automatically if it is not already present.
 
@@ -106,6 +109,27 @@ as written (`ctype`, `(foo)`, `features.field_presence`,
 information is the same; the shape is friendlier to read. Values are
 JavaScript strings / numbers / booleans, with identifiers (`CORD`, `inf`,
 `-nan`) kept verbatim.
+
+An aggregate value, `option (f) = { a: 1 };`, is a string: the text
+between the braces, as `protoc` records it in `aggregate_value`. The text
+keeps its whitespace and newlines. Each comment becomes the newlines and
+spaces that keep the next token on its line and column, and a comment
+directly ahead of the closing brace leaves nothing. A column is what
+`protoc` counts as one: a byte of UTF-8, with a tab moving to the next
+multiple of 8. Inside the braces you may write a string value as adjacent
+literals, `a: "x" "y"`, as text format allows.
+
+```js
+const { parse } = require('@tabnas/proto')
+
+const fdp = parse(`message M {
+  option (f) = {
+    a: 1 // one
+    b: 2
+  };
+}`)
+fdp.messageType[0].options['(f)'] // => '\n    a: 1 \n    b: 2\n  '
+```
 
 ## Errors
 
