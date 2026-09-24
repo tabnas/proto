@@ -9,8 +9,8 @@ them there in a reviewed pull request: session credentials can push
 workflow changes (admin `DECISIONS.md` ADR-8, as amended on 2026-09-24),
 so staging a workflow here for a maintainer to promote is optional.
 
-`ci.yml`, `crates-release.yml`, `release.yml`, `notify-status.yml` and
-`scorecard.yml` also have a template in admin
+`ci.yml`, `crates-release.yml`, `release.yml`, `notify-status.yml`,
+`scorecard.yml` and `deps-gate.yml` also have a template in admin
 `rollout/workflows/proto__<file>`. Mirror a change there in the same change:
 admin `scripts/verify.sh` compares the two, and
 `rollout/apply-workflows.sh --apply` pushes the template's text back.

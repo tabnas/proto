@@ -347,9 +347,9 @@ The steps, in order:
    workflow **has no test step** — it reads `main`, builds against
    already-published dependencies, publishes and tags. The bump commit's
    own CI is the only gate there is. After the merge that is `ci.yml`,
-   `rust.yml` (a bump touches `ts/package.json` and `rs/Cargo.toml`) and
-   `docs.yml` when a gated page or the Vale configuration changed.
-   `clib.yml` has no `push` trigger (step 3).
+   `deps-gate.yml`, `rust.yml` (a bump touches `ts/package.json` and
+   `rs/Cargo.toml`) and `docs.yml` when a gated page or the Vale
+   configuration changed. `clib.yml` has no `push` trigger (step 3).
 
    An npm version is immutable, and a Go module tag is worse: proxy.golang.org caches module versions permanently,
    so a `go/vX.Y.Z` naming the wrong commit cannot be moved, only
