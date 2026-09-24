@@ -84,7 +84,6 @@ descriptor details such as `proto3Optional`.
 
 ## Out of scope (for now)
 
-A Go port (mirroring the `@tabnas/zon` / `@tabnas/abnf` dual-runtime
-layout), edition *feature* resolution (for example `features.field_presence`
+Edition *feature* resolution (for example `features.field_presence`
 driving presence defaults; features are recorded verbatim in `options`),
 cross-file type resolution, and the protobuf text/wire formats.
