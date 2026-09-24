@@ -1,6 +1,6 @@
 # The Rust gate. Standalone rather than an arm of ci.yml, because ci.yml
 # calls the org-shared polyglot workflow and that takes no Rust input:
-# promoting this file needs no change in tabnas/.github.
+# this file needs no change in tabnas/.github.
 name: Rust
 
 # Runs on EVERY branch push, not just main, and the path lists are
