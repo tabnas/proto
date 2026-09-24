@@ -138,11 +138,14 @@ and print `{rule, src, kids}`) to see how it inlined, then map it.
 cd ts && npm i && npm run build && npm test
 ```
 
-Dependencies: `@tabnas/abnf` (must be the local/in-flight version with the
-`TX`/`NR`/`ST`/`VL` token terminals and `wordKeywords`) and
-`@tabnas/parser`. In this dev layout `@tabnas/abnf` resolves via
-`file:../../abnf/ts`; `@tabnas/parser` from the registry. Node ≥ 24 in CI
-(warns but runs on 22).
+Dependencies: `@tabnas/abnf` and `@tabnas/parser` are `peerDependencies`
+(`">=0"`) and `"*"` devDependencies in `ts/package.json`, and
+`@tabnas/support` is a dev-only `"*"` devDependency (the shared fixture
+loader). None is a `file:` path, so `npm i` resolves all three from the
+registry. The `TX`/`NR`/`ST`/`VL` token terminals and the `wordKeywords`
+option proto relies on are in the published releases (`wordKeywords` is
+implemented by `@tabnas/bnf`, which `@tabnas/abnf` builds on). Node ≥ 24
+in CI (warns but runs on 22).
 
 ## Verify your work
 
