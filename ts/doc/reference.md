@@ -68,7 +68,8 @@ written. Cross-file / scope resolution is a separate pass.
 
 `json_name` and `default` are pseudo-options: they are lifted out of
 `options` into `jsonName` and `defaultValue` (a string, the literal as
-written). An `extend` member records the message it extends in `extendee`.
+written, or adjacent literals read as described under Options below). An
+`extend` member records the message it extends in `extendee`.
 
 ### Ranges
 
@@ -110,14 +111,34 @@ information is the same; the shape is friendlier to read. Values are
 JavaScript strings / numbers / booleans, with identifiers (`CORD`, `inf`,
 `-nan`) kept verbatim.
 
+A string written as one literal keeps its escapes as written: `"\x41"` is
+`\x41`. A string written as adjacent literals, `"a" "b"`, is the one
+string `protoc` records: each literal decoded and the results joined, so
+`"\x41" "b"` is `Ab`. Where the decoded bytes fall outside UTF-8, the
+Unicode replacement character stands in for each ill-formed sequence, and
+a `bytes` field's default comes back escaped again, as `protoc` escapes
+it. The same holds wherever `protoc` reads a string: `syntax`, `edition`,
+`import`, `default`, `json_name` and a reserved name.
+
 An aggregate value, `option (f) = { a: 1 };`, is a string: the text
 between the braces, as `protoc` records it in `aggregate_value`. The text
 keeps its whitespace and newlines. Each comment becomes the newlines and
 spaces that keep the next token on its line and column, and a comment
 directly ahead of the closing brace leaves nothing. A column is what
 `protoc` counts as one: a byte of UTF-8, with a tab moving to the next
-multiple of 8. Inside the braces you may write a string value as adjacent
-literals, `a: "x" "y"`, as text format allows.
+multiple of 8.
+
+Inside the braces you may write what text format takes there:
+
+- A string value as adjacent literals. `a: "x" "y"`
+- A repeated field's values as a list. `a: [1, 2]`
+- A message in angle brackets. `a < b: 1 >`
+- A field named by an extension or an Any type URL. `[x.y]: 1`,
+  `[type.googleapis.com/x.Y] { a: 1 }`
+- A field name or enum value spelt like a keyword. `message: optional`
+
+`parse` refuses text outside text format, even where `protoc`'s parser,
+which only matches the braces, would record it.
 
 ```js
 const { parse } = require('@tabnas/proto')

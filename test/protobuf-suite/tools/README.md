@@ -92,6 +92,7 @@ Python.
    ninja -C /tmp/oracle oracle
    $PY test/protobuf-suite/tools/oracle-check.py /tmp/oracle/oracle test/protobuf-suite
    $PY test/protobuf-suite/tools/oracle-check.py /tmp/oracle/oracle --spec test/spec/aggregate.tsv
+   $PY test/protobuf-suite/tools/oracle-check.py /tmp/oracle/oracle --spec test/spec/adjacent-strings.tsv
    ```
 
    At v36.2: the parser produces all 89 goldens and accepts all 50
@@ -99,8 +100,13 @@ Python.
    with the upstream diagnostic among them for 96. Two of the three misses
    are the `require_syntax_identifier_` tests again, and the third,
    `ExplicitlyMapEntryError`, reports its line through a validation error
-   collector upstream, where this run prints `-1:0`. All 45
-   `aggregate.tsv` rows equal the parser's descriptor.
+   collector upstream, where this run prints `-1:0`. Every fixture row
+   that expects a descriptor equals the parser's: 84 of 84 in
+   `aggregate.tsv` and 21 of 21 in `adjacent-strings.tsv`. The parser
+   refuses 3 of the 12 `aggregate.tsv` error rows and the one
+   `adjacent-strings.tsv` error row; the other 9 are the block
+   `aggregate.tsv` marks as text protoc's parser records and text format
+   refuses, and the check lists each.
 
 4. **Run the conformance runners**, in every runtime: `npm test` in `ts/`,
    `GOWORK=off go test -count=1 ./...` in `go/`, `ci/rust/run.sh`. A

@@ -81,9 +81,10 @@ ABORTS the process, and the abort cannot be caught, logged or recovered
 from. A port that can build an unbounded tree therefore has to bound it.
 
 `rs/src/build_descriptor.rs` `MAX_NESTING_DEPTH` is 100. `parse` counts
-braces outside strings and comments and refuses past that BEFORE the
-engine builds a tree that deep; `build_file` refuses a CST it is handed
-directly.
+braces, and the angle brackets that nest a message inside an aggregate
+value (`{ a < b: 1 > }`), outside strings and comments, and refuses past
+that BEFORE the engine builds a tree that deep; `build_file` refuses a
+CST it is handed directly.
 
 Measured, on the smallest stack a caller is likely to have, the 1 MiB a
 spawned `std::thread` gets by default, with a debug build:
@@ -112,9 +113,10 @@ every deeper level's.
 discipline, not a defect to repair.
 
 **Executed:** `rs/tests/untrusted_test.rs`, which parses AT the cap and one
-level under it as well as past it. A fixture row cannot express it: the
-input is larger than a cell, and the canonical runtime's answer is a
-descriptor 100 levels deep.
+level under it as well as past it, for messages and for angle brackets in
+an aggregate value. A fixture row cannot express it: the input is larger
+than a cell, and the canonical runtime's answer is a descriptor 100
+levels deep.
 
 ## 3. Divergences this repository records that are NOT Rust's
 

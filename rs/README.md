@@ -121,9 +121,11 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 A message extension or reserved range is half-open, an enum reserved
 range is closed, and `to max` is the sentinel protoc uses for each. The
 repository [`../AGENTS.md`](../AGENTS.md) lists the whole of the output
-shape, including the two declared deviations from protoc: options are a
-plain map keyed by the option name as written, and `default_value` keeps
-the literal as written.
+shape, including the declared deviations from protoc: options are a plain
+map keyed by the option name as written, `default_value` keeps the
+literal as written, and a string written as one literal keeps its
+escapes as written, where protoc decodes them. Adjacent literals read as
+protoc reads them.
 
 ### Version detection
 
@@ -237,7 +239,10 @@ already refused to walk it. The refusal is not the protection; parsing
 no such tree is.
 
 The cap counts braces outside string literals and comments, so a document
-that merely mentions braces is not refused for nesting.
+that merely mentions braces is not refused for nesting. Inside an
+aggregate option value it also counts angle brackets, because text format
+nests a message in them as it does in braces: `{ a < b < c: 1 > > }`. It
+leaves a `map<K, V>` field's alone.
 
 ## Install
 

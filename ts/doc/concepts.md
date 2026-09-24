@@ -26,6 +26,9 @@ structure over the lexer's built-in tokens, referenced by name:
 
 Keywords are whole-word matched (`@tabnas/abnf`'s `wordKeywords` option) so
 `option` never grabs the `option` prefix of an identifier `optional`.
+Inside an aggregate value, where text format has no keywords, a lexer
+matcher the plugin installs reads a keyword as an identifier instead, as
+"The one value read from the source" below explains.
 
 ## One permissive union grammar
 
@@ -74,6 +77,18 @@ while the brace tokens are in hand, and leaves it on the aggregate's
 `constant` node as `aggregate`. `toDescriptor` takes the value from
 there, which is why an engine you built yourself gives the same answer as
 `parse`.
+
+The grammar still reads what the braces hold, as text format: values,
+adjacent string literals, lists such as `a: [1, 2]`, messages in braces
+and in angle brackets such as `a < b: 1 >`, and fields named by an
+extension or an Any type URL, such as `[x.y]: 1`. So a parse refuses text
+outside text format, even where `protoc`'s parser, which only matches the
+braces, would record it. Text format has no keywords, so inside the
+braces `message` or `max` is a field name or an enum value like any other
+word. The lexer reads a keyword as a keyword everywhere else, so the
+plugin installs a matcher that runs ahead of it and, inside an aggregate
+value only, reads such a word as an identifier, and a bracketed name as
+one word.
 
 ## Versions
 

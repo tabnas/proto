@@ -68,7 +68,10 @@ left unset for them; cross-file resolution is a separate concern.
 Two things are deliberately shaped for readability rather than byte-for-byte
 `protoc` parity: options are a plain `{ name: value }` map (not an
 `uninterpretedOption` list), and `defaultValue` keeps the literal as
-written. See [doc/reference.md](doc/reference.md).
+written. A string written as one literal also keeps its escapes as
+written, where `protoc` decodes them, while adjacent literals such as
+`"a" "b"` read as `protoc` reads them. See
+[doc/reference.md](doc/reference.md).
 
 ## Conformance
 

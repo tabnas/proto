@@ -70,11 +70,16 @@ the `rust` column, each through its runtime's half of
 
 ## The files
 
-`aggregate` / `edition-2023` / `edition-2024` / `proto2` / `proto3` /
-`version-detect` / `whitespace` are the hand-written per-topic fixtures.
-`aggregate.tsv` pins how an aggregate option value's text is recorded;
-its rows were checked against protoc 36.2's own parser, and a new row
-should be too (`protobuf-suite/tools/oracle-check.py --spec`).
+`adjacent-strings` / `aggregate` / `edition-2023` / `edition-2024` /
+`proto2` / `proto3` / `version-detect` / `whitespace` are the hand-written
+per-topic fixtures. `aggregate.tsv` pins how an aggregate option value's
+text is recorded and which text format forms the grammar takes between
+the braces; `adjacent-strings.tsv` pins a string written as adjacent
+literals, wherever protoc reads one. The rows of both were checked
+against protoc 36.2's own parser, and a new row should be too
+(`protobuf-suite/tools/oracle-check.py --spec`). The one exception is the
+`aggregate.tsv` block that says so: text protoc's parser records and
+text format refuses, which this package refuses as well.
 `descriptor-shape.tsv` is a curated, commented tour of the descriptor
 details protoc pins down (range bounds, groups, pseudo-options, synthetic
 oneofs, visibility, …).
