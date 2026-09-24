@@ -43,7 +43,17 @@ func Proto(j *tabnas.Tabnas) error {
 		Start:        "proto",
 		WordKeywords: true,
 	}, nil)
-	return err
+	if err != nil {
+		return err
+	}
+	// An aggregate value (`option (f) = { a: 1 };`) is recorded as the text
+	// between its braces, which the CST's src does not keep: the lexer drops
+	// whitespace and comments. This action reads it from the source while
+	// the brace tokens are to hand; see aggregate.go.
+	j.Rule("constant", func(rs *tabnas.RuleSpec, _ *tabnas.Parser) {
+		rs.AddAC(recordAggregate)
+	})
+	return nil
 }
 
 // ToDescriptor turns a parsed proto CST into a FileDescriptorProto, resolving

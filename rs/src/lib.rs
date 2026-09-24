@@ -38,6 +38,7 @@
 //! `import` paths and `type_name`s included, is untrusted text. See the
 //! repository `AGENTS.md`.
 
+mod aggregate;
 mod build_descriptor;
 mod descriptor;
 mod detect_version;
@@ -159,6 +160,13 @@ pub fn proto(parser: &mut Tabnas) -> Result<(), ProtoError> {
     };
     abnf(parser, GRAMMAR_TEXT, Some(&AbnfOptions::new(convert)))
         .map_err(|error| ProtoError::Grammar(format!("proto: {error}")))?;
+    // An aggregate value (`option (f) = { a: 1 };`) is recorded as the text
+    // between its braces, which the CST's `src` does not keep: the lexer
+    // drops whitespace and comments. This action reads it from the source
+    // while the brace tokens are to hand; see `aggregate.rs`.
+    parser.define_rule("constant", |spec| {
+        spec.add_ac(aggregate::record_aggregate);
+    });
     Ok(())
 }
 

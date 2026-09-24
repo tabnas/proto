@@ -200,7 +200,7 @@ describe('doc-examples', () => {
   // NOTHING (a regression in extractBlocks, a renamed doc directory, a `tsc`
   // output layout change). A ratchet at the observed count is the honest
   // version: it fails if extraction ever drops a block.
-  const MIN_TESTABLE = 11 // measured 2026-08-09: ts/README.md + ts/doc/*
+  const MIN_TESTABLE = 12 // measured 2026-09-24: ts/README.md + ts/doc/*
   it(`extracted at least ${MIN_TESTABLE} testable doc blocks`, () => {
     assert.ok(
       testable >= MIN_TESTABLE,

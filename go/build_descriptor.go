@@ -239,6 +239,11 @@ func jsNumber(s string) (float64, bool) {
 // ---- constants / option values --------------------------------------------
 
 func constantValue(n map[string]any) OptionValue {
+	// An aggregate (`{ a: 1 }`) is the text between its braces, as protoc
+	// records it in aggregate_value; see aggregate.go.
+	if text, ok := n["aggregate"].(string); ok {
+		return text
+	}
 	s := nsrc(n)
 	if s == "true" {
 		return true

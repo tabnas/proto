@@ -129,8 +129,10 @@ impl SymbolVisibility {
 ///
 /// The canonical `OptionValue` union also admits a nested map, and no
 /// input produces one: an aggregate value (`option (f) = { a: 1 };`) is
-/// kept as the literal text between its braces, so the three variants
-/// here are the whole range the walk emits.
+/// kept as the text between its braces, as protoc records it (every
+/// comment turned to the spaces and newlines that hold the layout; see
+/// `aggregate.rs`), so the three variants here are the whole range the
+/// walk emits.
 #[derive(Debug, Clone, PartialEq, Serialize)]
 #[serde(untagged)]
 pub enum OptionValue {

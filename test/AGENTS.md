@@ -1,8 +1,9 @@
 # Agents Guide — shared spec fixtures
 
-`spec/*.tsv` holds the cross-runtime conformance fixtures. Both runtimes
-auto-discover and run **every** file in this directory, so a change here
-affects TypeScript and Go together — edit with that in mind.
+`spec/*.tsv` holds the cross-runtime conformance fixtures. All three
+runtimes auto-discover and run **every** file in this directory, so a
+change here affects TypeScript, Go and Rust together — edit with that in
+mind.
 
 ## Format
 
@@ -69,8 +70,11 @@ the `rust` column, each through its runtime's half of
 
 ## The files
 
-`edition-2023` / `edition-2024` / `proto2` / `proto3` / `version-detect` /
-`whitespace` are the hand-written per-topic fixtures.
+`aggregate` / `edition-2023` / `edition-2024` / `proto2` / `proto3` /
+`version-detect` / `whitespace` are the hand-written per-topic fixtures.
+`aggregate.tsv` pins how an aggregate option value's text is recorded;
+its rows were checked against protoc 36.2's own parser, and a new row
+should be too.
 `descriptor-shape.tsv` is a curated, commented tour of the descriptor
 details protoc pins down (range bounds, groups, pseudo-options, synthetic
 oneofs, visibility, …).

@@ -150,6 +150,13 @@ fn number_of(node: Option<&Value>) -> f64 {
 // ---- constants and option values ------------------------------------------
 
 fn constant_value(node: &Value) -> OptionValue {
+    // An aggregate (`{ a: 1 }`) is the text between its braces, as protoc
+    // records it in `aggregate_value`; see `aggregate.rs`.
+    if let Value::Object(entries) = node {
+        if let Some(Value::String(text)) = entries.get("aggregate") {
+            return OptionValue::Str(text.clone());
+        }
+    }
     let src = nsrc(node);
     if "true" == src {
         return OptionValue::Bool(true);
@@ -167,8 +174,9 @@ fn constant_value(node: &Value) -> OptionValue {
             return OptionValue::Number(number);
         }
     }
-    // An identifier (an enum value name, `inf`, `-nan`), an aggregate
-    // value, or a number JavaScript will not read: kept verbatim.
+    // An identifier (an enum value name, `inf`, `-nan`), a number
+    // JavaScript will not read, or an aggregate on a tree that did not come
+    // through this plugin's parse, so has no `aggregate`: kept verbatim.
     OptionValue::Str(src.to_string())
 }
 
