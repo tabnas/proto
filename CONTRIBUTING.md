@@ -10,17 +10,19 @@ repository for humans and agents alike.
 
 ## Build & test
 
-This repository is *polyglot*: `ts/` and `go/` hold two parallel
-implementations of the same package. **`ts/` is canonical; `go/` tracks
-it** — a behaviour change normally lands in both, with tests in both.
+This repository is *polyglot*: `ts/`, `go/` and `rs/` hold three parallel
+implementations of the same package. **`ts/` is canonical; `go/` and
+`rs/` track it** — a behaviour change normally lands in all three, with
+tests in all three.
 
 ```bash
-make build   # builds ts/ and go/
-make test    # tests ts/ and go/
+make build   # builds ts/, go/ and rs/
+make test    # tests ts/, go/ and rs/
 
 # or per stack:
 cd ts && npm install && npm run build && npm test
 cd go && go build ./... && go test ./...
+cd rs && cargo test --all-targets && cargo test --doc
 ```
 
 Tabnas repos resolve their unpublished `@tabnas/*` siblings from
@@ -44,7 +46,7 @@ Use `feat!:` / `fix!:` (or a `BREAKING CHANGE:` footer) for breaking changes.
 
 1. Open an issue first for anything larger than a small fix.
 2. Branch from `main`; keep the PR focused on one change.
-3. `make test` must pass for **both** implementations.
+3. `make test` must pass for **every** implementation.
 4. PR titles follow Conventional Commits — PRs are squash-merged, so the
    title becomes the commit message.
 5. CI must be green before merge.

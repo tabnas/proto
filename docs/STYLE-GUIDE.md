@@ -2,7 +2,7 @@
 
 How the tabnas documentation is written. Adapted from
 [aontu](https://github.com/aontu-lang/aontu)'s `docs/STYLE-GUIDE.md`,
-with tabnas's terminology, two-runtime file layout, and executable-example
+with tabnas's terminology, three-runtime file layout, and executable-example
 conventions. This guide is normative for every page `ts/scripts/gated-docs.cjs`
 lists, which is the reader-facing set: 7 pages in this repository. It exists so that a page written next year sounds like a
 page written this year, and so that a reviewer can point at a rule instead
@@ -35,14 +35,14 @@ drift from the other:
 
 | Gate | Runs | Checks |
 |---|---|---|
-| `make prose` (Vale) | `ci/workflows/docs.yml` (staged) | spelling, Google's conventions, and the banned list, at the levels set in `.vale.ini` |
+| `make prose` (Vale) | `.github/workflows/docs.yml` | spelling, Google's conventions, and the banned list, at the levels set in `.vale.ini` |
 | `ts/test/docs.test.js` | `make test` | the banned list again, the no-em-dash rule, the first-person rules, the exclamation ration, and no emoji |
 | `ts/scripts/vale-counts.cjs` | `make prose` | that every count in `.vale.ini`, and the total below, are what Vale reports |
 
-The gated set is the reader-facing one: the language-neutral pages under
-`doc/`, the four Diátaxis kinds under `ts/doc/` and `go/doc/`, and the
-three package READMEs. The Rust-port series, the feasibility reports and
-the defect ledgers are working documents, and they are out.
+The gated set is the reader-facing one: the four Diátaxis kinds under
+`ts/doc/`, and the READMEs at the root, in `ts/` and in `rs/`. The agent
+guides, `DIVERGENCE.md` and the notes under `ci/` and `test/` are working
+documents, and they are out.
 
 **Four checks live in the local gate rather than in Vale, and the reason
 is capability, not preference.**
@@ -73,11 +73,10 @@ and fails on any difference; `--write` re-measures. A rule switched off
 is measured with it switched back on, because the count is the evidence
 for switching it off.
 
-**The Vale gate is staged, not yet wired.** `ci/workflows/docs.yml`
-follows this repository's convention for proposed workflows (see
-`ci/README.md`): review it and move it to `.github/workflows/` to
-activate. `make prose` runs the same check locally today, and
-`ts/test/docs.test.js` runs in `make test` now.
+**The Vale gate runs in CI.** `.github/workflows/docs.yml` runs Vale and
+the recorded-count check on every push and pull request that changes a
+gated page or the Vale configuration. `make prose` runs the same two
+checks locally, and `ts/test/docs.test.js` runs in `make test`.
 
 ## The structure: Diátaxis, enforced by placement
 
@@ -100,11 +99,11 @@ tutorial, used in a guide, specified in the reference, argued in the
 explanation) but the normative statement lives in the reference and
 everything else links to it.
 
-**The two runtimes carry the same set.** A page present under `ts/doc/`
-and missing under `go/doc/` is a gap, and `gated-docs.cjs` filters to
-what is on disk so the gap shows up as a missing gate rather than a
-crash. A page only one port has is a deliberate exception and says so in
-its own opening lines.
+**The reader-facing pages live under `ts/doc/`.** The Rust port documents
+itself in `rs/README.md`, which is gated like the other two READMEs.
+`gated-docs.cjs` throws on a declared page that is not on disk, so a gated
+page that is deleted or renamed fails the gate rather than dropping out of
+it.
 
 ## The published set cites nothing internal
 
@@ -136,8 +135,9 @@ The rule runs one way. Internal documents cite each other and cite the
 documentation freely. Only the direction out of the published set is
 closed. The **root `README.md`** is exempt, because it is the
 repository's front page and its job includes pointing at `AGENTS.md`.
-`ts/README.md` and `go/README.md` are not exempt: npm and pkg.go.dev
-render them to somebody who has the package and not the repository.
+`ts/README.md` and `rs/README.md` are not exempt: they are the npm
+package's README and the crate's, read by somebody who has the package
+and not the repository.
 
 ## The voice
 
@@ -372,12 +372,15 @@ notations" is. A rule demoted without that note reads later as an
 oversight, and gets re-promoted by somebody repeating the work.
 
 To accept a word the spelling gate does not know, add it to `accept.txt`
-in the same directory, one stem at a time. Never add a suffix pattern:
-`\w+ise` accepts `madeupise` too, and punches a hole through the gate the
-file exists to make usable. Write a case pair as one regular expression
-(`[Tt]abnas`), because two plain lines make Vale enforce one spelling
-over the other, and it will then report the directory `ts/` as a
-misspelling of `TS`.
+in the same directory, one word at a time. An entry matches a whole word,
+so `[Ee]nder` does not accept `enders`: a plural or a possessive is an
+entry of its own. Never add a suffix pattern: `\w+ise` accepts `madeupise`
+too, and punches a hole through the gate the file exists to make usable.
+Write a case pair as one regular expression (`[Tt]abnas`), because two
+plain lines make Vale enforce one spelling over the other. A name also
+written in lower case, as a package name is, puts its capitals in the same
+entry (`(?:[Jj]son|JSON)`); a name with one correct case is one exact
+entry (`TS`, `DOMPurify`), so Vale reports any other case of it.
 
 ## The fleet
 

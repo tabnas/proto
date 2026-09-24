@@ -276,11 +276,11 @@ The steps, in order:
    only the first three for a while: following it left both Rust values
    stale and turned `rs/tests/version_test.rs` red.
 
-   **The Rust check is not automatic yet.** `ci/workflows/rust.yml` is
-   staged under ADR-8 and runs nowhere until a maintainer promotes it, so
-   nothing on a pull request tells you the Rust sites drifted. Run
-   `ci/rust/run.sh` yourself on the bump commit; the TypeScript and Go
-   checks run in `ci.yml` as usual.
+   **The Rust check runs in its own workflow.** `.github/workflows/rust.yml`
+   runs `ci/rust/run.sh` on every push and pull request that touches the
+   crate or a file its tests read, `ts/package.json` and `go/proto.go`
+   among them, so a version bump runs it. The TypeScript and Go checks
+   run in `ci.yml` as usual.
 
    Bumping `rs/Cargo.toml` also moves `rs/Cargo.lock`'s entry for this
    crate, which `ci/rust/run.sh` compares before it runs anything. Run
@@ -346,8 +346,10 @@ The steps, in order:
 4. **Wait for `main` CI to go green on the bump commit.** The release
    workflow **has no test step** — it reads `main`, builds against
    already-published dependencies, publishes and tags. The bump commit's
-   own CI is the only gate there is, and after the merge that is
-   `ci.yml` alone.
+   own CI is the only gate there is. After the merge that is `ci.yml`,
+   `rust.yml` (a bump touches `ts/package.json` and `rs/Cargo.toml`) and
+   `docs.yml` when a gated page or the Vale configuration changed.
+   `clib.yml` has no `push` trigger (step 3).
 
    An npm version is immutable, and a Go module tag is worse: proxy.golang.org caches module versions permanently,
    so a `go/vX.Y.Z` naming the wrong commit cannot be moved, only

@@ -42,8 +42,8 @@ All three are a dozen lines holding only what is specific to proto: how
 to build the parser for a row's options. Everything else — finding
 `test/spec`, reading the file, decoding escapes, the `ERROR:` contract,
 the comparison, the `<file>:<line>` in a failure message — comes from
-[`@tabnas/support`](https://github.com/tabnas/support) and its Go half, so
-the two loaders cannot drift from each other either.
+[`@tabnas/support`](https://github.com/tabnas/support) and its Go and Rust
+counterparts, so the three loaders cannot drift from one another either.
 
 All three discover files by directory listing: adding a `.tsv` here runs
 it in every runtime without touching a runner. An empty fixture, and a
