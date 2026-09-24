@@ -15,6 +15,7 @@ import {
   MAX_FIELD_NUMBER_END, MAX_MESSAGE_SET_END, MAX_ENUM_NUMBER,
 } from './descriptor'
 import { ProtoVersion, isEdition } from './detect-version'
+import { adjacentValue } from './strings'
 
 // `aggregate` is set on an aggregate value's `constant` node only: the
 // text protoc records for it, which `src` cannot give (see ./aggregate.ts).
@@ -97,6 +98,14 @@ function unquote(s: string): string {
   return m ? m[1] : s
 }
 
+// A string value as this package records it. One literal keeps the text
+// between its quotes as written; adjacent literals (`"a" "b"`) are the one
+// string protoc records for them, decoded and concatenated (./strings.ts).
+// `bytes` is a `bytes` field's default, which protoc escapes again.
+function stringValue(src: string, bytes = false): string {
+  return adjacentValue(src, bytes) ?? unquote(src)
+}
+
 // ---- constants / option values -------------------------------------------
 
 function constantValue(n: Node): OptionValue {
@@ -106,7 +115,7 @@ function constantValue(n: Node): OptionValue {
   const s = n.src
   if ('true' === s) return true
   if ('false' === s) return false
-  if (/^["']/.test(s)) return unquote(s)
+  if (/^["']/.test(s)) return stringValue(s)
   if (/^[-+]?(?:\d|\.\d|0x|0o|0b)/i.test(s)) {
     const num = Number(s.replace(/^\+/, ''))
     if (!Number.isNaN(num)) return num
@@ -142,7 +151,10 @@ type PseudoOptions = {
 
 // fieldOptions = "[" fieldOption *( "," fieldOption ) "]"
 // fieldOption  = optionName "=" constant
-function readFieldOptions(opts: Node | undefined): PseudoOptions {
+//
+// `bytes` says the field is a `bytes` field, whose default protoc escapes
+// again after reading it (absl::CEscape).
+function readFieldOptions(opts: Node | undefined, bytes = false): PseudoOptions {
   const out: PseudoOptions = {}
   if (!opts) return out
   const map: Record<string, OptionValue> = {}
@@ -150,8 +162,8 @@ function readFieldOptions(opts: Node | undefined): PseudoOptions {
     const cst = child(fo, 'constant')
     const name = optionNameOf(fo, cst)
     if (!cst || !name) continue
-    if ('json_name' === name) { out.jsonName = String(unquote(cst.src)); continue }
-    if ('default' === name) { out.defaultValue = unquote(cst.src); continue }
+    if ('json_name' === name) { out.jsonName = String(stringValue(cst.src)); continue }
+    if ('default' === name) { out.defaultValue = stringValue(cst.src, bytes); continue }
     map[name] = constantValue(cst)
   }
   if (Object.keys(map).length) out.options = map
@@ -215,7 +227,7 @@ function typeNodeOf(n: Node): Node | undefined {
 }
 
 function applyFieldOptions(f: FieldDescriptorProto, opts: Node | undefined): void {
-  const po = readFieldOptions(opts)
+  const po = readFieldOptions(opts, 'TYPE_BYTES' === f.type)
   if (undefined !== po.jsonName) f.jsonName = po.jsonName
   if (undefined !== po.defaultValue) f.defaultValue = po.defaultValue
   if (po.options) f.options = po.options
@@ -395,12 +407,14 @@ function ranges(rangesNode: Node | undefined, ro: RangeOpts): DescriptorRange[] 
 // The reserved-name list. Both the leading `strLit`/`ident` and (for a
 // single-item list) the whole list can be inlined into `src`, so read the
 // names out of the statement text; whole-word tokens make that unambiguous.
+// A name is one string, one identifier, or adjacent strings, which protoc
+// reads as the one name they concatenate to (`reserved "a" "b";` is `ab`).
 function reservedNames(n: Node): string[] {
   const body = n.src.replace(/^reserved/, '').replace(/;$/, '')
-  const re = /"((?:[^"\\]|\\.)*)"|'((?:[^'\\]|\\.)*)'|([A-Za-z_][A-Za-z0-9_]*)/g
+  const re = /((?:"(?:[^"\\]|\\.)*"|'(?:[^'\\]|\\.)*')+)|([A-Za-z_][A-Za-z0-9_]*)/g
   const out: string[] = []
   let m: RegExpExecArray | null
-  while (null !== (m = re.exec(body))) out.push(m[1] ?? m[2] ?? m[3])
+  while (null !== (m = re.exec(body))) out.push(null != m[1] ? stringValue(m[1]) : m[2])
   return out
 }
 
@@ -611,14 +625,15 @@ export function buildFile(proto: Node, version: ProtoVersion): FileDescriptorPro
     if (k.startsWith('package')) {
       file.package = child(def, 'fullIdent')?.src
     } else if (k.startsWith('import')) {
-      const s = child(def, 'strLit')
+      // The file named, from one literal or from adjacent ones.
+      const s = R(def).filter((c) => 'strLit' === c.rule).map((c) => c.src).join('')
       if (s) {
         // `import option "x";` (edition 2024) is a separate dependency list.
         if (k.includes('option')) {
-          (file.optionDependency = file.optionDependency || []).push(unquote(s.src))
+          (file.optionDependency = file.optionDependency || []).push(stringValue(s))
         } else {
           const idx = file.dependency.length
-          file.dependency.push(unquote(s.src))
+          file.dependency.push(stringValue(s))
           if (k.includes('public')) file.publicDependency.push(idx)
           if (k.includes('weak')) file.weakDependency.push(idx)
         }

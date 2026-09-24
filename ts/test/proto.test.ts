@@ -225,3 +225,64 @@ describe('aggregate option values', () => {
     assert.deepEqual(entryKids(tn.parse(adjacent), 'a:"x""y"'), ['strLit', 'strLit'])
   })
 })
+
+describe('text format inside an aggregate', () => {
+  const tn = new Tabnas({ rewind: { history: 8192 } }).use(Proto)
+  const kids = (n: any, rule: string, src: string): any =>
+    rule === n?.rule && src === n.src
+      ? n.kids.map((k: any) => k.rule)
+      : (n?.kids || []).map((k: any) => kids(k, rule, src)).find((k: any) => k)
+
+  it('reads a list and a message in angle brackets as nodes of their own', () => {
+    const cst = tn.parse('option (f) = { a: [1, "x" "y"] b < c: 1 > };')
+    assert.deepEqual(kids(cst, 'messageValueEntry', 'a:[1,"x""y"]'), ['listValue'])
+    assert.deepEqual(kids(cst, 'listValue', '[1,"x""y"]'), ['constant', 'constant'])
+    assert.deepEqual(kids(cst, 'messageValueEntry', 'b<c:1>'), ['angleValue'])
+    assert.deepEqual(kids(cst, 'angleValue', '<c:1>'), ['messageValueEntry'])
+  })
+
+  it('reads a keyword, and a bracketed name, as an identifier inside the braces only', () => {
+    const src = 'option (f) = { message: optional [ x . y ]: 1 };\nmessage M { optional int32 a = 1; }'
+    const cst = tn.parse(src)
+    // The bracketed name is one word, its spaces left out as every
+    // node's `src` leaves them out.
+    assert.deepEqual(kids(cst, 'messageValueEntry', '[x.y]:1'), ['constant'])
+    const fdp = toDescriptor(cst)
+    assert.equal(fdp.options['(f)'], ' message: optional [ x . y ]: 1 ')
+    assert.equal(fdp.messageType[0].name, 'M')
+    // Outside an aggregate a keyword is a keyword, as it was in 0.5.0.
+    assert.throws(() => parse('option (f) = max;'))
+  })
+
+  it('knows every word the grammar spells as a literal, bar export and local', () => {
+    const { grammarText } = require('../dist/grammar')
+    const { KEYWORDS } = require('../dist/aggregate')
+    const words = new Set<string>()
+    for (const line of grammarText.split('\n')) {
+      // A rule line ends at the first `;` outside a quoted literal.
+      let body = ''
+      let quoted = false
+      for (const c of line) {
+        if ('"' === c) quoted = !quoted
+        else if (';' === c && !quoted) break
+        body += c
+      }
+      for (const m of body.matchAll(/"([A-Za-z_][A-Za-z0-9_]*)"/g)) words.add(m[1].toLowerCase())
+    }
+    words.delete('export')
+    words.delete('local')
+    assert.deepEqual([...KEYWORDS].sort(), [...words].sort())
+  })
+})
+
+describe('string literals', () => {
+  it('records one literal as written and adjacent literals as protoc does', () => {
+    // protoc decodes both. One literal is kept as written, escapes and
+    // all, as 0.5.0 kept it; adjacent literals, which 0.5.0 refused, are
+    // recorded as protoc records them: decoded and concatenated.
+    const fdp = parse('option (f) = "\\x41"; option (g) = "\\x41" "";\nimport "a\\x41";\nimport "a" "\\x41";')
+    assert.equal(fdp.options['(f)'], '\\x41')
+    assert.equal(fdp.options['(g)'], 'A')
+    assert.deepEqual(fdp.dependency, ['a\\x41', 'aA'])
+  })
+})

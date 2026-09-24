@@ -8,6 +8,7 @@ package tabnasproto
 import (
 	"fmt"
 	"regexp"
+	"strings"
 )
 
 // ProtoVersion is one of "proto2", "proto3", "2023", "2024".
@@ -23,20 +24,46 @@ var (
 // node, or "" if the file has no leading syntax/edition declaration. The
 // node's src is whitespace-stripped, e.g. `syntax="proto3";`. It returns an
 // error for a recognised keyword carrying an unknown version value.
+//
+// The version may be written as adjacent literals, `syntax = "pro" "to3";`,
+// which protoc reads as the one string they concatenate to (strings.go). A
+// single literal is read from src as it always has been.
 // Go counterpart of the TS `declaredVersion` (ts/src/detect-version.ts).
 func DeclaredVersion(syntaxNode map[string]any) (ProtoVersion, error) {
 	if syntaxNode == nil {
 		return "", nil
 	}
+	var literals strings.Builder
+	count := 0
+	for _, k := range childRules(syntaxNode) {
+		if nrule(k) == "strLit" {
+			literals.WriteString(nsrc(k))
+			count++
+		}
+	}
+	if count > 1 {
+		kind := "syntax"
+		if strings.HasPrefix(nsrc(syntaxNode), "edition") {
+			kind = "edition"
+		}
+		value, ok := adjacentValue(literals.String(), false)
+		if !ok {
+			return "", nil
+		}
+		return knownVersion(kind, value)
+	}
 	m := declRe.FindStringSubmatch(nsrc(syntaxNode))
 	if m == nil {
 		return "", nil
 	}
-	value := m[2]
+	return knownVersion(m[1], m[2])
+}
+
+func knownVersion(kind, value string) (ProtoVersion, error) {
 	if syntaxVersions[value] || editionVersions[value] {
 		return value, nil
 	}
-	return "", fmt.Errorf("proto: unknown %s version %q", m[1], value)
+	return "", fmt.Errorf("proto: unknown %s version %q", kind, value)
 }
 
 // ResolveVersion reconciles the version declared in the source with the

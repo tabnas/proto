@@ -10,7 +10,7 @@
 //! closing brace leaves nothing. Columns are protoc's: a tab moves to the
 //! next multiple of 8, and every other byte of UTF-8 is one column.
 
-use tabnas::{Context, Rule, Value};
+use tabnas::{Context, Lexer, Rule, RuleSnapshot, Token, Value, TIN_TX};
 
 const TAB_WIDTH: usize = 8;
 
@@ -153,5 +153,270 @@ pub(crate) fn record_aggregate(rule: &mut Rule, ctx: &mut Context) {
     let text = aggregate_text(src, open, close);
     if let Some(node) = rule.node.borrow_mut().as_object_mut() {
         node.insert("aggregate".to_string(), Value::String(text));
+    }
+}
+
+// ---- words inside an aggregate --------------------------------------------
+//
+// Port of the matcher in `ts/src/aggregate.ts`, which explains it in full.
+// Text format has no keywords, so inside an aggregate value this matcher,
+// which [`crate::proto`] runs ahead of the grammar's own, lexes as an
+// identifier (#TX):
+//
+// - a word the grammar spells as a keyword, always;
+// - `true`, `false`, `null`, `export` and `local` where they name a field:
+//   followed by `:`, `{` or `<`;
+// - `[x.y]` or `[type.googleapis.com/x.Y]` followed by `:`, `{` or `<`, the
+//   name between the brackets read as one, as text format reads it.
+//
+// Every scan below compares ASCII bytes only, and no byte of a multi-byte
+// UTF-8 character is ASCII, so scanning bytes finds what the canonical
+// scan of UTF-16 code units finds.
+
+/// Every word the grammar spells as a literal, less `export` and `local`.
+/// The `keywords_match_the_grammar` test keeps it in step with the grammar.
+const KEYWORDS: [&str; 24] = [
+    "syntax",
+    "import",
+    "weak",
+    "public",
+    "package",
+    "option",
+    "message",
+    "required",
+    "optional",
+    "repeated",
+    "oneof",
+    "map",
+    "enum",
+    "service",
+    "rpc",
+    "stream",
+    "returns",
+    "extend",
+    "extensions",
+    "reserved",
+    "to",
+    "max",
+    "group",
+    "edition",
+];
+
+/// The grammar's punctuation, where the lexer ends a word.
+const PUNCT: &[u8] = b"{}[]:,;=()<>-.+";
+
+fn is_word_start(byte: u8) -> bool {
+    byte.is_ascii_alphabetic() || b'_' == byte
+}
+
+fn is_word_part(byte: u8) -> bool {
+    is_word_start(byte) || byte.is_ascii_digit()
+}
+
+fn is_space(byte: u8) -> bool {
+    matches!(byte, b' ' | b'\t' | b'\r' | b'\n')
+}
+
+/// Does the lexer end a word at `src[at]`: whitespace, the grammar's
+/// punctuation, a comment, or the end of the source?
+fn ends_word(src: &[u8], at: usize) -> bool {
+    let Some(&byte) = src.get(at) else {
+        return true;
+    };
+    if is_space(byte) || PUNCT.contains(&byte) || b'#' == byte {
+        return true;
+    }
+    b'/' == byte && matches!(src.get(at + 1), Some(b'/' | b'*'))
+}
+
+/// The index of the first byte at or after `at` that is neither space nor
+/// inside a comment, or `src.len()`.
+fn skip_space(src: &[u8], mut at: usize) -> usize {
+    while at < src.len() {
+        let byte = src[at];
+        if is_space(byte) {
+            at += 1;
+        } else if b'#' == byte || (b'/' == byte && Some(&b'/') == src.get(at + 1)) {
+            while at < src.len() && b'\n' != src[at] {
+                at += 1;
+            }
+        } else if b'/' == byte && Some(&b'*') == src.get(at + 1) {
+            at = src[at + 2..]
+                .windows(2)
+                .position(|pair| b"*/" == pair)
+                .map_or(src.len(), |end| at + 2 + end + 2);
+        } else {
+            break;
+        }
+    }
+    at
+}
+
+/// Does a field name end at `at`: is the next thing a `:`, `{` or `<`?
+fn names_field(src: &[u8], at: usize) -> bool {
+    matches!(src.get(skip_space(src, at)), Some(b':' | b'{' | b'<'))
+}
+
+/// A type name as text format checks one: identifiers joined by dots.
+fn is_type_name(name: &str) -> bool {
+    name.split('.').all(|part| {
+        let bytes = part.as_bytes();
+        !bytes.is_empty() && is_word_start(bytes[0]) && bytes[1..].iter().all(|&b| is_word_part(b))
+    })
+}
+
+/// `[x.y]` or `[type.googleapis.com/x.Y]` at `open`: the index after its
+/// `]` and the name with its spaces and comments left out, or `None`.
+///
+/// The name is checked as text format checks it
+/// (`ConsumeAnyTypeUrlOrFullTypeName` in protobuf's text_format.cc): after
+/// the last `/`, if there is one, a type name; before it, a prefix that
+/// does not start with `/`.
+fn bracket_name(src: &[u8], open: usize) -> Option<(usize, String)> {
+    let mut at = open + 1;
+    let mut name = String::new();
+    loop {
+        at = skip_space(src, at);
+        match src.get(at).copied() {
+            Some(byte) if is_word_part(byte) || matches!(byte, b'.' | b'/' | b'-') => {
+                name.push(char::from(byte));
+                at += 1;
+            }
+            Some(b']') => {
+                let last = name.rfind('/').map_or(0, |slash| slash + 1);
+                if !is_type_name(&name[last..]) || name.starts_with('/') {
+                    return None;
+                }
+                return Some((at + 1, format!("[{name}]")));
+            }
+            _ => return None,
+        }
+    }
+}
+
+fn is_open_brace(token: Option<&Token>) -> bool {
+    token.is_some_and(|token| "{" == &*token.src)
+}
+
+/// Is the lexer inside an aggregate value? The value is the `constant`
+/// rule whose first token is its `{`. While that rule is still choosing
+/// its alternative it peeks the tokens after the brace itself, so the rule
+/// asking may be that `constant` with the brace already in the lookahead;
+/// after that, it is one of the rules below it.
+fn in_aggregate(rule: &Rule, context: &Context) -> bool {
+    if "constant" == &*rule.name && is_open_brace(context.t.first()) {
+        return true;
+    }
+    let mut current: Option<&RuleSnapshot> = Some(rule);
+    while let Some(snapshot) = current {
+        if "constant" == &*snapshot.name && is_open_brace(snapshot.o.first()) {
+            return true;
+        }
+        current = snapshot.parent_rule.as_deref();
+    }
+    false
+}
+
+/// The lexer matcher [`crate::proto`] installs: an identifier token, or
+/// `None` to let the grammar's own matchers read the text.
+pub(crate) fn aggregate_word(
+    lexer: &mut Lexer<'_>,
+    rule: &mut Rule,
+    context: &mut Context,
+) -> Option<Token> {
+    let rest = lexer.remaining();
+    let src = rest.as_bytes();
+    let first = *src.first()?;
+    let (end, text) = if b'[' == first {
+        let (end, name) = bracket_name(src, 0)?;
+        if !names_field(src, end) {
+            return None;
+        }
+        (end, name)
+    } else if is_word_start(first) {
+        let end = src
+            .iter()
+            .position(|&byte| !is_word_part(byte))
+            .unwrap_or(src.len());
+        if !ends_word(src, end) {
+            return None;
+        }
+        let word = &rest[..end];
+        let lower = word.to_ascii_lowercase();
+        let name = matches!(word, "true" | "false" | "null")
+            || matches!(lower.as_str(), "export" | "local");
+        let keyword = KEYWORDS.contains(&lower.as_str());
+        if !(keyword || (name && names_field(src, end))) {
+            return None;
+        }
+        (end, word.to_string())
+    } else {
+        return None;
+    };
+    if !in_aggregate(rule, context) {
+        return None;
+    }
+    // A bracketed name may cross lines and hold comments, so advance by the
+    // characters it spans: the lexer keeps the row and column as it goes.
+    let count = rest[..end].chars().count();
+    let point = lexer.point();
+    if !lexer.advance_chars(count) {
+        return None;
+    }
+    Some(lexer.token("#TX", TIN_TX, Value::String(text.clone()), text, point))
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// Every word the grammar spells as a literal, less `export` and
+    /// `local`, which the matcher takes only where they name a field.
+    #[test]
+    fn keywords_match_the_grammar() {
+        let mut words: Vec<String> = Vec::new();
+        for line in crate::GRAMMAR_TEXT.lines() {
+            // A rule line ends at the first `;` outside a quoted literal.
+            let mut body = String::new();
+            let mut quoted = false;
+            for ch in line.chars() {
+                if '"' == ch {
+                    quoted = !quoted;
+                } else if ';' == ch && !quoted {
+                    break;
+                }
+                body.push(ch);
+            }
+            // The literals sit between the odd and even quotes.
+            for literal in body.split('"').skip(1).step_by(2) {
+                let bytes = literal.as_bytes();
+                let word = !bytes.is_empty()
+                    && is_word_start(bytes[0])
+                    && bytes.iter().all(|&byte| is_word_part(byte));
+                let lower = literal.to_ascii_lowercase();
+                if word && !words.contains(&lower) {
+                    words.push(lower);
+                }
+            }
+        }
+        words.retain(|word| "export" != word && "local" != word);
+        words.sort();
+        let mut keywords: Vec<String> = KEYWORDS.iter().map(|word| word.to_string()).collect();
+        keywords.sort();
+        assert_eq!(keywords, words);
+    }
+
+    #[test]
+    fn bracketed_names_are_checked_as_text_format_checks_them() {
+        let name = |src: &str| bracket_name(src.as_bytes(), 0).map(|(_, name)| name);
+        assert_eq!(Some("[x.y]".to_string()), name("[ x . y ]"));
+        assert_eq!(
+            Some("[type.googleapis.com/x.Y]".to_string()),
+            name("[type.googleapis.com/x.Y]")
+        );
+        assert_eq!(None, name("[.x.y]"));
+        assert_eq!(None, name("[/x.Y]"));
+        assert_eq!(None, name("[]"));
+        assert_eq!(None, name("[x.y"));
     }
 }

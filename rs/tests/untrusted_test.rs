@@ -74,6 +74,54 @@ fn deep_unclosed_nesting_is_refused() {
     assert!(error.to_string().contains("nests"), "got {error}");
 }
 
+/// `option (f) = { a < a < ... c: 1 > > };`, nesting `depth` levels: the
+/// aggregate's brace is one, and each angle bracket inside it one more.
+fn nested_angles(depth: usize) -> String {
+    format!(
+        "syntax = \"proto2\";\noption (f) = {{ {}c: 1 {}}};\n",
+        "a < ".repeat(depth - 1),
+        "> ".repeat(depth - 1)
+    )
+}
+
+/// Inside an aggregate text format nests a message in angle brackets as
+/// well as in braces, and the tree the engine builds nests with it, so the
+/// scan counts both, to the same cap.
+#[test]
+fn angle_brackets_in_an_aggregate_nest_to_the_same_cap() {
+    let file = parse(&nested_angles(MAX_NESTING_DEPTH), None)
+        .expect("an aggregate nesting exactly to the cap parses");
+    match file.options.as_ref().and_then(|options| options.get("(f)")) {
+        Some(tabnas_proto::OptionValue::Str(text)) => {
+            assert_eq!(text.matches('<').count(), MAX_NESTING_DEPTH - 1)
+        }
+        other => panic!("the aggregate is not recorded whole: {other:?}"),
+    }
+    for depth in [MAX_NESTING_DEPTH + 1, 10 * MAX_NESTING_DEPTH] {
+        let error = parse(&nested_angles(depth), None).expect_err("past the cap is refused");
+        assert!(
+            error.to_string().contains("nests"),
+            "at depth {depth}: {error}"
+        );
+    }
+    let unclosed = format!("option (f) = {{ {}", "a < ".repeat(5000));
+    let error = parse(&unclosed, None).expect_err("an unclosed pile is refused");
+    assert!(error.to_string().contains("nests"), "got {error}");
+}
+
+/// Outside an aggregate an angle bracket is a map field's, which nests
+/// nothing, so a map in a message nested to the cap still parses, as it
+/// did before the scan counted angle brackets at all.
+#[test]
+fn a_map_field_is_not_nesting() {
+    let src = format!(
+        "syntax = \"proto3\";\n{}map<string, int32> m = 1;{}",
+        "message M {".repeat(MAX_NESTING_DEPTH),
+        "}".repeat(MAX_NESTING_DEPTH)
+    );
+    parse(&src, None).expect("a map field at the cap parses");
+}
+
 /// The brace scan does not count a brace inside a string or a comment, so
 /// a document that merely MENTIONS braces is not refused for nesting.
 #[test]

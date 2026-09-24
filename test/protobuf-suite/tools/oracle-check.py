@@ -17,7 +17,12 @@ which also resolves names and validates.
     parser, and the row's expected descriptor must equal the parser's once
     protoc's `uninterpretedOption` list is bridged to this package's
     `{ name: value }` options map, as the conformance runners bridge it.
-    test/spec/aggregate.tsv is the file this is for.
+    A string value that is not UTF-8 bridges with U+FFFD for each
+    ill-formed sequence, as this package records it. An ERROR row must be
+    refused by the parser; one the parser accepts is listed apart, since
+    a fixture may pin text that text format refuses when protoc reads the
+    option (test/spec/aggregate.tsv says which). test/spec/aggregate.tsv
+    and test/spec/adjacent-strings.tsv are the files this is for.
 
 Each lane goes through the parser in one run of the oracle; nothing here
 takes long enough to need progress lines.
@@ -105,7 +110,7 @@ def option_name(parts):
 
 def option_value(u):
     if 'stringValue' in u:
-        return base64.b64decode(u['stringValue']).decode('utf-8')
+        return base64.b64decode(u['stringValue']).decode('utf-8', 'replace')
     if 'positiveIntValue' in u:
         return int(u['positiveIntValue'])
     if 'negativeIntValue' in u:
@@ -157,9 +162,19 @@ def spec(oracle, path):
         if '' == line or (line.startswith('#') and '\t' not in line):
             continue
         cells = line.split('\t')
-        rows.append((unescape(cells[0]), json.loads(cells[1])))
+        expected = None if cells[1].startswith('ERROR') else json.loads(cells[1])
+        rows.append((unescape(cells[0]), expected))
     same = 0
+    refused = 0
+    errors = 0
     for (text, expected), r in zip(rows, run(oracle, [t for t, _ in rows])):
+        if expected is None:
+            errors += 1
+            if accepted(r):
+                print('  error row the parser accepts:', json.dumps(text)[:80])
+            else:
+                refused += 1
+            continue
         want = norm(bridge(r['descriptor']))
         got = norm(expected)
         # protoc leaves `syntax` unset for a file that declares none.
@@ -169,7 +184,8 @@ def spec(oracle, path):
             same += 1
         else:
             print('  row differs:', json.dumps(text)[:80], r['errors'].strip())
-    print('%s: %d/%d rows equal the parser\'s descriptor' % (os.path.basename(path), same, len(rows)))
+    print('%s: %d/%d rows equal the parser\'s descriptor; the parser refuses %d/%d error rows'
+          % (os.path.basename(path), same, len(rows) - errors, refused, errors))
 
 
 if '--spec' == sys.argv[2]:

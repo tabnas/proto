@@ -53,6 +53,13 @@ func Proto(j *tabnas.Tabnas) error {
 	j.Rule("constant", func(rs *tabnas.RuleSpec, _ *tabnas.Parser) {
 		rs.AddAC(recordAggregate)
 	})
+	// Text format has no keywords: inside an aggregate value a word the
+	// grammar spells as a keyword, and a bracketed extension or Any name, are
+	// identifiers. This matcher runs ahead of the grammar's own (priority
+	// 1e6) and reads them so there; see aggregate.go.
+	j.SetOptions(tabnas.Options{Lex: &tabnas.LexOptions{Match: map[string]*tabnas.MatchSpec{
+		"protoAggregateWord": {Order: 900000, Make: makeAggregateWord},
+	}}})
 	return nil
 }
 

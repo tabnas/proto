@@ -46,6 +46,7 @@ mod error;
 mod grammar;
 mod jsnum;
 mod node;
+mod strings;
 
 /// The README's Rust examples run as doctests, so a stale one fails the
 /// gate rather than misleading the reader. Its `toml` and `bash` fences
@@ -54,11 +55,13 @@ mod node;
 #[doc = include_str!("../README.md")]
 mod readme_examples {}
 
-use std::sync::OnceLock;
+use std::sync::{Arc, OnceLock};
 
 use indexmap::IndexMap;
 use serde::Deserialize;
-use tabnas::{Options as EngineOptions, Plugin, PluginError, RewindOptions, Tabnas, Value};
+use tabnas::{
+    LexMatcher, Options as EngineOptions, Plugin, PluginError, RewindOptions, Tabnas, Value,
+};
 use tabnas_abnf::{abnf, AbnfConvertOptions, AbnfOptions};
 
 pub use build_descriptor::{build_file, MAX_NESTING_DEPTH};
@@ -167,6 +170,24 @@ pub fn proto(parser: &mut Tabnas) -> Result<(), ProtoError> {
     parser.define_rule("constant", |spec| {
         spec.add_ac(aggregate::record_aggregate);
     });
+    // Text format has no keywords: inside an aggregate value a word the
+    // grammar spells as a keyword, and a bracketed extension or Any name,
+    // are identifiers. This matcher runs ahead of the grammar's own (the
+    // 1e6 band) and reads them so there; see `aggregate.rs`.
+    parser
+        .set_options(|options| {
+            options.lex.matchers.insert(
+                "protoAggregateWord".to_string(),
+                LexMatcher {
+                    name: "protoAggregateWord".to_string(),
+                    order: 900_000.0,
+                    matcher: None,
+                    imperative: Some(Arc::new(aggregate::aggregate_word)),
+                    factory: None,
+                },
+            );
+        })
+        .map_err(|error| ProtoError::Grammar(format!("proto: {error}")))?;
     Ok(())
 }
 
@@ -263,10 +284,11 @@ pub fn to_descriptor(
 /// when the descriptor walk refuses it. An abort cannot be caught, so
 /// the check has to come before the tree exists.
 ///
-/// The depth is counted in braces, skipping the string literals and
-/// comments the lexer skips. Over-counting is safe here and
-/// under-counting is not, so an unterminated string or comment counts
-/// every brace inside it; the engine rejects that source anyway.
+/// The depth is counted in braces, and in the angle brackets that nest a
+/// message inside an aggregate value (`{ a < b: 1 > }`), skipping the
+/// string literals and comments the lexer skips. Over-counting is safe
+/// here and under-counting is not, so an unterminated string or comment
+/// counts every brace inside it; the engine rejects that source anyway.
 ///
 /// ```
 /// fn main() -> Result<(), Box<dyn std::error::Error>> {
@@ -285,7 +307,7 @@ pub fn to_descriptor(
 /// }
 /// ```
 pub fn preflight(src: &str) -> Result<(), ProtoError> {
-    let depth = build_descriptor::brace_depth(src);
+    let depth = build_descriptor::nesting_depth(src);
     if depth > MAX_NESTING_DEPTH {
         return Err(ProtoError::TooDeep(format!(
             "proto: document nests {depth} levels deep, past the {MAX_NESTING_DEPTH} this \

@@ -147,9 +147,10 @@ var (
 	numLeadRe  = regexp.MustCompile(`(?i)^[-+]?(?:\d|\.\d|0x|0o|0b)`)
 	rangeRe    = regexp.MustCompile(`^(-?\d+)(?:to(-?\d+|max))?$`)
 	plusPrefix = regexp.MustCompile(`^\+`)
-	// One reserved name: a double- or single-quoted literal, or an identifier.
+	// One reserved name: one or more adjacent double- or single-quoted
+	// literals, or an identifier.
 	reservedNameRe = regexp.MustCompile(
-		`"((?:[^"\\]|\\.)*)"|'((?:[^'\\]|\\.)*)'|([A-Za-z_][A-Za-z0-9_]*)`)
+		`((?:"(?:[^"\\]|\\.)*"|'(?:[^'\\]|\\.)*')+)|([A-Za-z_][A-Za-z0-9_]*)`)
 )
 
 func stripWS(s string) string { return wsRe.ReplaceAllString(s, "") }
@@ -252,7 +253,7 @@ func constantValue(n map[string]any) OptionValue {
 		return false
 	}
 	if quoteRe.MatchString(s) {
-		return unquote(s)
+		return stringValue(s, false)
 	}
 	if numLeadRe.MatchString(s) {
 		if num, ok := jsNumber(s); ok {
@@ -298,8 +299,10 @@ type pseudoOptions struct {
 	hasDefault   bool
 }
 
-// readFieldOptions reads `"[" fieldOption *( "," fieldOption ) "]"`.
-func readFieldOptions(opts map[string]any) pseudoOptions {
+// readFieldOptions reads `"[" fieldOption *( "," fieldOption ) "]"`. bytes
+// says the field is a bytes field, whose default protoc escapes again after
+// reading it (absl::CEscape).
+func readFieldOptions(opts map[string]any, bytes bool) pseudoOptions {
 	var out pseudoOptions
 	if opts == nil {
 		return out
@@ -313,9 +316,9 @@ func readFieldOptions(opts map[string]any) pseudoOptions {
 		}
 		switch name {
 		case "json_name":
-			out.jsonName, out.hasJSONName = unquote(nsrc(cst)), true
+			out.jsonName, out.hasJSONName = stringValue(nsrc(cst), false), true
 		case "default":
-			out.defaultValue, out.hasDefault = unquote(nsrc(cst)), true
+			out.defaultValue, out.hasDefault = stringValue(nsrc(cst), bytes), true
 		default:
 			m[name] = constantValue(cst)
 		}
@@ -329,7 +332,7 @@ func readFieldOptions(opts map[string]any) pseudoOptions {
 // plainOptions is the option map for the places that cannot carry
 // json_name / default — extension ranges, enum values.
 func plainOptions(opts map[string]any) map[string]OptionValue {
-	return readFieldOptions(opts).options
+	return readFieldOptions(opts, false).options
 }
 
 // features is the subset of an option map whose names are rooted at
@@ -404,7 +407,7 @@ func typeNodeOf(n map[string]any) map[string]any {
 // applyFieldOptions attaches an option list to a field, splitting out the
 // json_name / default pseudo-options.
 func applyFieldOptions(f *FieldDescriptorProto, opts map[string]any) {
-	po := readFieldOptions(opts)
+	po := readFieldOptions(opts, f.Type == "TYPE_BYTES")
 	if po.hasJSONName {
 		f.JsonName = po.jsonName
 	}
@@ -641,18 +644,17 @@ func ranges(rangesNode map[string]any, ro rangeOpts) []Range {
 // reservedNames reads the reserved-name list. Both the leading strLit/ident
 // and (for a single-item list) the whole list can be inlined into src, so read
 // the names out of the statement text; whole-word tokens make that
-// unambiguous.
+// unambiguous. A name is one string, one identifier, or adjacent strings,
+// which protoc reads as the one name they concatenate to (`reserved "a" "b";`
+// is `ab`).
 func reservedNames(n map[string]any) []string {
 	body := strings.TrimSuffix(strings.TrimPrefix(nsrc(n), "reserved"), ";")
 	var out []string
 	for _, m := range reservedNameRe.FindAllStringSubmatch(body, -1) {
-		switch {
-		case m[1] != "":
-			out = append(out, m[1])
-		case m[2] != "":
+		if m[1] != "" {
+			out = append(out, stringValue(m[1], false))
+		} else {
 			out = append(out, m[2])
-		default:
-			out = append(out, m[3])
 		}
 	}
 	return out
@@ -984,14 +986,21 @@ func BuildFile(proto map[string]any, version ProtoVersion) FileDescriptorProto {
 				file.Package = nsrc(fi)
 			}
 		case strings.HasPrefix(k, "import"):
-			if s := child(def, "strLit"); s != nil {
+			// The file named, from one literal or from adjacent ones.
+			var named strings.Builder
+			for _, c := range childRules(def) {
+				if nrule(c) == "strLit" {
+					named.WriteString(nsrc(c))
+				}
+			}
+			if s := named.String(); s != "" {
 				// `import option "x";` (edition 2024) is a separate list.
 				if strings.Contains(k, "option") {
-					file.OptionDependency = append(file.OptionDependency, unquote(nsrc(s)))
+					file.OptionDependency = append(file.OptionDependency, stringValue(s, false))
 					break
 				}
 				idx := len(file.Dependency)
-				file.Dependency = append(file.Dependency, unquote(nsrc(s)))
+				file.Dependency = append(file.Dependency, stringValue(s, false))
 				if strings.Contains(k, "public") {
 					file.PublicDependency = append(file.PublicDependency, idx)
 				}

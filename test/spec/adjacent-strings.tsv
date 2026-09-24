@@ -1,0 +1,40 @@
+input	expected	opts
+# A string written as adjacent literals, `"a" "b"`, wherever protoc reads
+# a string (Parser::ConsumeString in protobuf's compiler/parser.cc): the
+# declaration, every import, an option's value, default, json_name and a
+# reserved name. protoc records ONE string, each literal decoded by its
+# tokenizer (ParseStringAppend in io/tokenizer.cc) and the bytes run
+# together, and so does this package; ts/src/strings.ts is that reading.
+# A string written as ONE literal is recorded as written, as it always
+# has been (see the root AGENTS.md). Every row was checked against protoc
+# 36.2's own parser and agrees with it.
+# the declaration: syntax and edition
+syntax = "pro" "to3";\nmessage M {}\n	{"dependency":[],"publicDependency":[],"weakDependency":[],"messageType":[{"name":"M","field":[],"nestedType":[],"enumType":[],"oneofDecl":[],"extension":[]}],"enumType":[],"service":[],"extension":[],"syntax":"proto3"}
+syntax = 'proto' "2";\n	{"dependency":[],"publicDependency":[],"weakDependency":[],"messageType":[],"enumType":[],"service":[],"extension":[],"syntax":"proto2"}
+syntax = "proto" /* c */ "3";\n	{"dependency":[],"publicDependency":[],"weakDependency":[],"messageType":[],"enumType":[],"service":[],"extension":[],"syntax":"proto3"}
+edition = "20" "23";\nmessage M {}\n	{"dependency":[],"publicDependency":[],"weakDependency":[],"messageType":[{"name":"M","field":[],"nestedType":[],"enumType":[],"oneofDecl":[],"extension":[]}],"enumType":[],"service":[],"extension":[],"edition":"EDITION_2023","syntax":"editions"}
+edition = "202" '4';\nimport option "o" "p.proto";\n	{"dependency":[],"publicDependency":[],"weakDependency":[],"messageType":[],"enumType":[],"service":[],"extension":[],"edition":"EDITION_2024","syntax":"editions","optionDependency":["op.proto"]}
+# every import
+syntax = "proto2";\nimport "a" "b.proto";\n	{"dependency":["ab.proto"],"publicDependency":[],"weakDependency":[],"messageType":[],"enumType":[],"service":[],"extension":[],"syntax":"proto2"}
+syntax = "proto2";\nimport public "a" "b";\nimport weak "c" 'd';\nimport "e.proto";\n	{"dependency":["ab","cd","e.proto"],"publicDependency":[0],"weakDependency":[1],"messageType":[],"enumType":[],"service":[],"extension":[],"syntax":"proto2"}
+# an option's value, in every place an option is written
+syntax = "proto2";\noption java_package = "com." "example";\n	{"dependency":[],"publicDependency":[],"weakDependency":[],"messageType":[],"enumType":[],"service":[],"extension":[],"syntax":"proto2","options":{"java_package":"com.example"}}
+syntax = "proto2";\noption (f) = "a" "b" "c";\n	{"dependency":[],"publicDependency":[],"weakDependency":[],"messageType":[],"enumType":[],"service":[],"extension":[],"syntax":"proto2","options":{"(f)":"abc"}}
+syntax = "proto2";\nmessage M {\n  option (f) = "a" "b";\n  optional int32 x = 1 [(g) = "c" "d"];\n  extensions 1 to 2 [(h) = "e" "f"];\n  oneof o {\n    option (i) = "g" "h";\n    int32 y = 2;\n  }\n}\n	{"dependency":[],"publicDependency":[],"weakDependency":[],"messageType":[{"name":"M","field":[{"name":"x","number":1,"label":"LABEL_OPTIONAL","type":"TYPE_INT32","options":{"(g)":"cd"}},{"name":"y","number":2,"label":"LABEL_OPTIONAL","type":"TYPE_INT32","oneofIndex":0}],"nestedType":[],"enumType":[],"oneofDecl":[{"name":"o","options":{"(i)":"gh"}}],"extension":[],"options":{"(f)":"ab"},"extensionRange":[{"start":1,"end":3,"options":{"(h)":"ef"}}]}],"enumType":[],"service":[],"extension":[],"syntax":"proto2"}
+syntax = "proto2";\nenum E {\n  option (f) = "a" "b";\n  A = 0 [(g) = "c" "d"];\n}\n	{"dependency":[],"publicDependency":[],"weakDependency":[],"messageType":[],"enumType":[{"name":"E","value":[{"name":"A","number":0,"options":{"(g)":"cd"}}],"options":{"(f)":"ab"}}],"service":[],"extension":[],"syntax":"proto2"}
+syntax = "proto2";\nservice S {\n  option (f) = "a" "b";\n  rpc M (A) returns (B) { option (g) = "c" "d"; }\n}\n	{"dependency":[],"publicDependency":[],"weakDependency":[],"messageType":[],"enumType":[],"service":[{"name":"S","method":[{"name":"M","inputType":"A","outputType":"B","options":{"(g)":"cd"}}],"options":{"(f)":"ab"}}],"extension":[],"syntax":"proto2"}
+# default and json_name, which are not options; a bytes field's default is escaped again, as protoc does
+syntax = "proto2";\nmessage M {\n  optional string s = 1 [default = "a" "b", json_name = "j" "k"];\n}\n	{"dependency":[],"publicDependency":[],"weakDependency":[],"messageType":[{"name":"M","field":[{"name":"s","number":1,"label":"LABEL_OPTIONAL","type":"TYPE_STRING","jsonName":"jk","defaultValue":"ab"}],"nestedType":[],"enumType":[],"oneofDecl":[],"extension":[]}],"enumType":[],"service":[],"extension":[],"syntax":"proto2"}
+syntax = "proto2";\nmessage M {\n  optional bytes b = 1 [default = "a\\001" "b\\"\\\\'"];\n  optional bytes c = 2 [default = "\\xff" "\\x7f" "\\t\\r\\n" "~ "];\n}\n	{"dependency":[],"publicDependency":[],"weakDependency":[],"messageType":[{"name":"M","field":[{"name":"b","number":1,"label":"LABEL_OPTIONAL","type":"TYPE_BYTES","defaultValue":"a\\001b\\\"\\\\\\'"},{"name":"c","number":2,"label":"LABEL_OPTIONAL","type":"TYPE_BYTES","defaultValue":"\\377\\177\\t\\r\\n~ "}],"nestedType":[],"enumType":[],"oneofDecl":[],"extension":[]}],"enumType":[],"service":[],"extension":[],"syntax":"proto2"}
+# a reserved name, in a message and in an enum
+syntax = "proto2";\nmessage M {\n  reserved "a" "b", "c";\n}\n	{"dependency":[],"publicDependency":[],"weakDependency":[],"messageType":[{"name":"M","field":[],"nestedType":[],"enumType":[],"oneofDecl":[],"extension":[],"reservedName":["ab","c"]}],"enumType":[],"service":[],"extension":[],"syntax":"proto2"}
+syntax = "proto2";\nenum E {\n  A = 0;\n  reserved "B" "C";\n}\n	{"dependency":[],"publicDependency":[],"weakDependency":[],"messageType":[],"enumType":[{"name":"E","value":[{"name":"A","number":0}],"reservedName":["BC"]}],"service":[],"extension":[],"syntax":"proto2"}
+# each literal is decoded as protoc decodes it, and the bytes concatenated: octal, hex and the letter escapes, \u and \U, a surrogate pair written as two \u escapes, UTF-8 as written
+syntax = "proto2";\noption (f) = "\\101\\x42" "\\u0043\\U00000044";\n	{"dependency":[],"publicDependency":[],"weakDependency":[],"messageType":[],"enumType":[],"service":[],"extension":[],"syntax":"proto2","options":{"(f)":"ABCD"}}
+syntax = "proto2";\noption (f) = "\\a\\b\\f\\n\\r\\t\\v" "\\\\\\?\\'\\"";\n	{"dependency":[],"publicDependency":[],"weakDependency":[],"messageType":[],"enumType":[],"service":[],"extension":[],"syntax":"proto2","options":{"(f)":"\u0007\b\f\n\r\t\u000b\\?'\""}}
+syntax = "proto2";\noption (f) = "é" "\\u00e9" "\\U0001F600" "\\ud83d\\ude00";\n	{"dependency":[],"publicDependency":[],"weakDependency":[],"messageType":[],"enumType":[],"service":[],"extension":[],"syntax":"proto2","options":{"(f)":"éé😀😀"}}
+syntax = "proto2";\noption (f) = "" "a" '';\n	{"dependency":[],"publicDependency":[],"weakDependency":[],"messageType":[],"enumType":[],"service":[],"extension":[],"syntax":"proto2","options":{"(f)":"a"}}
+# bytes that are not UTF-8 are recorded with U+FFFD for each ill-formed sequence: protoc keeps the bytes themselves, which JSON text cannot hold
+syntax = "proto2";\noption (f) = "\\xff" "a" "\\xe2\\x82";\n	{"dependency":[],"publicDependency":[],"weakDependency":[],"messageType":[],"enumType":[],"service":[],"extension":[],"syntax":"proto2","options":{"(f)":"�a�"}}
+# protoc refuses these
+syntax = "proto2";\noption (f) = -"a" "b";\n	ERROR

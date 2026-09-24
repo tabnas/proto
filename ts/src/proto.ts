@@ -10,7 +10,7 @@ import { abnf } from '@tabnas/abnf'
 
 import { grammarText } from './grammar'
 import { buildFile } from './build-descriptor'
-import { recordAggregate } from './aggregate'
+import { recordAggregate, makeAggregateWord } from './aggregate'
 import {
   ProtoVersion, declaredVersion, resolveVersion,
 } from './detect-version'
@@ -43,6 +43,13 @@ const Proto = ((tn: AnyTabnas, _options?: Partial<ProtoOptions>) => {
   // drops whitespace and comments. This action reads it from the source
   // while the brace tokens are to hand; see ./aggregate.ts.
   tn.rule('constant', (rs: any) => rs.ac(recordAggregate))
+  // Text format has no keywords: inside an aggregate value a word the
+  // grammar spells as a keyword, and a bracketed extension or Any name,
+  // are identifiers. This matcher runs ahead of the grammar's own (order
+  // 1e6) and reads them so there; see ./aggregate.ts.
+  tn.options({
+    lex: { match: { protoAggregateWord: { order: 9e5, make: makeAggregateWord } } },
+  })
 }) as {
   (tn: AnyTabnas, options?: Partial<ProtoOptions>): void
   defaults: ProtoOptions

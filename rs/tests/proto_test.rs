@@ -587,6 +587,103 @@ fn entry_kids<'a>(node: &'a tabnas::Value, entry: &str) -> Option<Vec<&'a str>> 
         .find_map(|kid| entry_kids(kid, entry))
 }
 
+// The rules under the node carrying `rule` and `src`.
+fn rule_kids<'a>(node: &'a tabnas::Value, rule: &str, src: &str) -> Option<Vec<&'a str>> {
+    if rule == tabnas_proto::nrule(node) && src == nsrc(node) {
+        return Some(
+            child_rules(node)
+                .into_iter()
+                .map(tabnas_proto::nrule)
+                .collect(),
+        );
+    }
+    child_rules(node)
+        .into_iter()
+        .find_map(|kid| rule_kids(kid, rule, src))
+}
+
+// Rust port of the "text format inside an aggregate" and "string literals"
+// suites in `ts/test/proto.test.ts`. The rows are in
+// `test/spec/aggregate.tsv` and `test/spec/adjacent-strings.tsv`; these
+// pin the CST shapes the rows cannot.
+#[test]
+fn an_aggregate_reads_a_list_and_a_message_in_angle_brackets_as_nodes() {
+    let cst = make()
+        .parse("option (f) = { a: [1, \"x\" \"y\"] b < c: 1 > };")
+        .expect("parse");
+    for (rule, src, want) in [
+        ("messageValueEntry", "a:[1,\"x\"\"y\"]", vec!["listValue"]),
+        ("listValue", "[1,\"x\"\"y\"]", vec!["constant", "constant"]),
+        ("messageValueEntry", "b<c:1>", vec!["angleValue"]),
+        ("angleValue", "<c:1>", vec!["messageValueEntry"]),
+    ] {
+        assert_eq!(rule_kids(&cst, rule, src), Some(want), "{rule} {src}");
+    }
+}
+
+#[test]
+fn an_aggregate_reads_keywords_and_bracketed_names_as_identifiers_inside_only() {
+    let source =
+        "option (f) = { message: optional [ x . y ]: 1 };\nmessage M { optional int32 a = 1; }";
+    let cst = make().parse(source).expect("parse");
+    // The bracketed name is one word, its spaces left out as every node's
+    // `src` leaves them out.
+    assert_eq!(
+        rule_kids(&cst, "messageValueEntry", "[x.y]:1"),
+        Some(vec!["constant"])
+    );
+    let file = to_descriptor(&cst, None).expect("descriptor");
+    assert_eq!(
+        file.options.as_ref().and_then(|options| options.get("(f)")),
+        Some(&OptionValue::Str(
+            " message: optional [ x . y ]: 1 ".to_string()
+        ))
+    );
+    assert_eq!(file.message_type[0].name, "M");
+    // Outside an aggregate a keyword is a keyword, as it was in 0.5.0.
+    assert!(parse("option (f) = max;", None).is_err());
+}
+
+#[test]
+fn one_string_literal_is_kept_as_written_and_adjacent_ones_are_read_as_protoc_reads_them() {
+    // protoc decodes both. One literal is kept as written, escapes and
+    // all, as 0.5.0 kept it; adjacent literals, which 0.5.0 refused, are
+    // recorded as protoc records them: decoded and concatenated.
+    let file = must_parse(
+        "option (f) = \"\\x41\"; option (g) = \"\\x41\" \"\";\nimport \"a\\x41\";\nimport \"a\" \"\\x41\";",
+        None,
+    );
+    let options = file.options.as_ref().expect("options");
+    assert_eq!(
+        options.get("(f)"),
+        Some(&OptionValue::Str("\\x41".to_string()))
+    );
+    assert_eq!(options.get("(g)"), Some(&OptionValue::Str("A".to_string())));
+    assert_eq!(
+        file.dependency,
+        vec!["a\\x41".to_string(), "aA".to_string()]
+    );
+}
+
+#[test]
+fn a_version_written_as_adjacent_literals_is_the_string_they_make() {
+    assert_eq!(
+        declared_version_src("syntax=\"pro\"'to3';").expect("known"),
+        Some(ProtoVersion::Proto3)
+    );
+    assert_eq!(
+        declared_version_src("edition=\"20\"\"\\x323\";").expect("known"),
+        Some(ProtoVersion::Edition2023)
+    );
+    let error = declared_version_src("syntax=\"proto\"\"4\";").expect_err("unknown");
+    assert!(
+        error
+            .to_string()
+            .contains("unknown syntax version \"proto4\""),
+        "{error}"
+    );
+}
+
 #[test]
 fn the_grammar_text_carries_every_source_file() {
     assert!(!tabnas_proto::GRAMMAR_TEXT.is_empty());

@@ -11,6 +11,7 @@ use tabnas::Value;
 
 use crate::error::ProtoError;
 use crate::node::nsrc;
+use crate::strings::adjacent_value;
 
 /// The protobuf version a file is read as.
 ///
@@ -89,6 +90,11 @@ pub fn edition_enum(version: ProtoVersion) -> String {
 ///
 /// The node's `src` is whitespace-stripped, for example
 /// `syntax="proto3";` or `edition="2023";`.
+///
+/// The version may be written as adjacent literals, `syntax = "pro" "to3";`,
+/// which protoc reads as the one string they concatenate to
+/// (`strings.rs`). A single literal is read from `src` as it always has
+/// been.
 pub fn declared_version(node: &Value) -> Result<Option<ProtoVersion>, ProtoError> {
     declared_version_src(nsrc(node))
 }
@@ -96,7 +102,10 @@ pub fn declared_version(node: &Value) -> Result<Option<ProtoVersion>, ProtoError
 /// [`declared_version`] over the node's `src` directly.
 ///
 /// The canonical runtime answers `null` for a node with no string `src`,
-/// which here is the empty string and the same answer.
+/// which here is the empty string and the same answer. The canonical
+/// runtime reads adjacent literals from the node's `strLit` children; their
+/// text is the whole of `src` between the `=` and the closing `;`, which is
+/// where this reads them.
 pub fn declared_version_src(src: &str) -> Result<Option<ProtoVersion>, ProtoError> {
     // The canonical `/^(syntax|edition)=["']([^"']+)["']/`, written out:
     // the regexp crate reads a character class Unicode-aware where this
@@ -107,6 +116,9 @@ pub fn declared_version_src(src: &str) -> Result<Option<ProtoVersion>, ProtoErro
     let Some(rest) = rest.strip_prefix('=') else {
         return Ok(None);
     };
+    if let Some(value) = adjacent_value(rest.strip_suffix(';').unwrap_or(rest), false) {
+        return known_version(keyword, &value);
+    }
     let mut chars = rest.char_indices();
     match chars.next() {
         Some((_, '"' | '\'')) => {}
@@ -123,8 +135,12 @@ pub fn declared_version_src(src: &str) -> Result<Option<ProtoVersion>, ProtoErro
     if 0 == end {
         return Ok(None);
     }
-    let value = &body[..end];
+    known_version(keyword, &body[..end])
+}
 
+/// The version `value` names, or the error for one this package does not
+/// know.
+fn known_version(keyword: &str, value: &str) -> Result<Option<ProtoVersion>, ProtoError> {
     match ProtoVersion::from_declared(value) {
         Some(version) => Ok(Some(version)),
         None => Err(ProtoError::Version(format!(

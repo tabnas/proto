@@ -23,6 +23,7 @@ use crate::detect_version::{edition_enum, is_edition, ProtoVersion};
 use crate::error::ProtoError;
 use crate::jsnum::{is_js_whitespace, js_number};
 use crate::node::{child, child_rules, children, gaps_before, kw, nrule, nsrc, src_or};
+use crate::strings::adjacent_value;
 
 /// How deep a document may nest before the walk refuses it.
 ///
@@ -112,6 +113,15 @@ fn unquote(text: &str) -> &str {
     &text[first.len_utf8()..last_at]
 }
 
+/// A string value as this package records it. One literal keeps the text
+/// between its quotes as written; adjacent literals (`"a" "b"`) are the one
+/// string protoc records for them, decoded and concatenated
+/// (`strings.rs`). `bytes` is a `bytes` field's default, which protoc
+/// escapes again.
+fn string_value(src: &str, bytes: bool) -> String {
+    adjacent_value(src, bytes).unwrap_or_else(|| unquote(src).to_string())
+}
+
 /// The canonical `/^[-+]?(?:\d|\.\d|0x|0o|0b)/i`, ASCII throughout.
 fn numeric_lead(text: &str) -> bool {
     let bytes = text.as_bytes();
@@ -165,7 +175,7 @@ fn constant_value(node: &Value) -> OptionValue {
         return OptionValue::Bool(false);
     }
     if src.starts_with(['"', '\'']) {
-        return OptionValue::Str(unquote(src).to_string());
+        return OptionValue::Str(string_value(src, false));
     }
     if numeric_lead(src) {
         // `Number(s.replace(/^\+/, ''))`: stripping the sign first is what
@@ -220,7 +230,10 @@ struct PseudoOptions {
 }
 
 /// `fieldOptions = "[" fieldOption *( "," fieldOption ) "]"`.
-fn read_field_options(opts: Option<&Value>) -> PseudoOptions {
+///
+/// `bytes` says the field is a `bytes` field, whose default protoc escapes
+/// again after reading it (absl::CEscape).
+fn read_field_options(opts: Option<&Value>, bytes: bool) -> PseudoOptions {
     let mut out = PseudoOptions::default();
     let Some(opts) = opts else {
         return out;
@@ -233,11 +246,11 @@ fn read_field_options(opts: Option<&Value>) -> PseudoOptions {
             continue;
         };
         if "json_name" == name {
-            out.json_name = Some(unquote(nsrc(constant)).to_string());
+            out.json_name = Some(string_value(nsrc(constant), false));
             continue;
         }
         if "default" == name {
-            out.default_value = Some(unquote(nsrc(constant)).to_string());
+            out.default_value = Some(string_value(nsrc(constant), bytes));
             continue;
         }
         // The canonical `map[name] = value` writes to a bare object, and
@@ -262,7 +275,7 @@ fn read_field_options(opts: Option<&Value>) -> PseudoOptions {
 /// The option map for the places that cannot carry `json_name` or
 /// `default`: extension ranges, enum values.
 fn plain_options(opts: Option<&Value>) -> Option<Options> {
-    read_field_options(opts).options
+    read_field_options(opts, false).options
 }
 
 /// `optionStmt = "option" optionName "=" constant ";"`.
@@ -346,7 +359,7 @@ fn type_node_of(node: &Value) -> Option<&Value> {
 }
 
 fn apply_field_options(field: &mut FieldDescriptorProto, opts: Option<&Value>) {
-    let pseudo = read_field_options(opts);
+    let pseudo = read_field_options(opts, Some(FieldType::Bytes) == field.r#type);
     if let Some(json_name) = pseudo.json_name {
         field.json_name = Some(json_name);
     }
@@ -659,10 +672,12 @@ fn split_range(part: &str) -> Option<(&str, Option<&str>)> {
 ///
 /// Both the leading `strLit` or `ident` and (for a single-item list) the
 /// whole list can be inlined into `src`, so read the names out of the
-/// statement text; whole-word tokens make that unambiguous.
+/// statement text; whole-word tokens make that unambiguous. A name is one
+/// string, one identifier, or adjacent strings, which protoc reads as the
+/// one name they concatenate to (`reserved "a" "b";` is `ab`).
 ///
 /// The canonical pattern is
-/// `/"((?:[^"\\]|\\.)*)"|'((?:[^'\\]|\\.)*)'|([A-Za-z_][A-Za-z0-9_]*)/g`,
+/// `/((?:"(?:[^"\\]|\\.)*"|'(?:[^'\\]|\\.)*')+)|([A-Za-z_][A-Za-z0-9_]*)/g`,
 /// scanned left to right. `\\.` does not cross a line terminator, and the
 /// identifier class is ASCII, so both are written out rather than handed
 /// to a Unicode-aware regexp engine.
@@ -675,14 +690,18 @@ fn reserved_names(node: &Value) -> Vec<String> {
     let bytes = body.as_bytes();
     let mut at = 0;
     while at < bytes.len() {
-        if let Some((text, next)) = scan_quoted(body, at, b'"') {
-            out.push(text.to_string());
-            at = next;
-            continue;
+        // `(?:"..."|'...')+`: as many literals as follow one another. The
+        // repetition is greedy and nothing follows it in its alternative,
+        // so the longest run is the match.
+        let mut end = at;
+        while let Some((_, next)) =
+            scan_quoted(body, end, b'"').or_else(|| scan_quoted(body, end, b'\''))
+        {
+            end = next;
         }
-        if let Some((text, next)) = scan_quoted(body, at, b'\'') {
-            out.push(text.to_string());
-            at = next;
+        if at < end {
+            out.push(string_value(&body[at..end], false));
+            at = end;
             continue;
         }
         if let Some((text, next)) = scan_identifier(body, at) {
@@ -1107,8 +1126,10 @@ pub fn build_file(proto: &Value, version: ProtoVersion) -> Result<FileDescriptor
                 file.package = Some(nsrc(node).to_string());
             }
         } else if keyword.starts_with("import") {
-            if let Some(node) = child(def, "strLit") {
-                let target = unquote(nsrc(node)).to_string();
+            // The file named, from one literal or from adjacent ones.
+            let named: String = children(def, "strLit").into_iter().map(nsrc).collect();
+            if !named.is_empty() {
+                let target = string_value(&named, false);
                 // `import option "x";` (edition 2024) is a separate
                 // dependency list.
                 if keyword.contains("option") {
@@ -1151,30 +1172,48 @@ pub fn build_file(proto: &Value, version: ProtoVersion) -> Result<FileDescriptor
     Ok(file)
 }
 
-/// The nesting depth of a `.proto` source, counted in braces, skipping
-/// the string literals and the comments the tabnas lexer skips.
+/// The nesting depth of a `.proto` source: its braces, and the angle
+/// brackets that nest a message inside an aggregate value, skipping the
+/// string literals and the comments the tabnas lexer skips.
 ///
 /// `parse` uses it to refuse a runaway document BEFORE the engine builds
 /// a tree that deep, because a `tabnas::Value` drops recursively and a
 /// Rust stack overflow aborts the process rather than unwinding.
 ///
+/// An aggregate value (`option (f) = { a < b < c: 1 > > };`) starts at a
+/// brace whose token before it is `=`, the only place the grammar takes
+/// one. Inside it text format writes a message as `{ ... }` or `< ... >`,
+/// and both nest, so both count. Outside one an angle bracket belongs to a
+/// `map<K, V>` field, which nests nothing, and is not counted.
+///
 /// Over-counting is safe and under-counting is not, so an unterminated
 /// string or comment counts every brace it contains: the engine will
 /// reject that source anyway.
-pub(crate) fn brace_depth(src: &str) -> usize {
+pub(crate) fn nesting_depth(src: &str) -> usize {
     let bytes = src.as_bytes();
     let mut at = 0;
     let mut depth: usize = 0;
     let mut deepest: usize = 0;
+    // The depth outside the aggregate value the scan is in, if it is in one.
+    let mut aggregate: Option<usize> = None;
+    // The last byte that is neither space nor inside a comment.
+    let mut last = 0u8;
     while at < bytes.len() {
-        match bytes[at] {
-            b'{' => {
+        let byte = bytes[at];
+        match byte {
+            b'{' | b'<' if b'{' == byte || aggregate.is_some() => {
+                if aggregate.is_none() && b'=' == last {
+                    aggregate = Some(depth);
+                }
                 depth += 1;
                 deepest = deepest.max(depth);
                 at += 1;
             }
-            b'}' => {
+            b'}' | b'>' if b'}' == byte || aggregate.is_some() => {
                 depth = depth.saturating_sub(1);
+                if Some(depth) == aggregate {
+                    aggregate = None;
+                }
                 at += 1;
             }
             quote @ (b'"' | b'\'') => {
@@ -1190,11 +1229,13 @@ pub(crate) fn brace_depth(src: &str) -> usize {
                 while at < bytes.len() && b'\n' != bytes[at] {
                     at += 1;
                 }
+                continue;
             }
             b'/' if Some(&b'/') == bytes.get(at + 1) => {
                 while at < bytes.len() && b'\n' != bytes[at] {
                     at += 1;
                 }
+                continue;
             }
             b'/' if Some(&b'*') == bytes.get(at + 1) => {
                 at += 2;
@@ -1202,9 +1243,15 @@ pub(crate) fn brace_depth(src: &str) -> usize {
                     at += 1;
                 }
                 at += 2;
+                continue;
+            }
+            b' ' | b'\t' | b'\r' | b'\n' => {
+                at += 1;
+                continue;
             }
             _ => at += 1,
         }
+        last = byte;
     }
     deepest
 }
@@ -1238,12 +1285,34 @@ mod tests {
     }
 
     #[test]
-    fn brace_depth_skips_strings_and_comments() {
-        assert_eq!(brace_depth("message M { message N { } }"), 2);
-        assert_eq!(brace_depth("option a = \"{{{{\";"), 0);
-        assert_eq!(brace_depth("// {{{{\nmessage M {}"), 1);
-        assert_eq!(brace_depth("/* {{{{ */ message M {}"), 1);
-        assert_eq!(brace_depth("# {{{{\nmessage M {}"), 1);
-        assert_eq!(brace_depth("}}}}"), 0);
+    fn nesting_depth_skips_strings_and_comments() {
+        assert_eq!(nesting_depth("message M { message N { } }"), 2);
+        assert_eq!(nesting_depth("option a = \"{{{{\";"), 0);
+        assert_eq!(nesting_depth("// {{{{\nmessage M {}"), 1);
+        assert_eq!(nesting_depth("/* {{{{ */ message M {}"), 1);
+        assert_eq!(nesting_depth("# {{{{\nmessage M {}"), 1);
+        assert_eq!(nesting_depth("}}}}"), 0);
+    }
+
+    #[test]
+    fn nesting_depth_counts_angle_brackets_inside_an_aggregate_only() {
+        // A map field's angle brackets nest nothing.
+        assert_eq!(nesting_depth("message M { map<string, int32> m = 1; }"), 1);
+        // Inside an aggregate they nest a message, as braces do.
+        assert_eq!(nesting_depth("option (f) = { a < b < c: 1 > > };"), 3);
+        assert_eq!(
+            nesting_depth("option (f) = /* x */\n{ a { b < c: 1 > } };"),
+            3
+        );
+        assert_eq!(nesting_depth("int32 a = 1 [(f) = { a: [< b: 1 >] }];"), 2);
+        // The aggregate ends at its own brace, and the map after it is a
+        // map again.
+        assert_eq!(
+            nesting_depth("message M { option (f) = { a < b: 1 > }; map<K, V> m = 1; }"),
+            3
+        );
+        assert_eq!(nesting_depth("option (f) = { a: \"<<<<\" };"), 1);
+        // Unclosed, every opening bracket counts.
+        assert_eq!(nesting_depth("option (f) = { a < a < a <"), 4);
     }
 }

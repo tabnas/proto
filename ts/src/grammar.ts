@@ -14,12 +14,15 @@ export const grammarText = `
 
 proto          = [ syntaxOrEdition ] *topLevelDef
 
-syntaxOrEdition = "syntax" "=" strLit ";"
+; protoc takes a string wherever it reads one as C does: adjacent literals
+; are one string, concatenated (\`syntax = "pro" "to3";\`). Every string
+; site below takes them, and the walk records what protoc records.
+syntaxOrEdition = "syntax" "=" strLit *strLit ";"
 
 topLevelDef    = importStmt / packageStmt / optionStmt / message / enumDef
                / service / extendStmt / emptyStmt
 
-importStmt     = "import" [ "weak" / "public" ] strLit ";"
+importStmt     = "import" [ "weak" / "public" ] strLit *strLit ";"
 packageStmt    = "package" fullIdent ";"
 
 optionStmt     = "option" optionName "=" constant ";"
@@ -64,10 +67,10 @@ range          = [ "-" ] NR [ "to" ( [ "-" ] NR / "max" ) ]
 ; Reserved names are string literals in proto2/proto3 and bare identifiers
 ; from edition 2023 on; the union accepts either (and a mix).
 fieldNames     = reservedName *( "," reservedName )
-reservedName   = strLit / ident
+reservedName   = strLit *strLit / ident
 
-constant       = boolLit / fullIdent / signedNumber / signedIdent / strLit
-               / messageValue
+constant       = boolLit / fullIdent / signedNumber / signedIdent
+               / strLit *strLit / messageValue
 signedNumber   = [ "-" / "+" ] NR
 ; \`-inf\` / \`-nan\`: a negated identifier constant. Tried after signedNumber
 ; so \`-33\` still lexes as a number.
@@ -77,7 +80,21 @@ messageValue   = "{" *messageValueEntry "}"
 ; Text format writes a string value as one or more adjacent literals and
 ; concatenates them: \`a: "foo" "bar"\`. The first alternative takes two or
 ; more, so a single literal is a \`constant\`, as any other value is.
+;
+; protoc's parser does not read an aggregate: it records the text between
+; the braces, and text format reads it once the option's type is known.
+; The second alternative takes two forms of that text format the first
+; does not: a repeated field's values as a list, \`a: [1, 2]\`, and a
+; message in angle brackets, \`a < b: 1 >\`. Two more reach these rules as
+; plain identifiers, because inside an aggregate the plugin's lexer reads
+; them as text format does (ts/src/aggregate.ts): a word the grammar
+; spells as a keyword (\`message: optional\`), and a field named by an
+; extension or an Any type URL (\`[x.y]: 1\`,
+; \`[type.googleapis.com/x.Y] { a: 1 }\`).
 messageValueEntry = ident [ ":" ] ( strLit 1*strLit / constant ) [ "," / ";" ]
+messageValueEntry =/ ident [ ":" ] ( listValue / angleValue ) [ "," / ";" ]
+listValue      = "[" [ ( constant / angleValue ) *( "," ( constant / angleValue ) ) ] "]"
+angleValue     = "<" *messageValueEntry ">"
 
 messageType    = [ "." ] fullIdent
 fullIdent      = ident *( "." ident )
@@ -103,12 +120,12 @@ groupField     = [ label ] "group" ident "=" fieldNumber messageBody
 ; edition 2023 deltas: the file may open with an \`edition = "2023";\`
 ; declaration instead of \`syntax = ...\`.
 syntaxOrEdition =/ editionDecl
-editionDecl     = "edition" "=" strLit ";"
+editionDecl     = "edition" "=" strLit *strLit ";"
 
 ; ===== edition-2024.abnf =====
 ; edition 2024 deltas: \`import option "...";\` and symbol visibility
 ; (export / local) on message and enum declarations.
-importStmt      =/ "import" "option" strLit ";"
+importStmt      =/ "import" "option" strLit *strLit ";"
 topLevelDef     =/ symbolVisibility message / symbolVisibility enumDef
 messageElement  =/ symbolVisibility message / symbolVisibility enumDef
 symbolVisibility = "export" / "local"
