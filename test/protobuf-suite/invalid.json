@@ -360,6 +360,24 @@
   "error": "1:11: Integer out of range.\n"
  },
  {
+  "name": "ParseErrorTest.ReservedMaxInt",
+  "helper": "ExpectHasErrors",
+  "input": "message Foo {\n  reserved 2147483647;\n}\n",
+  "error": "1:21: Field number out of bounds.\n"
+ },
+ {
+  "name": "ParseErrorTest.ReservedRangeMaxInt",
+  "helper": "ExpectHasErrors",
+  "input": "message Foo {\n  reserved 1 to 2147483647;\n}\n",
+  "error": "1:26: Field number out of bounds.\n"
+ },
+ {
+  "name": "ParseErrorTest.ReservedMaxIntOctal",
+  "helper": "ExpectHasErrors",
+  "input": "message Foo {\n  reserved 017777777777;\n}\n",
+  "error": "1:23: Field number out of bounds.\n"
+ },
+ {
   "name": "ParseErrorTest.EofInService",
   "helper": "ExpectHasErrors",
   "input": "service TestService {",

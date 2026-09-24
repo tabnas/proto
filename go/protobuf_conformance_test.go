@@ -6,7 +6,7 @@ package tabnasproto
 // corpus, in Go.
 //
 // `test/protobuf-suite/*.json` is a vendored extraction of upstream protobuf's
-// `src/google/protobuf/compiler/parser_unittest.cc` (v35.1) — see
+// `src/google/protobuf/compiler/parser_unittest.cc` (v36.2) — see
 // `../test/protobuf-suite/AGENTS.md` for provenance and lane meanings.
 //
 // This is the Go counterpart of `ts/test/protobuf-conformance.test.ts`. It

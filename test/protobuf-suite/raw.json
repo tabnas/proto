@@ -25,6 +25,48 @@
    "expectedText": "syntax: 'proto2' message_type {  name: \"TestMessage\"  field { name:\"foo\" label:LABEL_REQUIRED type:TYPE_INT32 number:1 }}"
   },
   {
+   "name": "ParseMessageTest.AggregateValueWithoutNormalization",
+   "helper": "ExpectParsesTo",
+   "input": "message TestMessage {\noption (foo) = {   a:\n  100  };\n}",
+   "expectedText": "\n        message_type {\n          name: \"TestMessage\"\n          options {\n            uninterpreted_option {\n              name { name_part: \"foo\" is_extension: true }\n              aggregate_value: \"   a:\\n  100  \"\n            }\n          }\n        }\n      "
+  },
+  {
+   "name": "ParseMessageTest.AggregateValueComplex",
+   "helper": "ExpectParsesTo",
+   "input": "message TestMessage {\n  option (foo) = {\n   outer: {\n      inner: 1\n    }\n  };\n}",
+   "expectedText": "\n        message_type {\n          name: \"TestMessage\"\n          options {\n            uninterpreted_option {\n              name { name_part: \"foo\" is_extension: true }\n              aggregate_value: \"\\n   outer: {\\n      inner: 1\\n    }\\n  \"\n            }\n          }\n        }\n      "
+  },
+  {
+   "name": "ParseMessageTest.AggregateValueTrailingWhitespace",
+   "helper": "ExpectParsesTo",
+   "input": "message TestMessage {\n  option (foo) = { a: 1    \n    b: 2   };\n}\n",
+   "expectedText": "\n        message_type {\n          name: \"TestMessage\"\n          options {\n            uninterpreted_option {\n              name { name_part: \"foo\" is_extension: true }\n              aggregate_value: \" a: 1    \\n    b: 2   \"\n            }\n          }\n        }\n      "
+  },
+  {
+   "name": "ParseMessageTest.AggregateValueMultilineString",
+   "helper": "ExpectParsesTo",
+   "input": "message TestMessage {\n  option (foo) = { a: \"foo\"\n                      \"bar\" };\n}\n",
+   "expectedText": "\n        message_type {\n          name: \"TestMessage\"\n          options {\n            uninterpreted_option {\n              name { name_part: \"foo\" is_extension: true }\n              aggregate_value: \" a: \\\"foo\\\"\\n                      \\\"bar\\\" \"\n            }\n          }\n        }\n      "
+  },
+  {
+   "name": "ParseMessageTest.AggregateValueWithInlineBlockComment",
+   "helper": "ExpectParsesTo",
+   "input": "message TestMessage {\n  option (foo) = { a: /* bla */ 1 };\n}\n",
+   "expectedText": "\n        message_type {\n          name: \"TestMessage\"\n          options {\n            uninterpreted_option {\n              name { name_part: \"foo\" is_extension: true }\n              aggregate_value: \" a:           1 \"\n            }\n          }\n        }\n      "
+  },
+  {
+   "name": "ParseMessageTest.AggregateValueWithSingleLineComment",
+   "helper": "ExpectParsesTo",
+   "input": "message TestMessage {\n  option (foo) = {\n    // This is a comment\n    a: 1\n  };\n}\n",
+   "expectedText": "\n        message_type {\n          name: \"TestMessage\"\n          options {\n            uninterpreted_option {\n              name { name_part: \"foo\" is_extension: true }\n              aggregate_value: \"\\n    \\n    a: 1\\n  \"\n            }\n          }\n        }\n      "
+  },
+  {
+   "name": "ParseMessageTest.AggregateValueWithMultilineBlockComment",
+   "helper": "ExpectParsesTo",
+   "input": "message TestMessage {\n  option (foo) = {\n    /* line 1\n       line 2\n       line 3 */\n    a: 1\n  };\n}\n",
+   "expectedText": "\n        message_type {\n          name: \"TestMessage\"\n          options {\n            uninterpreted_option {\n              name { name_part: \"foo\" is_extension: true }\n              aggregate_value: \"\\n    \\n\\n                \\n    a: 1\\n  \"\n            }\n          }\n        }\n      "
+  },
+  {
    "name": "ParseMessageTest.SimpleFields",
    "helper": "ExpectParsesTo",
    "input": "message TestMessage {\n  required int32 foo = 15;\n  optional int32 bar = 34;\n  repeated int32 baz = 3;\n}\n",
@@ -855,6 +897,24 @@
    "error": "1:11: Integer out of range.\n"
   },
   {
+   "name": "ParseErrorTest.ReservedMaxInt",
+   "helper": "ExpectHasErrors",
+   "input": "message Foo {\n  reserved 2147483647;\n}\n",
+   "error": "1:21: Field number out of bounds.\n"
+  },
+  {
+   "name": "ParseErrorTest.ReservedRangeMaxInt",
+   "helper": "ExpectHasErrors",
+   "input": "message Foo {\n  reserved 1 to 2147483647;\n}\n",
+   "error": "1:26: Field number out of bounds.\n"
+  },
+  {
+   "name": "ParseErrorTest.ReservedMaxIntOctal",
+   "helper": "ExpectHasErrors",
+   "input": "message Foo {\n  reserved 017777777777;\n}\n",
+   "error": "1:23: Field number out of bounds.\n"
+  },
+  {
    "name": "ParseErrorTest.EofInService",
    "helper": "ExpectHasErrors",
    "input": "service TestService {",
@@ -1462,9 +1522,9 @@
   }
  ],
  "byHelper": {
-  "ExpectParsesTo": 82,
+  "ExpectParsesTo": 89,
   "ExpectHasWarnings": 2,
-  "ExpectHasErrors": 80,
+  "ExpectHasErrors": 83,
   "ExpectHasEarlyExitErrors": 16,
   "ExpectHasValidationErrors": 48
  }

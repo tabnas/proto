@@ -608,7 +608,7 @@ Everything else that diverges from `protoc` is a bug.
 
 ## Conformance
 
-The bar: **protoc 35.1's own parser test corpus**, extracted from upstream
+The bar: **protoc 36.2's own parser test corpus**, extracted from upstream
 `src/google/protobuf/compiler/parser_unittest.cc` and vendored under
 `test/protobuf-suite/` (see its AGENTS.md). `ts/test/protobuf-conformance.test.ts`,
 `go/protobuf_conformance_test.go` and `rs/tests/protobuf_conformance_test.rs`
@@ -617,20 +617,20 @@ normalisation, and the corpus is in-repo so it needs no network. What the
 three lanes below say about coverage holds identically in all three runtimes,
 the two exemptions included: the 11 `valid` cases on a protoc-internal edition
 are excluded, and the `invalid` lane is not a gate. Counts below are per
-runtime and were re-measured 2026-08-09; all three runtimes give the same
+runtime and were re-measured 2026-09-24; all three runtimes give the same
 answer:
 
-- `valid` (82 cases): source + the descriptor protoc's parser produces.
-  **71/71 in-scope pass.** The 11 excluded declare protoc-internal editions
+- `valid` (89 cases): source + the descriptor protoc's parser produces.
+  **78/78 in-scope pass.** The 11 excluded declare protoc-internal editions
   (`UNSTABLE`, `NNNNN_TEST_ONLY`) outside the proto2/proto3/2023/2024
   support this package claims; the runner asserts the exclusion set is
   exactly those.
 - `accept-only` (50 cases): source protoc's parser accepts without
   publishing a descriptor. **50/50 parse.**
-- `invalid` (96 cases): source protoc **rejects**. This lane is
+- `invalid` (99 cases): source protoc **rejects**. This lane is
   deliberately NOT a pass/fail gate — `common.abnf` is a permissive union
   and per-version legality is the walk's / protoc's concern (see above), so
-  the parser accepts roughly half of them. Rejection is not part of the
+  the parser accepts roughly half of them (48 of 99). Rejection is not part of the
   contract; recognition and descriptor shape are.
 - `leniency`: probes where the shared tabnas lexer is more permissive than
   `.proto` (a `#` comment, `1_0` digit separators, `1e2` where an intLit is

@@ -72,8 +72,8 @@ written. See [doc/reference.md](doc/reference.md).
 
 ## Conformance
 
-Checked against protoc 35.1's own parser test corpus (extracted from
-`parser_unittest.cc`): every one of the 71 in-scope `valid` cases and all
+Checked against protoc 36.2's own parser test corpus (extracted from
+`parser_unittest.cc`): every one of the 78 in-scope `valid` cases and all
 50 `accept-only` cases, run by `test/protobuf-conformance.test.ts`. The 11
 excluded cases declare protoc-internal editions (`UNSTABLE`,
 `99998_TEST_ONLY`) outside the proto2 / proto3 / 2023 / 2024 support this

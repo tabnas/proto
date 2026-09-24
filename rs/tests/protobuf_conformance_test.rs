@@ -1,7 +1,7 @@
 // Conformance against protoc's own parser test corpus, in Rust.
 //
 // `test/protobuf-suite/*.json` is a vendored extraction of upstream
-// protobuf's `src/google/protobuf/compiler/parser_unittest.cc` (v35.1);
+// protobuf's `src/google/protobuf/compiler/parser_unittest.cc` (v36.2);
 // see `../test/protobuf-suite/AGENTS.md` for provenance and lane
 // meanings.
 //
@@ -427,7 +427,7 @@ fn protobuf_corpus_valid() {
     );
     // Ratcheted at what was measured, so a corpus that shrinks cannot
     // pass by running less.
-    assert_eq!(in_scope.len(), 71, "in-scope valid cases");
+    assert_eq!(in_scope.len(), 78, "in-scope valid cases");
 }
 
 /// `accept-only`: protoc's PARSER accepts these (upstream asserts the

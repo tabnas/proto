@@ -59,7 +59,7 @@ Same order of authority as the repository guide, with one addition.
    the three cannot drift on what a row means.
 2. **The protoc corpus passes**, `tests/protobuf_conformance_test.rs`,
    with the same lanes, contracts and normalisation the other two
-   runners apply: `valid` (71 in-scope cases, compared against protoc's
+   runners apply: `valid` (78 in-scope cases, compared against protoc's
    goldens), `accept-only` (50, parse without failing) and the
    `leniency` probes. Two things are NOT run, in every runtime alike and
    for the reasons `../AGENTS.md` gives: the 11 `valid` cases declaring

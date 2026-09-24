@@ -38,6 +38,8 @@ yarn.lock
 test/protobuf-suite/protoc/
 test/protobuf-suite/protoc-*.zip
 test/protobuf-suite/parser_unittest.cc
+# Written by Python when a refresh tool imports lanes.py.
+test/protobuf-suite/tools/__pycache__/
 
 
 

@@ -1,5 +1,5 @@
 {
- "protocVersion": "libprotoc 35.1",
+ "protocVersion": "libprotoc 36.2",
  "probes": [
   {
    "name": "hash-line-comment",

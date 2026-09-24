@@ -74,19 +74,21 @@ the `rust` column, each through its runtime's half of
 `version-detect` / `whitespace` are the hand-written per-topic fixtures.
 `aggregate.tsv` pins how an aggregate option value's text is recorded;
 its rows were checked against protoc 36.2's own parser, and a new row
-should be too.
+should be too (`protobuf-suite/tools/oracle-check.py --spec`).
 `descriptor-shape.tsv` is a curated, commented tour of the descriptor
 details protoc pins down (range bounds, groups, pseudo-options, synthetic
 oneofs, visibility, …).
 
 `protobuf-suite.tsv` is **generated**: the in-scope `valid` lane of the
 vendored protoc parser corpus (`../protobuf-suite/valid.json`), one row per
-case, so Go runs the whole corpus too. Its `expected` column is this
-parser's output — that this output equals protoc's own golden is asserted
-separately, against the goldens, by
-`ts/test/protobuf-conformance.test.ts`. Together the two say: TypeScript
-matches protoc, and Go matches TypeScript. Regenerate it rather than
-hand-editing, and only after the conformance test is green.
+case, so every runtime runs the whole corpus as a fixture too. Its
+`expected` column is this parser's output — that this output equals
+protoc's own golden is asserted separately, against the goldens, by each
+runtime's conformance runner. Together the two say: TypeScript matches
+protoc, and Go and Rust match TypeScript. Regenerate it rather than
+hand-editing, and only after the conformance tests are green: run
+`node test/protobuf-suite/tools/suite-tsv.js` from the repository root,
+after `npm run build` in `ts/`.
 
 ## What the corpus does not reach
 
