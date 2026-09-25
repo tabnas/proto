@@ -165,9 +165,14 @@ pub(crate) fn record_aggregate(rule: &mut Rule, ctx: &mut Context) {
 //
 // - a word the grammar spells as a keyword, always;
 // - `true`, `false`, `null`, `export` and `local` where they name a field:
-//   followed by `:`, `{` or `<`;
-// - `[x.y]` or `[type.googleapis.com/x.Y]` followed by `:`, `{` or `<`, the
-//   name between the brackets read as one, as text format reads it.
+//   followed by `:`, `{`, `<` or `[`;
+// - `[x.y]` or `[type.googleapis.com/x.Y]` followed by `:`, `{`, `<` or `[`,
+//   the name between the brackets read as one, as text format reads it.
+//
+// A `[` after a name opens a list of messages with the colon left out. A
+// value followed by a bracketed name (`a: true [x.y]: 1`) is then read as an
+// identifier too, which the grammar takes as a value: the entries and the
+// text recorded are the same, and only that value's CST node differs.
 //
 // Every scan below compares ASCII bytes only, and no byte of a multi-byte
 // UTF-8 character is ASCII, so scanning bytes finds what the canonical
@@ -230,14 +235,15 @@ fn ends_word(src: &[u8], at: usize) -> bool {
 }
 
 /// The index of the first byte at or after `at` that is neither space nor
-/// inside a comment, or `src.len()`.
+/// inside a comment, or `src.len()`. A comment ends where the lexer ends
+/// it: `#` and `//` at a CR or an LF, `/*` after the next `*/`.
 fn skip_space(src: &[u8], mut at: usize) -> usize {
     while at < src.len() {
         let byte = src[at];
         if is_space(byte) {
             at += 1;
         } else if b'#' == byte || (b'/' == byte && Some(&b'/') == src.get(at + 1)) {
-            while at < src.len() && b'\n' != src[at] {
+            while at < src.len() && b'\n' != src[at] && b'\r' != src[at] {
                 at += 1;
             }
         } else if b'/' == byte && Some(&b'*') == src.get(at + 1) {
@@ -252,9 +258,12 @@ fn skip_space(src: &[u8], mut at: usize) -> usize {
     at
 }
 
-/// Does a field name end at `at`: is the next thing a `:`, `{` or `<`?
+/// Does a field name end at `at`: is the next thing a `:`, `{`, `<` or `[`?
 fn names_field(src: &[u8], at: usize) -> bool {
-    matches!(src.get(skip_space(src, at)), Some(b':' | b'{' | b'<'))
+    matches!(
+        src.get(skip_space(src, at)),
+        Some(b':' | b'{' | b'<' | b'[')
+    )
 }
 
 /// A type name as text format checks one: identifiers joined by dots.
@@ -268,30 +277,108 @@ fn is_type_name(name: &str) -> bool {
 /// `[x.y]` or `[type.googleapis.com/x.Y]` at `open`: the index after its
 /// `]` and the name with its spaces and comments left out, or `None`.
 ///
-/// The name is checked as text format checks it
-/// (`ConsumeAnyTypeUrlOrFullTypeName` in protobuf's text_format.cc): after
-/// the last `/`, if there is one, a type name; before it, a prefix that
-/// does not start with `/`.
+/// The name must pass the two readings protoc gives it. protoc's own
+/// tokenizer reads the text first, and refuses a malformed number
+/// ([`number_end`]) and a decimal point with a digit after it directly
+/// behind an identifier (`[a.2/x.Y]`). Text format
+/// (`ConsumeAnyTypeUrlOrFullTypeName` in protobuf's text_format.cc) then
+/// joins the pieces, so `[x.y 2]` names `x.y2`, and wants a type name
+/// after the last `/`, if there is one, and a prefix before it that does
+/// not start with `/`. Only letters, digits, `_`, `.`, `/` and `-` are
+/// read, and the sign of a number's exponent, where text format also
+/// allows the URL characters `~!$&()*+,;=%` in a prefix.
+/// `ts/src/aggregate.ts` says more.
 fn bracket_name(src: &[u8], open: usize) -> Option<(usize, String)> {
+    let byte_at = |index: usize| src.get(index).copied().unwrap_or(0);
     let mut at = open + 1;
     let mut name = String::new();
+    // Where the last identifier ended.
+    let mut ident_end = None;
     loop {
         at = skip_space(src, at);
-        match src.get(at).copied() {
-            Some(byte) if is_word_part(byte) || matches!(byte, b'.' | b'/' | b'-') => {
-                name.push(char::from(byte));
+        let byte = byte_at(at);
+        if is_word_start(byte) {
+            let from = at;
+            while is_word_part(byte_at(at)) {
                 at += 1;
             }
-            Some(b']') => {
-                let last = name.rfind('/').map_or(0, |slash| slash + 1);
-                if !is_type_name(&name[last..]) || name.starts_with('/') {
-                    return None;
-                }
-                return Some((at + 1, format!("[{name}]")));
+            name.push_str(std::str::from_utf8(&src[from..at]).ok()?);
+            ident_end = Some(at);
+        } else if byte.is_ascii_digit() || (b'.' == byte && byte_at(at + 1).is_ascii_digit()) {
+            if Some(at) == ident_end {
+                return None;
             }
-            _ => return None,
+            let end = number_end(src, at)?;
+            name.push_str(std::str::from_utf8(&src[at..end]).ok()?);
+            at = end;
+        } else if matches!(byte, b'.' | b'/' | b'-') {
+            name.push(char::from(byte));
+            at += 1;
+        } else if b']' == byte {
+            let last = name.rfind('/').map_or(0, |slash| slash + 1);
+            if !is_type_name(&name[last..]) || name.starts_with('/') {
+                return None;
+            }
+            return Some((at + 1, format!("[{name}]")));
+        } else {
+            return None;
         }
     }
+}
+
+/// The index after the number protoc's tokenizer reads at `at`, a digit or
+/// a decimal point with a digit after it, or `None` where it refuses the
+/// number. Port of `numberEnd` in `ts/src/aggregate.ts` (protobuf's
+/// `ConsumeNumber`).
+fn number_end(src: &[u8], at: usize) -> Option<usize> {
+    let byte_at = |index: usize| src.get(index).copied().unwrap_or(0);
+    let dot = b'.' == src[at];
+    let zero = b'0' == src[at];
+    let mut end = at + 1;
+    if zero && matches!(byte_at(end), b'x' | b'X') {
+        // Hexadecimal: `0x` and at least one hex digit.
+        end += 1;
+        if !byte_at(end).is_ascii_hexdigit() {
+            return None;
+        }
+        while byte_at(end).is_ascii_hexdigit() {
+            end += 1;
+        }
+    } else if zero && byte_at(end).is_ascii_digit() {
+        // Octal: a leading zero, and octal digits only.
+        while matches!(byte_at(end), b'0'..=b'7') {
+            end += 1;
+        }
+        if byte_at(end).is_ascii_digit() {
+            return None;
+        }
+    } else {
+        while byte_at(end).is_ascii_digit() {
+            end += 1;
+        }
+        if !dot && b'.' == byte_at(end) {
+            end += 1;
+            while byte_at(end).is_ascii_digit() {
+                end += 1;
+            }
+        }
+        if matches!(byte_at(end), b'e' | b'E') {
+            // An exponent: `e`, a sign if any, and at least one digit.
+            end += 1;
+            if matches!(byte_at(end), b'-' | b'+') {
+                end += 1;
+            }
+            if !byte_at(end).is_ascii_digit() {
+                return None;
+            }
+            while byte_at(end).is_ascii_digit() {
+                end += 1;
+            }
+        }
+    }
+    // Neither a letter nor another decimal point may follow.
+    let next = byte_at(end);
+    (!is_word_start(next) && b'.' != next).then_some(end)
 }
 
 fn is_open_brace(token: Option<&Token>) -> bool {
@@ -461,16 +548,47 @@ mod tests {
     }
 
     #[test]
-    fn bracketed_names_are_checked_as_text_format_checks_them() {
+    fn bracketed_names_are_read_as_protoc_reads_them() {
         let name = |src: &str| bracket_name(src.as_bytes(), 0).map(|(_, name)| name);
-        assert_eq!(Some("[x.y]".to_string()), name("[ x . y ]"));
-        assert_eq!(
-            Some("[type.googleapis.com/x.Y]".to_string()),
-            name("[type.googleapis.com/x.Y]")
-        );
-        assert_eq!(None, name("[.x.y]"));
-        assert_eq!(None, name("[/x.Y]"));
-        assert_eq!(None, name("[]"));
-        assert_eq!(None, name("[x.y"));
+        // Text format joins the pieces, and wants a type name after the
+        // last `/` and a prefix that does not start with one.
+        for (src, joined) in [
+            ("[ x . y ]", "[x.y]"),
+            ("[type.googleapis.com/x.Y]", "[type.googleapis.com/x.Y]"),
+            ("[x2.y_3/a.B]", "[x2.y_3/a.B]"),
+            ("[x.y 2]", "[x.y2]"),
+            ("[x /* c */2/a.B]", "[x2/a.B]"),
+            ("[a .5/x.Y]", "[a.5/x.Y]"),
+            ("[7/x.Y]", "[7/x.Y]"),
+            ("[a-2/x.Y]", "[a-2/x.Y]"),
+            ("[0x1f/x.Y]", "[0x1f/x.Y]"),
+            ("[07/x.Y]", "[07/x.Y]"),
+            ("[1./x.Y]", "[1./x.Y]"),
+            ("[1e-5/x.Y]", "[1e-5/x.Y]"),
+        ] {
+            assert_eq!(Some(joined.to_string()), name(src), "{src}");
+        }
+        for refused in ["[.x.y]", "[/x.Y]", "[]", "[x.y", "[x/2]", "[x/a .2]"] {
+            assert_eq!(None, name(refused), "{refused}");
+        }
+        // protoc's tokenizer refuses a number that runs into a letter or
+        // another decimal point, a malformed octal or hex number or
+        // exponent, and a decimal point with a digit after it directly
+        // behind an identifier.
+        for refused in [
+            "[1p.example/x.Y]",
+            "[x-2.com/a.B]",
+            "[1_a/x.Y]",
+            "[127.0.0.1/x.Y]",
+            "[1.5.2/x.Y]",
+            "[009/x.Y]",
+            "[072.x5/z]",
+            "[0x/x.Y]",
+            "[0x1g/x.Y]",
+            "[1e/x.Y]",
+            "[a.2/x.Y]",
+        ] {
+            assert_eq!(None, name(refused), "{refused}");
+        }
     }
 }

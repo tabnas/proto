@@ -137,8 +137,13 @@ Inside the braces you may write what text format takes there:
   `[type.googleapis.com/x.Y] { a: 1 }`
 - A field name or enum value spelt like a keyword. `message: optional`
 
-`parse` refuses text outside text format, even where `protoc`'s parser,
-which only matches the braces, would record it.
+`parse` checks text format only in part. It reads a bracketed name as
+`protoc` does: it refuses a name that `protoc` fails to split into
+tokens, such as `[a.2/x.Y]` or `[1p.example/x.Y]`, and joins the pieces
+of the rest, so `[x.y 2]` names `x.y2`. It also refuses some text that `protoc`'s
+parser, which only matches the braces, would record, such as a trailing
+comma in a list, and some text format, such as `.5`. It accepts some text
+that text format refuses, such as `a: foo/x`.
 
 ```js
 const { parse } = require('@tabnas/proto')

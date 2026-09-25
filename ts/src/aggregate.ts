@@ -147,11 +147,19 @@ function recordAggregate(rule: any, ctx: any): void {
 // - a word the grammar spells as a keyword, always;
 // - `true`, `false`, `null` (values to the lexer) and `export`, `local`
 //   (which stay keywords in a value such as `a: local.x`, as they always
-//   have), where they name a field: followed by `:`, `{` or `<`;
+//   have), where they name a field: followed by `:`, `{`, `<` or `[`;
 // - a field named by an extension or an Any type URL, `[x.y]` or
-//   `[type.googleapis.com/x.Y]`, followed by `:`, `{` or `<`. Text format
-//   reads the text between those brackets as one name, and so does this;
-//   anywhere else a `[` opens a list.
+//   `[type.googleapis.com/x.Y]`, followed by `:`, `{`, `<` or `[`. Text
+//   format reads the text between those brackets as one name, and so does
+//   this; anywhere else a `[` opens a list.
+//
+// A `[` after a name opens a list of messages with the colon left out, as
+// text format allows (`[x.y] [ { a: 1 } ]`). What comes before that `[`
+// may instead be a value, with a bracketed name after it: `a: true [x.y]:
+// 1`, or `a: [x] [y]: 1`. Such a value is read as an identifier too. The
+// grammar takes an identifier as a value, so the entries are the same and
+// so is the text recorded for the aggregate; only that value's CST node is
+// an identifier's rather than a list's or a literal's.
 //
 // A word glued to a character that would carry the lexer's text on
 // (`message/x`) is left alone: the identifier made here is always the one
@@ -172,7 +180,8 @@ const PUNCT = '{}[]:,;=()<>-.+'
 
 const isWordStart = (c: number): boolean =>
   (0x41 <= c && c <= 0x5a) || (0x61 <= c && c <= 0x7a) || 0x5f === c
-const isWordPart = (c: number): boolean => isWordStart(c) || (0x30 <= c && c <= 0x39)
+const isDigit = (c: number): boolean => 0x30 <= c && c <= 0x39
+const isWordPart = (c: number): boolean => isWordStart(c) || isDigit(c)
 const isSpace = (c: string): boolean => ' ' === c || '\t' === c || '\r' === c || '\n' === c
 
 function endsWord(src: string, i: number): boolean {
@@ -183,13 +192,14 @@ function endsWord(src: string, i: number): boolean {
 }
 
 // The index of the first character at or after `i` that is neither space
-// nor inside a comment, or src.length.
+// nor inside a comment, or src.length. A comment ends where the lexer ends
+// it: `#` and `//` at a CR or an LF, `/*` after the next `*/`.
 function skipSpace(src: string, i: number): number {
   while (i < src.length) {
     const c = src[i]
     if (isSpace(c)) i++
     else if ('#' === c || ('/' === c && '/' === src[i + 1])) {
-      while (i < src.length && '\n' !== src[i]) i++
+      while (i < src.length && '\n' !== src[i] && '\r' !== src[i]) i++
     } else if ('/' === c && '*' === src[i + 1]) {
       const end = src.indexOf('*/', i + 2)
       i = -1 === end ? src.length : end + 2
@@ -198,35 +208,104 @@ function skipSpace(src: string, i: number): number {
   return i
 }
 
-// Does a field name end at `i`: is the next thing a `:`, `{` or `<`?
+// Does a field name end at `i`: is the next thing a `:`, `{`, `<` or `[`?
 const namesField = (src: string, i: number): boolean => {
   const c = src[skipSpace(src, i)]
-  return ':' === c || '{' === c || '<' === c
+  return ':' === c || '{' === c || '<' === c || '[' === c
 }
 
 // A type name as text format checks one: identifiers joined by dots.
 const TYPE_NAME = /^[A-Za-z_][A-Za-z0-9_]*(\.[A-Za-z_][A-Za-z0-9_]*)*$/
 
 // `[x.y]` or `[type.googleapis.com/x.Y]` at `open`: the index after its
-// `]` and the name with its spaces and comments left out, or null. The
-// name is checked as text format checks it (`ConsumeAnyTypeUrlOrFullTypeName`
-// in protobuf's text_format.cc): after the last `/`, if there is one, a
-// type name; before it, a prefix that does not start with `/`.
+// `]` and the name with its spaces and comments left out, or null.
+//
+// The name must pass the two readings protoc gives it. protoc's own
+// tokenizer reads the text first, as it reads everything between an
+// aggregate's braces, and refuses the file where a number runs into a
+// letter or a `_` (`[1p.example/x.Y]`), a number has a second decimal
+// point (`[127.0.0.1/x.Y]`), an octal or hex number is malformed
+// (`[009/x.Y]`), or a decimal point with a digit after it follows an
+// identifier directly (`[a.2/x.Y]`). Text format
+// (`ConsumeAnyTypeUrlOrFullTypeName` in protobuf's text_format.cc) then
+// joins what the brackets hold, spaces and comments left out, so
+// `[x.y 2]` names `x.y2`, and wants a type name after the last `/`, if
+// there is one, and a prefix before it that does not start with `/`.
+//
+// Only letters, digits, `_`, `.`, `/` and `-` are read, and the sign of a
+// number's exponent. Text format also allows the URL characters
+// `~!$&()*+,;=%` in a prefix; a name holding one is not read as a name
+// here, and the aggregate is refused.
 function bracketName(src: string, open: number): { end: number; name: string } | null {
   let i = open + 1
   let name = ''
+  // Where the last identifier ended: a decimal point there, with a digit
+  // after it, is refused (protoc: "Need space between identifier and
+  // decimal point").
+  let identEnd = -1
   for (;;) {
     i = skipSpace(src, i)
     const c = src.charCodeAt(i)
-    if (isWordPart(c) || 0x2e === c || 0x2f === c || 0x2d === c) {
+    if (isWordStart(c)) {
+      const from = i
+      while (isWordPart(src.charCodeAt(i))) i++
+      name += src.slice(from, i)
+      identEnd = i
+    } else if (isDigit(c) || (0x2e === c && isDigit(src.charCodeAt(i + 1)))) {
+      if (identEnd === i) return null
+      const end = numberEnd(src, i)
+      if (end < 0) return null
+      name += src.slice(i, end)
+      i = end
+    } else if (0x2e === c || 0x2f === c || 0x2d === c) {
       name += src[i++]
-      continue
+    } else {
+      break
     }
-    if (']' !== src[i]) return null
-    const slash = name.lastIndexOf('/')
-    if (!TYPE_NAME.test(name.slice(slash + 1)) || 0 === name.indexOf('/')) return null
-    return { end: i + 1, name: '[' + name + ']' }
   }
+  if (']' !== src[i]) return null
+  const slash = name.lastIndexOf('/')
+  if (!TYPE_NAME.test(name.slice(slash + 1)) || 0 === name.indexOf('/')) return null
+  return { end: i + 1, name: '[' + name + ']' }
+}
+
+const isHex = (c: number): boolean =>
+  isDigit(c) || (0x41 <= c && c <= 0x46) || (0x61 <= c && c <= 0x66)
+const isOctal = (c: number): boolean => 0x30 <= c && c <= 0x37
+
+// The index after the number protoc's tokenizer reads at `at`, a digit or
+// a decimal point with a digit after it, or -1 where it refuses the
+// number. This is `ConsumeNumber` in protobuf's io/tokenizer.cc.
+function numberEnd(src: string, at: number): number {
+  const code = (k: number): number => src.charCodeAt(k)
+  const dot = 0x2e === code(at)
+  const zero = 0x30 === code(at)
+  let i = at + 1
+  if (zero && (0x78 === code(i) || 0x58 === code(i))) {
+    // Hexadecimal: `0x` and at least one hex digit.
+    i++
+    if (!isHex(code(i))) return -1
+    while (isHex(code(i))) i++
+  } else if (zero && isDigit(code(i))) {
+    // Octal: a leading zero, and octal digits only.
+    while (isOctal(code(i))) i++
+    if (isDigit(code(i))) return -1
+  } else {
+    while (isDigit(code(i))) i++
+    if (!dot && 0x2e === code(i)) {
+      i++
+      while (isDigit(code(i))) i++
+    }
+    if (0x65 === code(i) || 0x45 === code(i)) {
+      // An exponent: `e`, a sign if any, and at least one digit.
+      i++
+      if (0x2d === code(i) || 0x2b === code(i)) i++
+      if (!isDigit(code(i))) return -1
+      while (isDigit(code(i))) i++
+    }
+  }
+  // Neither a letter nor another decimal point may follow.
+  return isWordStart(code(i)) || 0x2e === code(i) ? -1 : i
 }
 
 const isOpenBrace = (t: any): boolean => null != t && '{' === t.src

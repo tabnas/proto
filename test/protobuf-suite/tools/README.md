@@ -101,9 +101,9 @@ Python.
    are the `require_syntax_identifier_` tests again, and the third,
    `ExplicitlyMapEntryError`, reports its line through a validation error
    collector upstream, where this run prints `-1:0`. Every fixture row
-   that expects a descriptor equals the parser's: 84 of 84 in
+   that expects a descriptor equals the parser's: 92 of 92 in
    `aggregate.tsv` and 21 of 21 in `adjacent-strings.tsv`. The parser
-   refuses 3 of the 12 `aggregate.tsv` error rows and the one
+   refuses 16 of the 25 `aggregate.tsv` error rows and the one
    `adjacent-strings.tsv` error row; the other 9 are the block
    `aggregate.tsv` marks as text protoc's parser records and text format
    refuses, and the check lists each.

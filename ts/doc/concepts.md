@@ -81,14 +81,15 @@ there, which is why an engine you built yourself gives the same answer as
 The grammar still reads what the braces hold, as text format: values,
 adjacent string literals, lists such as `a: [1, 2]`, messages in braces
 and in angle brackets such as `a < b: 1 >`, and fields named by an
-extension or an Any type URL, such as `[x.y]: 1`. So a parse refuses text
-outside text format, even where `protoc`'s parser, which only matches the
-braces, would record it. Text format has no keywords, so inside the
-braces `message` or `max` is a field name or an enum value like any other
-word. The lexer reads a keyword as a keyword everywhere else, so the
-plugin installs a matcher that runs ahead of it and, inside an aggregate
-value only, reads such a word as an identifier, and a bracketed name as
-one word.
+extension or an Any type URL, such as `[x.y]: 1`. That reading checks
+text format only in part. A parse refuses some text that `protoc`'s
+parser, which only matches the braces, would record, and it takes some
+text that text format itself refuses. Text format has no keywords, so
+inside the braces `message` or `max` is a field name or an enum value
+like any other word. The lexer reads a keyword as a keyword everywhere
+else, so the plugin installs a matcher that runs ahead of it and, inside
+an aggregate value only, reads such a word as an identifier, and a
+bracketed name as one word.
 
 ## Versions
 

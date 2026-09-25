@@ -148,10 +148,13 @@ order 9e5, ahead of the grammar's keywords at 1e6. Inside an aggregate
 value, and nowhere else, it reads as an identifier (`TX`) a word the
 grammar spells as a keyword, a field named by an extension or an Any type
 URL (`[x.y]`, `[type.googleapis.com/x.Y]`), and `true`, `false`, `null`,
-`export` or `local` where they name a field. Its word list is every word
-the grammar spells as a literal, bar `export` and `local`; a test in each
-runtime compares the two, so a keyword added to an `.abnf` file fails
-until the list has it.
+`export` or `local` where they name a field (followed by `:`, `{`, `<` or
+`[`). Where a value comes before such a name, as in `a: true [x.y]: 1`,
+the value is read as an identifier too; the grammar takes it as a value
+all the same, and the text recorded does not change. Its word list is
+every word the grammar spells as a literal, bar `export` and `local`; a
+test in each runtime compares the two, so a keyword added to an `.abnf`
+file fails until the list has it.
 
 It tells inside from outside by a keep prop, `protoAggregate`: a
 before-open action sets it on each rule the `constant` rule pushes once
@@ -623,10 +626,18 @@ name-resolution pass. Specifically:
   optional`). The last two reach the grammar as identifiers, through the
   lexer matcher described under "Grammar conventions". protoc's parser
   only counts braces there and records any text that balances them.
-  This package takes the text format forms above and no others, so text
-  that balances the braces without being text format (a trailing comma
-  in a list, `[.x.y]`) is refused; `test/spec/aggregate.tsv` pins those
-  rows as errors, in a block that says they are not the parser's answer.
+  This package does not check text format in full. It refuses the
+  malformed text `test/spec/aggregate.tsv` pins as errors, some of which
+  protoc's parser records and text format refuses (a trailing comma in a
+  list, `[.x.y]`), in a block that says they are not the parser's answer.
+  It also accepts some text that text format refuses (`{ a: foo/x }`), and,
+  as 0.5.0 did, `{ a: 2com }`, which protoc's tokenizer refuses; and it
+  refuses some text format, such as `.5` and a type URL prefix holding
+  one of the URL characters `~!$&()*+,;=%`. A bracketed name is read as
+  protoc reads it: its tokenizer refuses a malformed number
+  (`[1p.example/x.Y]`, `[127.0.0.1/x.Y]`) and a decimal point with a
+  digit after it directly behind an identifier (`[a.2/x.Y]`), and text
+  format joins what is left, so `[x.y 2]` names `x.y2`.
 - A string may be written as adjacent literals wherever protoc reads
   one: `syntax`, `edition`, `import`, an option's value, `default`,
   `json_name` and a reserved name (`option (f) = "a" "b";`). The value

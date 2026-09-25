@@ -254,6 +254,22 @@ describe('text format inside an aggregate', () => {
     assert.throws(() => parse('option (f) = max;'))
   })
 
+  it('takes a list of messages after a bracketed name without a colon', () => {
+    const cst = tn.parse('option (f) = { [x.y] [ { a: 1 } ] true [] b: true [x.z]: 1 };')
+    assert.deepEqual(kids(cst, 'messageValueEntry', '[x.y][{a:1}]'), ['listValue'])
+    assert.deepEqual(kids(cst, 'messageValueEntry', 'true[]'), ['listValue'])
+    // A value with a bracketed name after it is still the entry's value.
+    assert.deepEqual(kids(cst, 'messageValueEntry', 'b:true'), ['constant'])
+    assert.deepEqual(kids(cst, 'messageValueEntry', '[x.z]:1'), ['constant'])
+    // The name is read as protoc reads it. Its tokenizer refuses a
+    // decimal point with a digit after it directly behind an identifier,
+    // and a number that runs into a letter; text format then joins what
+    // is left, so `[x.y 2]` names `x.y2`.
+    assert.throws(() => parse('option (f) = { [a.2/x.Y] {} };'))
+    assert.throws(() => parse('option (f) = { [1p/x.Y] {} };'))
+    assert.equal(parse('option (f) = { [x.y 2]: 1 };').options['(f)'], ' [x.y 2]: 1 ')
+  })
+
   it('knows every word the grammar spells as a literal, bar export and local', () => {
     const { grammarText } = require('../dist/grammar')
     const { KEYWORDS } = require('../dist/aggregate')

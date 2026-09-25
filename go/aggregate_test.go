@@ -200,6 +200,39 @@ func TestAggregateReadsKeywordsAndBracketedNamesAsIdentifiersInsideOnly(t *testi
 	}
 }
 
+func TestAggregateTakesAListAfterABracketedNameWithoutAColon(t *testing.T) {
+	cst, err := aggregateEngine(t).Parse(`option (f) = { [x.y] [ { a: 1 } ] true [] b: true [x.z]: 1 };`)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, c := range []struct{ rule, src, want string }{
+		{"messageValueEntry", "[x.y][{a:1}]", "listValue"},
+		{"messageValueEntry", "true[]", "listValue"},
+		// A value with a bracketed name after it is still the entry's value.
+		{"messageValueEntry", "b:true", "constant"},
+		{"messageValueEntry", "[x.z]:1", "constant"},
+	} {
+		if got := strings.Join(ruleKids(cst, c.rule, c.src), " "); got != c.want {
+			t.Errorf("%s %s: got %q, want %q", c.rule, c.src, got, c.want)
+		}
+	}
+	// The name is read as protoc reads it. Its tokenizer refuses a decimal
+	// point with a digit after it directly behind an identifier, and a
+	// number that runs into a letter; text format then joins what is left,
+	// so `[x.y 2]` names `x.y2`.
+	for _, src := range []string{
+		"option (f) = { [a.2/x.Y] {} };",
+		"option (f) = { [1p/x.Y] {} };",
+	} {
+		if _, err := Parse(src, nil); err == nil {
+			t.Errorf("%s: want the refusal protoc's tokenizer gives", src)
+		}
+	}
+	if got := mustParse(t, "option (f) = { [x.y 2]: 1 };", nil).Options["(f)"]; got != " [x.y 2]: 1 " {
+		t.Errorf("[x.y 2]: got %q", got)
+	}
+}
+
 func TestAggregateKeywordsMatchTheGrammar(t *testing.T) {
 	quoted := regexp.MustCompile(`"([A-Za-z_][A-Za-z0-9_]*)"`)
 	words := map[string]bool{}

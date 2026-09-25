@@ -89,6 +89,9 @@ message M {\n  option (f) = { [type.googleapis.com/x.Y]: < a: 1 > };\n}\n	{"depe
 message M {\n  option (f) = { a { [x.y]: 1 } };\n}\n	{"dependency":[],"publicDependency":[],"weakDependency":[],"messageType":[{"name":"M","field":[],"nestedType":[],"enumType":[],"oneofDecl":[],"extension":[],"options":{"(f)":" a { [x.y]: 1 } "}}],"enumType":[],"service":[],"extension":[],"syntax":"proto2"}
 message M {\n  option (f) = { [ x . y /* c */ ] : 1 };\n}\n	{"dependency":[],"publicDependency":[],"weakDependency":[],"messageType":[{"name":"M","field":[],"nestedType":[],"enumType":[],"oneofDecl":[],"extension":[],"options":{"(f)":" [ x . y         ] : 1 "}}],"enumType":[],"service":[],"extension":[],"syntax":"proto2"}
 message M {\n  option (f) = { [google.protobuf.message]: 1 [x.optional] {} };\n}\n	{"dependency":[],"publicDependency":[],"weakDependency":[],"messageType":[{"name":"M","field":[],"nestedType":[],"enumType":[],"oneofDecl":[],"extension":[],"options":{"(f)":" [google.protobuf.message]: 1 [x.optional] {} "}}],"enumType":[],"service":[],"extension":[],"syntax":"proto2"}
+message M {\n  option (f) = { [x2.y_3/a.B] {} [x-y.z/a.B]: 1 };\n}\n	{"dependency":[],"publicDependency":[],"weakDependency":[],"messageType":[{"name":"M","field":[],"nestedType":[],"enumType":[],"oneofDecl":[],"extension":[],"options":{"(f)":" [x2.y_3/a.B] {} [x-y.z/a.B]: 1 "}}],"enumType":[],"service":[],"extension":[],"syntax":"proto2"}
+# a piece of the name may start with a digit wherever protoc's tokenizer reads a number there, and text format joins the pieces, so `[x.y 2]` names `x.y2`
+message M {\n  option (f) = { [x.y 2]: 1 [7/x.Y] {} [a-2/x.Y] < > [0x1f/x.Y] {} [1e-5/x.Y] {} };\n}\n	{"dependency":[],"publicDependency":[],"weakDependency":[],"messageType":[{"name":"M","field":[],"nestedType":[],"enumType":[],"oneofDecl":[],"extension":[],"options":{"(f)":" [x.y 2]: 1 [7/x.Y] {} [a-2/x.Y] < > [0x1f/x.Y] {} [1e-5/x.Y] {} "}}],"enumType":[],"service":[],"extension":[],"syntax":"proto2"}
 # text format has no keywords: a word the grammar spells as a keyword is a field name or an enum value, in any case
 message M {\n  option (f) = { message: 1 };\n}\n	{"dependency":[],"publicDependency":[],"weakDependency":[],"messageType":[{"name":"M","field":[],"nestedType":[],"enumType":[],"oneofDecl":[],"extension":[],"options":{"(f)":" message: 1 "}}],"enumType":[],"service":[],"extension":[],"syntax":"proto2"}
 message M {\n  option (f) = { syntax: 1 import: 2 weak: 3 public: 4 package: 5 option: 6 };\n}\n	{"dependency":[],"publicDependency":[],"weakDependency":[],"messageType":[{"name":"M","field":[],"nestedType":[],"enumType":[],"oneofDecl":[],"extension":[],"options":{"(f)":" syntax: 1 import: 2 weak: 3 public: 4 package: 5 option: 6 "}}],"enumType":[],"service":[],"extension":[],"syntax":"proto2"}
@@ -99,10 +102,17 @@ message M {\n  option (f) = { a: optional b: MAX c: Message d: stream };\n}\n	{"
 message M {\n  option (f) = { a: [optional, MAX] };\n}\n	{"dependency":[],"publicDependency":[],"weakDependency":[],"messageType":[{"name":"M","field":[],"nestedType":[],"enumType":[],"oneofDecl":[],"extension":[],"options":{"(f)":" a: [optional, MAX] "}}],"enumType":[],"service":[],"extension":[],"syntax":"proto2"}
 message M {\n  option (f) = { group { map < key: "k" value: message > } };\n}\n	{"dependency":[],"publicDependency":[],"weakDependency":[],"messageType":[{"name":"M","field":[],"nestedType":[],"enumType":[],"oneofDecl":[],"extension":[],"options":{"(f)":" group { map < key: \"k\" value: message > } "}}],"enumType":[],"service":[],"extension":[],"syntax":"proto2"}
 message M {\n  option (f) = { MESSAGE: 1 Optional: to };\n}\n	{"dependency":[],"publicDependency":[],"weakDependency":[],"messageType":[{"name":"M","field":[],"nestedType":[],"enumType":[],"oneofDecl":[],"extension":[],"options":{"(f)":" MESSAGE: 1 Optional: to "}}],"enumType":[],"service":[],"extension":[],"syntax":"proto2"}
-# `true`, `false`, `null`, `export` and `local` name a field too, where one is followed by `:`, `{` or `<`; as a value each is what it always was
+# `true`, `false`, `null`, `export` and `local` name a field too, where one is followed by `:`, `{`, `<` or `[`; as a value each is what it always was
 message M {\n  option (f) = { true: 1 false: 2 null: 3 };\n}\n	{"dependency":[],"publicDependency":[],"weakDependency":[],"messageType":[{"name":"M","field":[],"nestedType":[],"enumType":[],"oneofDecl":[],"extension":[],"options":{"(f)":" true: 1 false: 2 null: 3 "}}],"enumType":[],"service":[],"extension":[],"syntax":"proto2"}
 message M {\n  option (f) = { export: 1 local { a: 1 } };\n}\n	{"dependency":[],"publicDependency":[],"weakDependency":[],"messageType":[{"name":"M","field":[],"nestedType":[],"enumType":[],"oneofDecl":[],"extension":[],"options":{"(f)":" export: 1 local { a: 1 } "}}],"enumType":[],"service":[],"extension":[],"syntax":"proto2"}
 message M {\n  option (f) = { a: true b: export c: local.x };\n}\n	{"dependency":[],"publicDependency":[],"weakDependency":[],"messageType":[{"name":"M","field":[],"nestedType":[],"enumType":[],"oneofDecl":[],"extension":[],"options":{"(f)":" a: true b: export c: local.x "}}],"enumType":[],"service":[],"extension":[],"syntax":"proto2"}
+# a list of messages needs no colon after a bracketed name either, nor after `true`, `false`, `null`, `export` or `local` naming a field; a value followed by a bracketed name is still a value
+message M {\n  option (f) = { [x.y] [ { a: 1 }, < a: 2 > ] };\n}\n	{"dependency":[],"publicDependency":[],"weakDependency":[],"messageType":[{"name":"M","field":[],"nestedType":[],"enumType":[],"oneofDecl":[],"extension":[],"options":{"(f)":" [x.y] [ { a: 1 }, < a: 2 > ] "}}],"enumType":[],"service":[],"extension":[],"syntax":"proto2"}
+message M {\n  option (f) = { [x.y] [] [type.googleapis.com/x.Y] [ { a: 1 } ] };\n}\n	{"dependency":[],"publicDependency":[],"weakDependency":[],"messageType":[{"name":"M","field":[],"nestedType":[],"enumType":[],"oneofDecl":[],"extension":[],"options":{"(f)":" [x.y] [] [type.googleapis.com/x.Y] [ { a: 1 } ] "}}],"enumType":[],"service":[],"extension":[],"syntax":"proto2"}
+message M {\n  option (f) = { true [ { b: 1 } ] false [] null [ < c: 1 > ] };\n}\n	{"dependency":[],"publicDependency":[],"weakDependency":[],"messageType":[{"name":"M","field":[],"nestedType":[],"enumType":[],"oneofDecl":[],"extension":[],"options":{"(f)":" true [ { b: 1 } ] false [] null [ < c: 1 > ] "}}],"enumType":[],"service":[],"extension":[],"syntax":"proto2"}
+message M {\n  option (f) = { export [ { a: 1 } ] local [] };\n}\n	{"dependency":[],"publicDependency":[],"weakDependency":[],"messageType":[{"name":"M","field":[],"nestedType":[],"enumType":[],"oneofDecl":[],"extension":[],"options":{"(f)":" export [ { a: 1 } ] local [] "}}],"enumType":[],"service":[],"extension":[],"syntax":"proto2"}
+message M {\n  option (f) = { a: [x] [y]: 1 };\n}\n	{"dependency":[],"publicDependency":[],"weakDependency":[],"messageType":[{"name":"M","field":[],"nestedType":[],"enumType":[],"oneofDecl":[],"extension":[],"options":{"(f)":" a: [x] [y]: 1 "}}],"enumType":[],"service":[],"extension":[],"syntax":"proto2"}
+message M {\n  option (f) = { a: true [x.y]: 1 b: local [x.z] { } };\n}\n	{"dependency":[],"publicDependency":[],"weakDependency":[],"messageType":[{"name":"M","field":[],"nestedType":[],"enumType":[],"oneofDecl":[],"extension":[],"options":{"(f)":" a: true [x.y]: 1 b: local [x.z] { } "}}],"enumType":[],"service":[],"extension":[],"syntax":"proto2"}
 # an aggregate in every place an option is written
 message M {\n  optional int32 x = 1 [(f) = { message: optional, a: [1, 2] }];\n}\n	{"dependency":[],"publicDependency":[],"weakDependency":[],"messageType":[{"name":"M","field":[{"name":"x","number":1,"label":"LABEL_OPTIONAL","type":"TYPE_INT32","options":{"(f)":" message: optional, a: [1, 2] "}}],"nestedType":[],"enumType":[],"oneofDecl":[],"extension":[]}],"enumType":[],"service":[],"extension":[],"syntax":"proto2"}
 enum E {\n  A = 0 [(f) = { [x.y] < max: 1 > }];\n}\n	{"dependency":[],"publicDependency":[],"weakDependency":[],"messageType":[],"enumType":[{"name":"E","value":[{"name":"A","number":0,"options":{"(f)":" [x.y] < max: 1 > "}}]}],"service":[],"extension":[],"syntax":"proto2"}
@@ -121,7 +131,20 @@ message M {\n  option (f) = { a < b: 1 };\n}\n	ERROR
 message M {\n  option (f) = { []: 1 };\n}\n	ERROR
 message M {\n  option (f) = { [x.y: 1 };\n}\n	ERROR
 message M {\n  option (f) = { [.x.y]: 1 };\n}\n	ERROR
-# protoc's parser refuses these: a list or angle brackets as an option's whole value, and braces that do not balance
+# protoc's parser refuses these: a list or angle brackets as an option's whole value, braces that do not balance, and a bracketed name its tokenizer cannot read: a number that runs into a letter, a `_` or a second decimal point, a malformed octal or hex number or exponent, a decimal point and a digit directly behind an identifier
 syntax = "proto2";\noption (f) = [1, 2];\n	ERROR
 syntax = "proto2";\noption (f) = < a: 1 >;\n	ERROR
 message M {\n  option (f) = { a < b: 1 } };\n}\n	ERROR
+message M {\n  option (f) = { [1p.example/x.Y] {} };\n}\n	ERROR
+message M {\n  option (f) = { [x-2.com/a.B] {} };\n}\n	ERROR
+message M {\n  option (f) = { [x-2com/a.B] {} };\n}\n	ERROR
+message M {\n  option (f) = { [3d.io/x.Y] {} };\n}\n	ERROR
+message M {\n  option (f) = { [a.2/x.Y] {} };\n}\n	ERROR
+message M {\n  option (f) = { [x.2_a/x.Y] {} };\n}\n	ERROR
+message M {\n  option (f) = { [127.0.0.1/x.Y] {} };\n}\n	ERROR
+message M {\n  option (f) = { [009/ ax6] < > };\n}\n	ERROR
+message M {\n  option (f) = { [072.x5/z] < > };\n}\n	ERROR
+message M {\n  option (f) = { [a-2.b/x.Y] < > };\n}\n	ERROR
+message M {\n  option (f) = { [1_a/x.Y] {} };\n}\n	ERROR
+message M {\n  option (f) = { [0x/x.Y] {} };\n}\n	ERROR
+message M {\n  option (f) = { [1e/x.Y] {} };\n}\n	ERROR

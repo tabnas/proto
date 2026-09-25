@@ -152,9 +152,15 @@ func recordAggregate(r *tabnas.Rule, ctx *tabnas.Context) {
 //
 //   - a word the grammar spells as a keyword, always;
 //   - `true`, `false`, `null`, `export` and `local` where they name a field:
-//     followed by `:`, `{` or `<`;
-//   - `[x.y]` or `[type.googleapis.com/x.Y]` followed by `:`, `{` or `<`,
-//     the name between the brackets read as one, as text format reads it.
+//     followed by `:`, `{`, `<` or `[`;
+//   - `[x.y]` or `[type.googleapis.com/x.Y]` followed by `:`, `{`, `<` or
+//     `[`, the name between the brackets read as one, as text format reads
+//     it.
+//
+// A `[` after a name opens a list of messages with the colon left out. A
+// value followed by a bracketed name (`a: true [x.y]: 1`) is then read as an
+// identifier too, which the grammar takes as a value: the entries and the
+// text recorded are the same, and only that value's CST node differs.
 
 // aggregateKeywords is every word the grammar spells as a literal, less
 // `export` and `local`. TestAggregateKeywordsMatchTheGrammar keeps it in
@@ -175,7 +181,9 @@ func isWordStart(c byte) bool {
 	return ('A' <= c && c <= 'Z') || ('a' <= c && c <= 'z') || c == '_'
 }
 
-func isWordPart(c byte) bool { return isWordStart(c) || ('0' <= c && c <= '9') }
+func isDigit(c byte) bool { return '0' <= c && c <= '9' }
+
+func isWordPart(c byte) bool { return isWordStart(c) || isDigit(c) }
 
 func isLexSpace(c byte) bool { return c == ' ' || c == '\t' || c == '\r' || c == '\n' }
 
@@ -192,7 +200,8 @@ func endsWord(src string, i int) bool {
 }
 
 // skipSpace returns the index of the first byte at or after i that is neither
-// space nor inside a comment, or len(src).
+// space nor inside a comment, or len(src). A comment ends where the lexer ends
+// it: `#` and `//` at a CR or an LF, `/*` after the next `*/`.
 func skipSpace(src string, i int) int {
 	for i < len(src) {
 		c := src[i]
@@ -200,7 +209,7 @@ func skipSpace(src string, i int) int {
 		case isLexSpace(c):
 			i++
 		case c == '#' || (c == '/' && i+1 < len(src) && src[i+1] == '/'):
-			for i < len(src) && src[i] != '\n' {
+			for i < len(src) && src[i] != '\n' && src[i] != '\r' {
 				i++
 			}
 		case c == '/' && i+1 < len(src) && src[i+1] == '*':
@@ -218,37 +227,63 @@ func skipSpace(src string, i int) int {
 }
 
 // namesField reports whether a field name ends at i: is the next thing a
-// `:`, `{` or `<`?
+// `:`, `{`, `<` or `[`?
 func namesField(src string, i int) bool {
 	j := skipSpace(src, i)
 	if j >= len(src) {
 		return false
 	}
 	c := src[j]
-	return c == ':' || c == '{' || c == '<'
+	return c == ':' || c == '{' || c == '<' || c == '['
 }
 
 // typeNameRe is a type name as text format checks one.
 var typeNameRe = regexp.MustCompile(`^[A-Za-z_][A-Za-z0-9_]*(\.[A-Za-z_][A-Za-z0-9_]*)*$`)
 
 // bracketName reads `[x.y]` or `[type.googleapis.com/x.Y]` at open: the index
-// after its `]` and the name with its spaces and comments left out. The name
-// is checked as text format checks it: after the last `/`, if there is one, a
-// type name; before it, a prefix that does not start with `/`.
+// after its `]` and the name with its spaces and comments left out. Port of
+// bracketName in ts/src/aggregate.ts, which explains the two readings the
+// name must pass: protoc's tokenizer's, which refuses a malformed number
+// (numberEnd) and a decimal point with a digit after it directly behind an
+// identifier; and text format's, which joins the pieces and wants a type
+// name after the last `/` and a prefix that does not start with `/`. Only
+// letters, digits, `_`, `.`, `/` and `-` are read, and the sign of a
+// number's exponent, where text format also allows the URL characters
+// `~!$&()*+,;=%` in a prefix.
 func bracketName(src string, open int) (int, string, bool) {
 	i := open + 1
 	var name strings.Builder
+	// identEnd is where the last identifier ended.
+	identEnd := -1
 	for {
 		i = skipSpace(src, i)
-		if i < len(src) {
-			c := src[i]
-			if isWordPart(c) || c == '.' || c == '/' || c == '-' {
-				name.WriteByte(c)
+		c := byteAt(src, i)
+		switch {
+		case isWordStart(c):
+			from := i
+			for isWordPart(byteAt(src, i)) {
 				i++
-				continue
 			}
+			name.WriteString(src[from:i])
+			identEnd = i
+			continue
+		case isDigit(c) || (c == '.' && isDigit(byteAt(src, i+1))):
+			if identEnd == i {
+				return 0, "", false
+			}
+			end := numberEnd(src, i)
+			if end < 0 {
+				return 0, "", false
+			}
+			name.WriteString(src[i:end])
+			i = end
+			continue
+		case c == '.' || c == '/' || c == '-':
+			name.WriteByte(c)
+			i++
+			continue
 		}
-		if i >= len(src) || src[i] != ']' {
+		if c != ']' {
 			return 0, "", false
 		}
 		n := name.String()
@@ -258,6 +293,66 @@ func bracketName(src string, open int) (int, string, bool) {
 		}
 		return i + 1, "[" + n + "]", true
 	}
+}
+
+// byteAt is src[i], or 0 past the end.
+func byteAt(src string, i int) byte {
+	if i < len(src) {
+		return src[i]
+	}
+	return 0
+}
+
+// numberEnd is the index after the number protoc's tokenizer reads at at, a
+// digit or a decimal point with a digit after it, or -1 where it refuses the
+// number. Port of numberEnd in ts/src/aggregate.ts (protobuf's
+// ConsumeNumber).
+func numberEnd(src string, at int) int {
+	dot, zero := src[at] == '.', src[at] == '0'
+	i := at + 1
+	switch c := byteAt(src, i); {
+	case zero && (c == 'x' || c == 'X'):
+		i++
+		if !isHex(byteAt(src, i)) {
+			return -1
+		}
+		for isHex(byteAt(src, i)) {
+			i++
+		}
+	case zero && isDigit(c):
+		for isOctal(byteAt(src, i)) {
+			i++
+		}
+		if isDigit(byteAt(src, i)) {
+			return -1
+		}
+	default:
+		for isDigit(byteAt(src, i)) {
+			i++
+		}
+		if !dot && byteAt(src, i) == '.' {
+			i++
+			for isDigit(byteAt(src, i)) {
+				i++
+			}
+		}
+		if e := byteAt(src, i); e == 'e' || e == 'E' {
+			i++
+			if s := byteAt(src, i); s == '-' || s == '+' {
+				i++
+			}
+			if !isDigit(byteAt(src, i)) {
+				return -1
+			}
+			for isDigit(byteAt(src, i)) {
+				i++
+			}
+		}
+	}
+	if c := byteAt(src, i); isWordStart(c) || c == '.' {
+		return -1
+	}
+	return i
 }
 
 func isOpenBrace(t *tabnas.Token) bool { return t != nil && t.Src == "{" }
