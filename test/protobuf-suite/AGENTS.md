@@ -66,10 +66,12 @@ root `AGENTS.md`.
 
 ## Rules
 
-- The two declared output-shape deviations (options as a plain map;
+- The first two declared output-shape deviations (options as a plain map;
   `defaultValue` kept as written) are **bridged** in the runner, not waived:
   protoc's encoding is translated into ours before comparing, so an option
-  name or value we failed to capture still fails.
+  name or value we failed to capture still fails. The third, a string
+  written as one literal keeping its escapes, has no bridge and needs none
+  today: no `valid.json` case holds a string literal with an escape.
 - The only excluded `valid` cases are those declaring protoc-internal
   editions (`UNSTABLE`, `NNNNN_TEST_ONLY`). The runner asserts the exclusion
   set is exactly those and no larger — do not widen it to hide a failure.

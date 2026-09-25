@@ -58,7 +58,7 @@ reason the next paragraph gives.
 The grammar is a permissive *union* of the four versions, so rejecting
 version-illegal input is deliberately not part of the contract: recognition
 and descriptor shape are. See [`AGENTS.md`](AGENTS.md) for the full
-statement, including the two declared output-shape deviations from protoc.
+statement, including the declared output-shape deviations from protoc.
 
 ## Layout
 
