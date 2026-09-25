@@ -170,9 +170,11 @@ and records the fix.
 One recognition difference from protoc follows from the lookahead, and
 is deliberate: protoc commits to a nested message at the `message`
 keyword, so `message message = 1;` is an error there, where this grammar
-reads it as a field of type `message`. The union is permissive by design
-(see "Conformance"), and no descriptor is produced for anything protoc
-would not also produce one for.
+reads it as a field of type `message` and returns a descriptor for it.
+The union is permissive by design (see "Conformance"): rejection is not
+part of the contract, so an input protoc refuses can come back with a
+descriptor here, and `test/spec/keywords.tsv` pins this one so the
+difference stays recorded rather than accidental.
 
 ## The walk and abnf inlining (the main gotcha)
 
