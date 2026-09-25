@@ -118,7 +118,10 @@ string `protoc` records: each literal decoded and the results joined, so
 Unicode replacement character stands in for each ill-formed sequence, and
 a `bytes` field's default comes back escaped again, as `protoc` escapes
 it. The same holds wherever `protoc` reads a string: `syntax`, `edition`,
-`import`, `default`, `json_name` and a reserved name.
+`import`, `default`, `json_name` and a reserved name. `parse` refuses the
+adjacent literals that `protoc` refuses as well: a backtick string, or an
+escape outside the set `protoc` knows, such as `\e`. A single literal
+holding such an escape is still accepted, and kept as written.
 
 An aggregate value, `option (f) = { a: 1 };`, is a string: the text
 between the braces, as `protoc` records it in `aggregate_value`. The text

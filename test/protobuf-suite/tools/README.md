@@ -102,9 +102,9 @@ Python.
    `ExplicitlyMapEntryError`, reports its line through a validation error
    collector upstream, where this run prints `-1:0`. Every fixture row
    that expects a descriptor equals the parser's: 92 of 92 in
-   `aggregate.tsv` and 21 of 21 in `adjacent-strings.tsv`. The parser
-   refuses 16 of the 25 `aggregate.tsv` error rows and the one
-   `adjacent-strings.tsv` error row; the other 9 are the block
+   `aggregate.tsv` and 22 of 22 in `adjacent-strings.tsv`. The parser
+   refuses 16 of the 25 `aggregate.tsv` error rows and all 16
+   `adjacent-strings.tsv` error rows; the other 9 are the block
    `aggregate.tsv` marks as text protoc's parser records and text format
    refuses, and the check lists each.
 

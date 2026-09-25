@@ -13,6 +13,7 @@ import { buildFile } from './build-descriptor'
 import {
   recordAggregate, makeAggregateWord, markAggregate, pushedRules,
 } from './aggregate'
+import { makeAdjacentStrings } from './strings'
 import {
   ProtoVersion, declaredVersion, resolveVersion,
 } from './detect-version'
@@ -55,9 +56,16 @@ const Proto = ((tn: AnyTabnas, _options?: Partial<ProtoOptions>) => {
   // Text format has no keywords: inside an aggregate value a word the
   // grammar spells as a keyword, and a bracketed extension or Any name,
   // are identifiers. This matcher runs ahead of the grammar's own (order
-  // 1e6) and reads them so there; see ./aggregate.ts.
+  // 1e6) and reads them so there; see ./aggregate.ts. The second refuses
+  // adjacent string literals that protoc's tokenizer refuses; see
+  // ./strings.ts.
   tn.options({
-    lex: { match: { protoAggregateWord: { order: 9e5, make: makeAggregateWord } } },
+    lex: {
+      match: {
+        protoAggregateWord: { order: 9e5, make: makeAggregateWord },
+        protoAdjacentStrings: { order: 9.5e5, make: makeAdjacentStrings },
+      },
+    },
   })
 }) as {
   (tn: AnyTabnas, options?: Partial<ProtoOptions>): void

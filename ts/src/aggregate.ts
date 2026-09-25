@@ -393,5 +393,5 @@ const makeAggregateWord = () => aggregateWord
 
 export {
   aggregateText, recordAggregate, makeAggregateWord, markAggregate, pushedRules,
-  inAggregate, KEYWORDS,
+  inAggregate, skipSpace, KEYWORDS,
 }

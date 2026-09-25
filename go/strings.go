@@ -8,12 +8,15 @@ package tabnasproto
 // string wherever protoc reads one is every literal that follows, each
 // decoded by the tokenizer's ParseStringAppend and the bytes run together.
 // A value written as ONE literal keeps the text between its quotes as
-// written, escapes included, as it always has here.
+// written, escapes included, as it always has here. Adjacent literals that
+// protoc's tokenizer refuses are refused (adjacentStrings below).
 
 import (
 	"fmt"
 	"strings"
 	"unicode/utf8"
+
+	tabnas "github.com/tabnas/parser/go"
 )
 
 // splitLiterals returns the literals a CST src holds, in order, or nil when
@@ -286,4 +289,136 @@ func stringValue(src string, bytes bool) string {
 		return v
 	}
 	return unquote(src)
+}
+
+// ---- adjacent literals protoc refuses -------------------------------------
+//
+// Port of the matcher in ts/src/strings.ts, which explains it in full.
+// protoc's tokenizer refuses a literal holding an escape it does not know,
+// `\x` without a hex digit, `\u` without four, `\U` without eight that
+// start `000` or `001`, and has no backtick strings. Outside an aggregate
+// value, a literal that runs into another is refused where protoc refuses
+// either of the two; a single literal is kept as written, as it always was.
+
+func isQuote(c byte) bool { return c == '"' || c == '\'' || c == '`' }
+
+// letterEscapes are the letters protoc's tokenizer takes after a backslash.
+const letterEscapes = "abfnrtv\\?'\""
+
+// literalEnd is the index after the literal that opens at at, as the tabnas
+// lexer reads it: a backslash takes the byte after it. -1 where there is no
+// closing quote, or where a `"` or `'` literal holds a raw control
+// character, which the lexer refuses with an error of its own.
+func literalEnd(src string, at int) int {
+	quote := src[at]
+	for i := at + 1; i < len(src); i++ {
+		c := src[i]
+		switch {
+		case c == quote:
+			return i + 1
+		case quote != '`' && c < 0x20:
+			return -1
+		case c == '\\':
+			i++
+		}
+	}
+	return -1
+}
+
+// hexDigits reports whether there are count hex digits at from, all before
+// closeAt.
+func hexDigits(src string, from, count, closeAt int) bool {
+	if closeAt < from+count {
+		return false
+	}
+	for k := from; k < from+count; k++ {
+		if !isHex(src[k]) {
+			return false
+		}
+	}
+	return true
+}
+
+// protocRefuses reports whether protoc's tokenizer refuses the literal
+// src[at:end], reading its escapes as ConsumeString does.
+func protocRefuses(src string, at, end int) bool {
+	if src[at] == '`' {
+		return true
+	}
+	closeAt := end - 1
+	for i := at + 1; i < closeAt; i++ {
+		if src[i] != '\\' {
+			continue
+		}
+		i++
+		e := src[i]
+		switch {
+		case strings.IndexByte(letterEscapes, e) >= 0 || isOctal(e):
+		case e == 'x' || e == 'X':
+			if !hexDigits(src, i+1, 1, closeAt) {
+				return true
+			}
+		case e == 'u':
+			if !hexDigits(src, i+1, 4, closeAt) {
+				return true
+			}
+		case e == 'U':
+			// Eight hex digits, the first three `00` and then `0` or `1`.
+			if closeAt <= i+3 {
+				return true
+			}
+			if lead := src[i+1 : i+4]; lead != "000" && lead != "001" {
+				return true
+			}
+			if !hexDigits(src, i+4, 5, closeAt) {
+				return true
+			}
+		default:
+			return true
+		}
+	}
+	return false
+}
+
+// adjacentStrings is the lexer matcher: a bad token for a literal that runs
+// into another where protoc refuses either, spanning from the first to the
+// end of the one refused, or nil to let the grammar's own matchers read the
+// text. Checking each literal with the one after it covers every pair in a
+// run.
+func adjacentStrings(lex *tabnas.Lex, rule *tabnas.Rule) *tabnas.Token {
+	src := lex.Src
+	at := lex.Cursor().SI
+	if at >= len(src) || !isQuote(src[at]) || inAggregate(lex, rule) {
+		return nil
+	}
+	end := literalEnd(src, at)
+	if end < 0 {
+		return nil
+	}
+	next := skipSpace(src, end)
+	if next >= len(src) || !isQuote(src[next]) {
+		return nil
+	}
+	nextEnd := literalEnd(src, next)
+	if nextEnd < 0 {
+		return nil
+	}
+	refused := -1
+	if protocRefuses(src, at, end) {
+		refused = end
+	} else if protocRefuses(src, next, nextEnd) {
+		refused = nextEnd
+	}
+	if refused < 0 {
+		return nil
+	}
+	tkn := lex.Bad("unexpected")
+	tkn.Src = src[at:refused]
+	return tkn
+}
+
+// makeAdjacentStrings is the matcher's factory, for the engine's Lex.Match
+// option.
+func makeAdjacentStrings(_ *tabnas.LexConfig, _ *tabnas.Options) tabnas.LexMatcher {
+	return adjacentStrings
 }

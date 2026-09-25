@@ -237,7 +237,7 @@ fn ends_word(src: &[u8], at: usize) -> bool {
 /// The index of the first byte at or after `at` that is neither space nor
 /// inside a comment, or `src.len()`. A comment ends where the lexer ends
 /// it: `#` and `//` at a CR or an LF, `/*` after the next `*/`.
-fn skip_space(src: &[u8], mut at: usize) -> usize {
+pub(crate) fn skip_space(src: &[u8], mut at: usize) -> usize {
     while at < src.len() {
         let byte = src[at];
         if is_space(byte) {

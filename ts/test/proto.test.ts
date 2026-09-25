@@ -302,6 +302,16 @@ describe('string literals', () => {
     assert.deepEqual(fdp.dependency, ['a\\x41', 'aA'])
   })
 
+  it('refuses adjacent literals protoc refuses, and nothing 0.5.0 took', () => {
+    // protoc's tokenizer refuses `\e` in any literal. One literal holding
+    // it is kept as written, as 0.5.0 kept it, and so is an aggregate,
+    // whose text is recorded as written; adjacent literals are refused.
+    assert.equal(parse('option (f) = "\\e";').options['(f)'], '\\e')
+    assert.equal(parse('option (f) = { a: "\\e" "x" };').options['(f)'], ' a: "\\e" "x" ')
+    assert.throws(() => parse('option (f) = "\\e" "x";'), /unexpected/)
+    assert.throws(() => parse('option (f) = "x" /* c */ `y`;'), /unexpected/)
+    assert.throws(() => parse('import "a" "\\U0001" "F600";'), /unexpected/)
+  })
 })
 
 describe('telling inside an aggregate from outside', () => {

@@ -164,7 +164,9 @@ rule at hand. Walking up the rule stack instead, for every keyword, costs
 more the deeper the stack is, and a file's top-level definitions, a flat
 aggregate and nested angle brackets all deepen it, so the parse time grew
 with the square of the file's size. A test in each runtime pins the
-lookup. `ts/src/aggregate.ts` states the rest.
+lookup. A second matcher, `protoAdjacentStrings` at order 9.5e5, refuses
+adjacent string literals that protoc's tokenizer refuses; see "Output
+shape". `ts/src/aggregate.ts` and `ts/src/strings.ts` state the rest.
 
 `common.abnf` is a permissive **union** that accepts every version's
 syntax. Per-version legality (proto3 has no `required`, `group` is
@@ -643,7 +645,11 @@ name-resolution pass. Specifically:
   `json_name` and a reserved name (`option (f) = "a" "b";`). The value
   recorded is the one protoc records: each literal decoded as protoc's
   tokenizer decodes it (the letter, octal, `\x`, `\u` and `\U`
-  escapes, an unknown escape as `?`) and the bytes concatenated. Bytes
+  escapes) and the bytes concatenated. Adjacent literals protoc's
+  tokenizer refuses are refused: a backtick string, or an escape it does
+  not know (`\e`, `\8`, a backslash before a newline, `\U` without
+  eight hex digits that start `000` or `001`). The `protoAdjacentStrings`
+  lexer matcher refuses them, outside an aggregate only. Bytes
   that are not UTF-8 have each ill-formed sequence replaced by U+FFFD,
   where protoc keeps the bytes, which JSON text cannot hold; a `bytes`
   field's default is escaped again as protoc escapes it
@@ -675,7 +681,9 @@ runner, so a real capture failure still turns it red:
    escape and records `A`. Adjacent literals, which 0.5.0 refused, are
    decoded as protoc decodes them (see "Output shape"). Decoding a single
    literal as well would change what 0.5.0 records for every string
-   holding an escape, which a patch release does not do.
+   holding an escape, which a patch release does not do. For the same
+   reason one literal holding an escape protoc's tokenizer refuses, such
+   as `"\e"`, is still accepted, as 0.5.0 accepted it.
 
 Everything else that diverges from `protoc` is a bug.
 

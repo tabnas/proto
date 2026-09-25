@@ -13,6 +13,13 @@
 // This module is that reading. A value written as ONE literal keeps the
 // text between its quotes as written, escapes included, as it always has
 // here; see the declared deviation in the root AGENTS.md.
+//
+// It also holds adjacent literals to the rule protoc's tokenizer holds
+// every literal to, since 0.5.0 refused them all: a run of them that
+// protoc refuses is refused (see `adjacentStrings` below). The value is
+// read only from a run protoc accepts.
+
+import { inAggregate, skipSpace } from './aggregate'
 
 // The literals a CST `src` holds, in order. `src` is the literals' own
 // text run together (the lexer drops the space between them), so each
@@ -166,4 +173,92 @@ function adjacentValue(src: string, bytes = false): string | null {
   return bytes ? cEscape(out) : utf8Text(out)
 }
 
-export { adjacentValue, splitLiterals }
+// ---- adjacent literals protoc refuses -------------------------------------
+//
+// protoc's tokenizer refuses a string literal holding an escape it does
+// not know, `\x` without a hex digit, `\u` without four, `\U` without
+// eight that start `000` or `001`, a raw newline or a NUL (`ConsumeString`
+// in io/tokenizer.cc), and it has no backtick strings. The tabnas lexer takes
+// some of these (`\e`, `\8`, `\U`, a backslash before a newline, a
+// backtick string). A single literal that holds one has always been
+// accepted here and kept as written, and still is. Adjacent literals are
+// new, and decoding one of these would record a value protoc never
+// produces, so this matcher, which the `Proto` plugin runs ahead of the
+// grammar's own, refuses a literal that runs into another where protoc
+// refuses either of the two. Inside an aggregate value, whose text is
+// recorded as written and which 0.5.0 read as it reads it now, it leaves
+// every literal alone.
+
+const isQuote = (c: string | undefined): boolean => '"' === c || "'" === c || '`' === c
+const LETTER_ESCAPES = 'abfnrtv\\?\'"'
+
+// The index after the literal that opens at `at`, as the tabnas lexer
+// reads it: a backslash takes the character after it. -1 where there is
+// no closing quote, or where a `"` or `'` literal holds a raw control
+// character, which the lexer refuses with an error of its own.
+function literalEnd(src: string, at: number): number {
+  const quote = src[at]
+  for (let i = at + 1; i < src.length; i++) {
+    const c = src[i]
+    if (quote === c) return i + 1
+    if ('`' !== quote && src.charCodeAt(i) < 0x20) return -1
+    if ('\\' === c) i++
+  }
+  return -1
+}
+
+// Are there `count` hex digits at `from`, all before `close`?
+function hexDigits(src: string, from: number, count: number, close: number): boolean {
+  if (close < from + count) return false
+  for (let k = from; k < from + count; k++) if (!isHex(src.charCodeAt(k))) return false
+  return true
+}
+
+// Does protoc's tokenizer refuse the literal src[at, end)? It reads the
+// escapes as `ConsumeString` does. A raw newline or NUL, which it also
+// refuses, never gets here: literalEnd leaves those to the lexer.
+function protocRefuses(src: string, at: number, end: number): boolean {
+  if ('`' === src[at]) return true
+  const close = end - 1
+  for (let i = at + 1; i < close; i++) {
+    if ('\\' !== src[i]) continue
+    const e = src[++i]
+    if (LETTER_ESCAPES.includes(e) || isOctal(src.charCodeAt(i))) continue
+    if ('x' === e || 'X' === e) {
+      if (!hexDigits(src, i + 1, 1, close)) return true
+    } else if ('u' === e) {
+      if (!hexDigits(src, i + 1, 4, close)) return true
+    } else if ('U' === e) {
+      // Eight hex digits, the first three `00` and then `0` or `1`.
+      const lead = src.slice(i + 1, i + 4)
+      if (!('000' === lead || '001' === lead) || !hexDigits(src, i + 4, 5, close)) return true
+    } else {
+      return true
+    }
+  }
+  return false
+}
+
+// The lexer matcher: a bad token for a literal that runs into another where
+// protoc refuses either, spanning from the first to the end of the one
+// refused, or undefined to let the grammar's own matchers read the text.
+// Checking each literal with the one after it covers every pair in a run.
+function adjacentStrings(lex: any, rule: any): any {
+  const src: string = lex.src
+  const at: number = lex.pnt.sI
+  if (!isQuote(src[at]) || inAggregate(lex, rule)) return undefined
+  const end = literalEnd(src, at)
+  if (end < 0) return undefined
+  const next = skipSpace(src, end)
+  if (!isQuote(src[next])) return undefined
+  const nextEnd = literalEnd(src, next)
+  if (nextEnd < 0) return undefined
+  if (protocRefuses(src, at, end)) return lex.bad('unexpected', at, end)
+  if (protocRefuses(src, next, nextEnd)) return lex.bad('unexpected', at, nextEnd)
+  return undefined
+}
+
+// The matcher's factory, for the engine's `lex.match` option.
+const makeAdjacentStrings = () => adjacentStrings
+
+export { adjacentValue, splitLiterals, makeAdjacentStrings, protocRefuses }

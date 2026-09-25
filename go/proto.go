@@ -66,9 +66,12 @@ func Proto(j *tabnas.Tabnas) error {
 	// Text format has no keywords: inside an aggregate value a word the
 	// grammar spells as a keyword, and a bracketed extension or Any name, are
 	// identifiers. This matcher runs ahead of the grammar's own (priority
-	// 1e6) and reads them so there; see aggregate.go.
+	// 1e6) and reads them so there; see aggregate.go. The second refuses
+	// adjacent string literals that protoc's tokenizer refuses; see
+	// strings.go.
 	j.SetOptions(tabnas.Options{Lex: &tabnas.LexOptions{Match: map[string]*tabnas.MatchSpec{
-		"protoAggregateWord": {Order: 900000, Make: makeAggregateWord},
+		"protoAggregateWord":   {Order: 900000, Make: makeAggregateWord},
+		"protoAdjacentStrings": {Order: 950000, Make: makeAdjacentStrings},
 	}}})
 	return nil
 }

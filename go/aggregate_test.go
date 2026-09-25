@@ -280,6 +280,27 @@ func TestStringLiteralsOneAsWrittenAdjacentAsProtocReadsThem(t *testing.T) {
 	}
 }
 
+func TestStringLiteralsRefusesAdjacentLiteralsProtocRefuses(t *testing.T) {
+	// protoc's tokenizer refuses `\e` in any literal. One literal holding it
+	// is kept as written, as 0.5.0 kept it, and so is an aggregate, whose
+	// text is recorded as written; adjacent literals are refused.
+	if got := mustParse(t, `option (f) = "\e";`, nil).Options["(f)"]; got != `\e` {
+		t.Errorf("one literal: got %q", got)
+	}
+	if got := mustParse(t, `option (f) = { a: "\e" "x" };`, nil).Options["(f)"]; got != ` a: "\e" "x" ` {
+		t.Errorf("an aggregate: got %q", got)
+	}
+	for _, src := range []string{
+		`option (f) = "\e" "x";`,
+		"option (f) = \"x\" /* c */ `y`;",
+		`import "a" "\U0001" "F600";`,
+	} {
+		if _, err := Parse(src, nil); err == nil || !strings.Contains(err.Error(), "unexpected") {
+			t.Errorf("%s: want the refusal protoc gives, got %v", src, err)
+		}
+	}
+}
+
 // The answer to "is the lexer inside an aggregate" once came from walking up
 // the rule stack, which every top-level definition and every aggregate entry
 // deepens, so each keyword cost more than the one before it. Port of the

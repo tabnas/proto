@@ -122,6 +122,10 @@ impl Default for ProtoOptions {
     }
 }
 
+/// The names of this plugin's two lexer matchers.
+pub(crate) const AGGREGATE_WORD: &str = "protoAggregateWord";
+pub(crate) const ADJACENT_STRINGS: &str = "protoAdjacentStrings";
+
 /// Install the union proto grammar on an engine instance, so it can parse
 /// `.proto` source into a `{rule, src, kids}` CST.
 ///
@@ -184,16 +188,28 @@ pub fn proto(parser: &mut Tabnas) -> Result<(), ProtoError> {
     // Text format has no keywords: inside an aggregate value a word the
     // grammar spells as a keyword, and a bracketed extension or Any name,
     // are identifiers. This matcher runs ahead of the grammar's own (the
-    // 1e6 band) and reads them so there; see `aggregate.rs`.
+    // 1e6 band) and reads them so there; see `aggregate.rs`. The second
+    // refuses adjacent string literals that protoc's tokenizer refuses;
+    // see `strings.rs`.
     parser
         .set_options(|options| {
             options.lex.matchers.insert(
-                "protoAggregateWord".to_string(),
+                AGGREGATE_WORD.to_string(),
                 LexMatcher {
-                    name: "protoAggregateWord".to_string(),
+                    name: AGGREGATE_WORD.to_string(),
                     order: 900_000.0,
                     matcher: None,
                     imperative: Some(Arc::new(aggregate::aggregate_word)),
+                    factory: None,
+                },
+            );
+            options.lex.matchers.insert(
+                ADJACENT_STRINGS.to_string(),
+                LexMatcher {
+                    name: ADJACENT_STRINGS.to_string(),
+                    order: 950_000.0,
+                    matcher: None,
+                    imperative: Some(Arc::new(strings::adjacent_strings)),
                     factory: None,
                 },
             );

@@ -6,8 +6,10 @@ input	expected	opts
 # tokenizer (ParseStringAppend in io/tokenizer.cc) and the bytes run
 # together, and so does this package; ts/src/strings.ts is that reading.
 # A string written as ONE literal is recorded as written, as it always
-# has been (see the root AGENTS.md). Every row was checked against protoc
-# 36.2's own parser and agrees with it.
+# has been (see the root AGENTS.md). Adjacent literals protoc's tokenizer
+# refuses, a backtick string or an escape it does not know, are refused.
+# Every row was checked against protoc 36.2's own parser and agrees with
+# it.
 # the declaration: syntax and edition
 syntax = "pro" "to3";\nmessage M {}\n	{"dependency":[],"publicDependency":[],"weakDependency":[],"messageType":[{"name":"M","field":[],"nestedType":[],"enumType":[],"oneofDecl":[],"extension":[]}],"enumType":[],"service":[],"extension":[],"syntax":"proto3"}
 syntax = 'proto' "2";\n	{"dependency":[],"publicDependency":[],"weakDependency":[],"messageType":[],"enumType":[],"service":[],"extension":[],"syntax":"proto2"}
@@ -29,12 +31,28 @@ syntax = "proto2";\nmessage M {\n  optional bytes b = 1 [default = "a\\001" "b\\
 # a reserved name, in a message and in an enum
 syntax = "proto2";\nmessage M {\n  reserved "a" "b", "c";\n}\n	{"dependency":[],"publicDependency":[],"weakDependency":[],"messageType":[{"name":"M","field":[],"nestedType":[],"enumType":[],"oneofDecl":[],"extension":[],"reservedName":["ab","c"]}],"enumType":[],"service":[],"extension":[],"syntax":"proto2"}
 syntax = "proto2";\nenum E {\n  A = 0;\n  reserved "B" "C";\n}\n	{"dependency":[],"publicDependency":[],"weakDependency":[],"messageType":[],"enumType":[{"name":"E","value":[{"name":"A","number":0}],"reservedName":["BC"]}],"service":[],"extension":[],"syntax":"proto2"}
-# each literal is decoded as protoc decodes it, and the bytes concatenated: octal, hex and the letter escapes, \u and \U, a surrogate pair written as two \u escapes, UTF-8 as written
+# each literal is decoded as protoc decodes it, and the bytes concatenated: octal, hex and the letter escapes, \u and \U, a surrogate pair written as two \u escapes, UTF-8 as written, and a \U past U+10FFFF written out as text, as protoc writes it
 syntax = "proto2";\noption (f) = "\\101\\x42" "\\u0043\\U00000044";\n	{"dependency":[],"publicDependency":[],"weakDependency":[],"messageType":[],"enumType":[],"service":[],"extension":[],"syntax":"proto2","options":{"(f)":"ABCD"}}
 syntax = "proto2";\noption (f) = "\\a\\b\\f\\n\\r\\t\\v" "\\\\\\?\\'\\"";\n	{"dependency":[],"publicDependency":[],"weakDependency":[],"messageType":[],"enumType":[],"service":[],"extension":[],"syntax":"proto2","options":{"(f)":"\u0007\b\f\n\r\t\u000b\\?'\""}}
 syntax = "proto2";\noption (f) = "é" "\\u00e9" "\\U0001F600" "\\ud83d\\ude00";\n	{"dependency":[],"publicDependency":[],"weakDependency":[],"messageType":[],"enumType":[],"service":[],"extension":[],"syntax":"proto2","options":{"(f)":"éé😀😀"}}
+syntax = "proto2";\noption (f) = "\\U0010ffff" "\\U00110000" "\\U001FFFFF";\n	{"dependency":[],"publicDependency":[],"weakDependency":[],"messageType":[],"enumType":[],"service":[],"extension":[],"syntax":"proto2","options":{"(f)":"􏿿\\U00110000\\U001fffff"}}
 syntax = "proto2";\noption (f) = "" "a" '';\n	{"dependency":[],"publicDependency":[],"weakDependency":[],"messageType":[],"enumType":[],"service":[],"extension":[],"syntax":"proto2","options":{"(f)":"a"}}
 # bytes that are not UTF-8 are recorded with U+FFFD for each ill-formed sequence: protoc keeps the bytes themselves, which JSON text cannot hold
 syntax = "proto2";\noption (f) = "\\xff" "a" "\\xe2\\x82";\n	{"dependency":[],"publicDependency":[],"weakDependency":[],"messageType":[],"enumType":[],"service":[],"extension":[],"syntax":"proto2","options":{"(f)":"�a�"}}
-# protoc refuses these
+# protoc refuses these: a sign before a string, and adjacent literals where its tokenizer refuses one, for an escape it does not know or a backtick string, at every site
 syntax = "proto2";\noption (f) = -"a" "b";\n	ERROR
+syntax = "proto2";\noption (f) = "\\e" "x";\n	ERROR
+syntax = "proto2";\noption (f) = "a" "\\c" '\\z';\n	ERROR
+syntax = "proto2";\noption (f) = "\\8" "\\9";\n	ERROR
+syntax = "proto2";\noption (f) = "\\ " "\\%";\n	ERROR
+syntax = "proto2";\noption (f) = "\\U" "x";\n	ERROR
+syntax = "proto2";\noption (f) = "\\U0001" "F600";\n	ERROR
+syntax = "proto2";\noption (f) = "\\U12345678" "x";\n	ERROR
+syntax = "proto2";\noption (f) = "\\U00200000" "x";\n	ERROR
+syntax = "proto2";\noption (f) = "a\\\nb" "c";\n	ERROR
+syntax = "proto2";\noption (f) = "a" `b`;\n	ERROR
+syntax = "proto2";\nimport "a" "\\q.proto";\n	ERROR
+syntax = "proto2";\nmessage M {\n  optional string s = 1 [default = "a" "\\e"];\n}\n	ERROR
+syntax = "proto2";\nmessage M {\n  optional string s = 1 [json_name = `j` "k"];\n}\n	ERROR
+syntax = "proto2";\nmessage M {\n  reserved "a" "\\e";\n}\n	ERROR
+syntax = "proto" `2`;\n	ERROR
