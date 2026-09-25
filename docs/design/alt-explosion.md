@@ -187,14 +187,19 @@ across iterations (§5.3).
 Two defects in the shipped grammar are consequences of the size problem,
 not separate bugs.
 
-**Keywords cannot be identifiers.** Sixteen inputs that protoc accepts
-are refused with `[tabnas/unexpected]`: a field named `message`,
-`option`, `optional`, `map`, `to`, `max`, `stream` or `reserved`; a
-message named `service`; a package `foo.message.bar`; a type
-`foo.option.Bar`; an enum value `max`; an rpc `stream`; an option named
-`message`; a field named `export` in edition 2024. The vendored protoc
-corpus (`test/protobuf-suite/`) has no case of a keyword used as a name,
-which is why the conformance lanes are green.
+**Keywords cannot be identifiers.** Nineteen inputs that protoc's
+parser accepts are refused with `[tabnas/unexpected]`; §12 lists each
+one. Fifteen use a keyword as a name: a field named `message`, `option`,
+`optional`, `map`, `to`, `max`, `stream` or `reserved`; a message named
+`service`; a package `foo.message.bar`; a type `foo.option.Bar`; an enum
+value `max`; an rpc `stream`; an option named `message`; a field named
+`export` in edition 2024. Four more use a value word: `true`, `false`
+and `null` lex as `VL`, a token distinct from both `TX` and the keyword
+tokens, so a field or an enum value named `true` is refused as well,
+and a contextual-identifier facility (§9.2) has to admit the value
+words alongside the keywords. The vendored protoc corpus
+(`test/protobuf-suite/`) has no case of a keyword used as a name, which
+is why the conformance lanes are green.
 
 **Identifiers that case-fold to a keyword are refused.** RFC 5234 quoted
 strings are case-insensitive, so `"edition"` compiles to the matcher
@@ -417,8 +422,14 @@ inlined differently and the walk read the label from a different place.
 That is §5.6's coupling, and it is a test that any emitter change has
 to keep green.
 
-So the shipped grammar's tables are between 2.4 and 3.2 times larger
-than they need to be, and the excess is not paying for correctness.
+So the shipped grammar's dispatch needs at most two tokens, and its
+tables are between 2.4 and 3.2 times larger than that needs. The saving
+is not yet free of observable change: at K = 2 and K = 3 one descriptor
+moves, because the walk reads an inlined value from a different place,
+and at K = 1 the second-token decisions break. Read the figures as the
+saving available once the walk no longer depends on inlining shape and
+every shared fixture is green, and not as a change that can land on its
+own.
 `tabnas/bnf#71` reaches the same place from the other side: its scratch
 patch of first-token dispatch, gated on a contest check, takes proto
 0.5.0 from 2,888 to 946 alternates (1,122 under the character-level
@@ -443,8 +454,11 @@ identifiers).
 At K = 2 the grammar does what protoc does: `int32 message = 1;`,
 `package foo.message.bar;`, `enum E { max = 0; }`, `rpc stream (M)
 returns (M);`, `.message.Foo f = 1;`, nested messages, groups, maps,
-reserved ranges and `-inf` all parse, and 136 corpus descriptors are
-identical. The two refusals are the edition-2024 `export message` cases,
+reserved ranges and `-inf` all parse (the 15 inputs of that column are
+these shapes, chosen to cover keyword names and the statement kinds the
+reordering touches; they are not the §12 set), and 136 of the 139 corpus
+inputs give the same result as the shipped parser: the same descriptor,
+or the same refusal for the 11 protoc-internal-edition cases. The two refusals are the edition-2024 `export message` cases,
 where the `=/ symbolVisibility message` alternatives are appended after
 `field` and lose the first-match on `#EXPORT #MESSAGE` (now two
 identifier tokens); ordering them first fixes it, as protoc's
@@ -481,9 +495,13 @@ the decision the single-segment path already makes:
    then the size of the trie of contested prefixes, not the product of
    all paths.
 3. Seed the repetition helper's prefix walk with itself, so a window
-   never runs into the next iteration (`bnf#71`, direction 4). The
-   continue-or-exit decision of `*X` needs FIRST(X) against FOLLOW and
-   nothing more.
+   never runs into the next iteration, for the helpers whose FIRST(X) is
+   disjoint from their FOLLOW (`bnf#71`, direction 4, which measures it
+   and states the limit). A contested helper still has to see across
+   the boundary: in `start = *"a" "a" "b"`, `ab` exits at once and
+   `aab` continues once, and both begin with `a`. Keep the deeper window
+   for those, or route them through the probe and rewind fallback; a
+   FIRST-against-FOLLOW check alone would refuse valid input.
 4. Keep `leftFactor`, but let it fire on any shared prefix that a
    contested decision would otherwise enumerate, rather than on
    prefixes beyond the window alone.
@@ -508,9 +526,14 @@ do not), fall back to the tuples for that decision only.
 
 The TypeScript engine already resolves set names per position in
 `normalt`; Go resolves them per parse in `Context.altS` (§3.3 shows the
-cost) and should resolve them at install; the Rust engine expands them
-at install and does not re-resolve (`parser#217`). Making all three
-resolve once, at install, is the engine half. The emitter half has a
+cost); the Rust engine expands them at install and never re-resolves,
+which is the defect `parser#217` records. Caching the resolution is the
+engine half, and the cache has to keep the semantics TypeScript and Go
+define: a set overridden after an alternate was installed still reaches
+that alternate. So keep the names, resolve lazily, cache per instance,
+and invalidate the cache and any first-token index (§9.3) when a token
+set changes. Expanding the names away at install, as Rust does, is the
+one form to avoid. The emitter half has a
 known obstacle, recorded in `tabnas/bnf#71`: the compiler's own passes
 (`applyDebtGuard`, `reorderKeywordShadow`, `specificityPermute`) read
 an alternate's `s` as a string, so a set-valued position is treated as
@@ -521,7 +544,8 @@ token-set trial failed one bnf test for exactly that reason.
 This is also the soft-keyword facility proto needs. With it, the front
 end can offer an option (`wordKeywords: { contextual: true }`, or an
 annotation on the `ident` rule) meaning "a rule named `ident` also
-accepts every keyword token", which is what Lezer's `@extend`,
+accepts every keyword token and the value-word tokens (`VL`: `true`,
+`false`, `null`)", which is what Lezer's `@extend`,
 tree-sitter's `word` and protocompile's `identifier` production each
 provide. The grammar then stays as written and protoc-faithful, and the
 statement-head ordering of §8.2 is the only discipline the author needs.
@@ -555,9 +579,13 @@ smaller wrong grammar.
 
 - The shipped grammar compiles to at most 1,000 open alternates and
   installs in under 100 ms in TypeScript.
-- The protoc-faithful grammar (§8.2) compiles in under a second and
-  parses all 139 corpus inputs to identical descriptors, plus the 17
-  keyword-as-identifier inputs in §4, plus protobuf's `descriptor.proto`.
+- The protoc-faithful grammar (§8.2) compiles in under a second. Of the
+  139 corpus inputs, the 78 in-scope `valid` cases produce descriptors
+  identical to protoc's goldens, the 50 `accept-only` cases parse, and
+  the 11 `valid` cases declaring a protoc-internal edition stay refused
+  by the version check, as the exact-set exclusion in
+  `test/protobuf-suite/AGENTS.md` requires. The 19 inputs of §12 parse,
+  and so does protobuf's `descriptor.proto`.
 - Go parses the 104 KB synthetic file within two times the TypeScript
   time.
 - `test/spec/*.tsv` and `test/divergent.tsv` hold in all three runtimes.
@@ -619,3 +647,43 @@ file described in §3.3, best of three to five runs after one warm-up.
 Profiles are `node --cpu-prof` and Go's `runtime/pprof`. The literature
 and third-party statements were read from the primary sources named in
 §6 and §7; page and line references are as of 2026-09-25.
+
+## 12. The keyword-as-identifier inputs
+
+Each row is one file, parsed with the shipped 0.5.0 grammar. protoc's
+parser accepts every row (its tokenizer has one identifier class, and
+`ConsumeIdentifier` takes any identifier token, keywords and value words
+included); the grammar refuses each with `[tabnas/unexpected]`. One
+shape is left out on purpose: a type spelled with an unqualified
+keyword, `message m = 1;` inside a message, which protoc also refuses,
+because `LookingAt("message")` reads the statement as a nested message.
+
+| # | input | refused because |
+|---|---|---|
+| 1 | `syntax = "proto3"; message M { int32 message = 1; }` | field named by a keyword |
+| 2 | `syntax = "proto3"; message M { int32 option = 1; }` | field named by a keyword |
+| 3 | `syntax = "proto3"; message M { int32 optional = 1; }` | field named by a keyword |
+| 4 | `syntax = "proto3"; message M { int32 map = 1; }` | field named by a keyword |
+| 5 | `syntax = "proto3"; message M { int32 to = 1; }` | field named by a keyword |
+| 6 | `syntax = "proto3"; message M { int32 max = 1; }` | field named by a keyword |
+| 7 | `syntax = "proto3"; message M { int32 stream = 1; }` | field named by a keyword |
+| 8 | `syntax = "proto3"; message M { int32 reserved = 1; }` | field named by a keyword |
+| 9 | `syntax = "proto3"; message service { int32 a = 1; }` | message named by a keyword |
+| 10 | `syntax = "proto3"; package foo.message.bar;` | package segment is a keyword |
+| 11 | `syntax = "proto3"; message M { foo.option.Bar x = 1; }` | type segment is a keyword |
+| 12 | `syntax = "proto3"; enum E { max = 0; }` | enum value named by a keyword |
+| 13 | `syntax = "proto3"; message M {} service S { rpc stream (M) returns (M); }` | rpc named by a keyword |
+| 14 | `syntax = "proto3"; option message = 1;` | option named by a keyword |
+| 15 | `edition = "2024"; message M { int32 export = 1; }` | field named by an edition-2024 keyword |
+| 16 | `syntax = "proto3"; message M { int32 true = 1; }` | field named by a value word |
+| 17 | `syntax = "proto3"; message M { int32 false = 1; }` | field named by a value word |
+| 18 | `syntax = "proto3"; message M { int32 null = 1; }` | field named by a value word |
+| 19 | `syntax = "proto3"; enum E { true = 0; }` | enum value named by a value word |
+
+Two controls parse with the shipped grammar and belong beside the table:
+`edition = "2024"; message M { local.pkg.T x = 1; }`, which the
+edition-2024 `fullIdent` extension admits, and
+`syntax = "proto3"; message M { int32 truth = 1; }`, an identifier that
+merely begins with a value word. The §4 case-fold rows (`Edition`,
+`Message`, `Service`, `MAX`) are a separate defect with the grammar-only
+fix in §10.1 and are not counted here.
