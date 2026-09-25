@@ -70,8 +70,14 @@ the `rust` column, each through its runtime's half of
 
 ## The files
 
-`aggregate` / `edition-2023` / `edition-2024` / `proto2` / `proto3` /
-`version-detect` / `whitespace` are the hand-written per-topic fixtures.
+`aggregate` / `edition-2023` / `edition-2024` / `keywords` / `proto2` /
+`proto3` / `version-detect` / `whitespace` are the hand-written per-topic
+fixtures. `keywords.tsv` pins keywords and value words used as identifiers
+(a field named `message`, an enum value `max`, an rpc `stream`), which
+protoc admits and this grammar admits since tabnas/bnf#71 was fixed;
+`../descriptor/` holds protobuf's own `descriptor.proto` as a further
+input for the same property, checked by a dedicated test per runtime
+rather than a fixture row.
 `aggregate.tsv` pins how an aggregate option value's text is recorded;
 its rows were checked against protoc 36.2's own parser, and a new row
 should be too (`protobuf-suite/tools/oracle-check.py --spec`).

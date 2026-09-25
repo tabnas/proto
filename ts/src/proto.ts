@@ -33,10 +33,26 @@ type AnyTabnas = Tabnas & { abnf?: Function }
 const Proto = ((tn: AnyTabnas, _options?: Partial<ProtoOptions>) => {
   // Proto drives parsing through @tabnas/abnf; ensure it is installed.
   if ('function' !== typeof tn.abnf) tn.use(abnf)
+  // The grammar admits every keyword as an identifier, which a compiler
+  // without `tokenClasses` expands into millions of alternates
+  // (tabnas/bnf#71) and never finishes installing. Probe the installed
+  // compiler with a three-token grammar first, so an old @tabnas/bnf
+  // fails here, at once and by name, rather than hanging.
+  const probe = (tn.abnf as any).toSpec('s = a a\na = "x" / "y"\n',
+    { tag: 'proto', start: 's', tokenClasses: true })
+  if (!probe?.options?.tokenSet?.a) {
+    throw new Error('@tabnas/proto: the installed @tabnas/bnf does not ' +
+      'support tokenClasses; upgrade @tabnas/bnf (tabnas/bnf#74)')
+  }
+  // `wordKeywords` makes a keyword match as a whole word; `tokenClasses`
+  // compiles `ident` (an identifier or any keyword) to one engine token
+  // set, so a lookahead position peeks it as one token rather than one
+  // alternate per keyword. Both are required: see AGENTS.md.
   ;(tn.abnf as Function)(grammarText, {
     tag: 'proto',
     start: 'proto',
     wordKeywords: true,
+    tokenClasses: true,
   })
   // An aggregate value (`option (f) = { a: 1 };`) is recorded as the text
   // between its braces, which the CST's `src` does not keep: the lexer

@@ -39,6 +39,11 @@ alternates by first token so dispatch cost stops depending on the count.
 The proto grammar can take two small steps today (§10) and is ready for
 the rest once the emitter lands.
 
+**Status (2026-09-25).** All of it is implemented; §13 records what
+shipped and what was measured. The emitter half is tabnas/bnf#74, the
+engine half tabnas/parser#232, and the grammar that admits keywords is
+in this repository beside this note.
+
 ## 2. Ground state
 
 `tabnas/proto` has no open issues and no open pull requests. `main` is
@@ -416,20 +421,24 @@ K = 1 fails 29 inputs, all at decisions that need a second token:
 `optional group` against `optional Foo`, `import option` and `import
 public` against `import "x"`, `-inf` against `-33`, `extensions … to
 max` shapes, and the edition-2024 visibility prefixes. K = 2 resolves
-all of them. The one input that differs at K = 2 and K = 3,
-`ParseMessageTest.ExplicitOptionalLabelProto3`, parses, but the CST
-inlined differently and the walk read the label from a different place.
-That is §5.6's coupling, and it is a test that any emitter change has
-to keep green.
+all of them.
+
+The one input the table shows differing at K = 2 and K = 3 does not
+differ. `test/protobuf-suite/valid.json` holds two cases named
+`ParseMessageTest.ExplicitOptionalLabelProto3` (the second declares
+`oneof _foo { int32 __foo = 2; }`), and the comparison keyed its
+recorded outputs by name, so the second overwrote the first and the
+K = 2 and K = 3 runs were graded against the wrong reference. Keyed by
+position, every K from 2 upward gives outputs identical to the shipped
+parser on all 313 inputs, so the walk does not depend on the inlining
+shape after all, and an earlier draft of this section that said it did
+was wrong. (The case is also a warning about name-keyed reference maps
+over that corpus.)
 
 So the shipped grammar's dispatch needs at most two tokens, and its
-tables are between 2.4 and 3.2 times larger than that needs. The saving
-is not yet free of observable change: at K = 2 and K = 3 one descriptor
-moves, because the walk reads an inlined value from a different place,
-and at K = 1 the second-token decisions break. Read the figures as the
-saving available once the walk no longer depends on inlining shape and
-every shared fixture is green, and not as a change that can land on its
-own.
+tables are between 2.4 and 3.2 times larger than that needs. At K = 1
+the second-token decisions break; from K = 2 the saving is free of
+observable change.
 `tabnas/bnf#71` reaches the same place from the other side: its scratch
 patch of first-token dispatch, gated on a contest check, takes proto
 0.5.0 from 2,888 to 946 alternates (1,122 under the character-level
@@ -653,7 +662,10 @@ and third-party statements were read from the primary sources named in
 Each row is one file, parsed with the shipped 0.5.0 grammar. protoc's
 parser accepts every row (its tokenizer has one identifier class, and
 `ConsumeIdentifier` takes any identifier token, keywords and value words
-included); the grammar refuses each with `[tabnas/unexpected]`. One
+included); the 0.5.0 grammar refused each with `[tabnas/unexpected]`.
+The grammar beside this note accepts every row, and
+`test/spec/keywords.tsv` pins each one, with its descriptor, in all
+three runtimes. One
 shape is left out on purpose: a type spelled with an unqualified
 keyword, `message m = 1;` inside a message, which protoc also refuses,
 because `LookingAt("message")` reads the statement as a nested message.
@@ -687,3 +699,52 @@ edition-2024 `fullIdent` extension admits, and
 merely begins with a value word. The §4 case-fold rows (`Edition`,
 `Message`, `Service`, `MAX`) are a separate defect with the grammar-only
 fix in §10.1 and are not counted here.
+
+## 13. What shipped
+
+Everything §9 and §10 asked for, in the order §9 gave, in TypeScript, Go
+and Rust:
+
+- **Emitter** (tabnas/bnf#74): the dispatcher dispatches on the first
+  token of each alternative and deepens only under a head two
+  alternatives contest, one token at a time, up to the four-token window
+  (§9.1); a production whose alternatives are all single literals or
+  tokens compiles, under `tokenClasses`, to one engine token set that
+  stands as one token at every lookahead position (§9.2). Where Paull's
+  substitution would inline such a class at the head of an alternative,
+  it consumes the set's one token instead, so the tree is the one the
+  plain compile builds: no walk had to change, here or in any front-end
+  suite. Size fixtures in all three runtimes pin the counts.
+- **Engine** (tabnas/parser#232): alternates are indexed by the token
+  they can take first, in every runtime, and the Go lexer's gate reads
+  per-slot columns instead of walking the alternates (§9.3). Rust keeps
+  a slot's token-set names and resolves them again whenever the parser
+  is rebuilt, so an override reaches alternates installed before it
+  (`parser#217`, the defect §9.2 named).
+- **Grammar** (this repository): every keyword is `%s"..."` (§10.1),
+  `ident` admits `TX`, `VL` and every keyword, each statement list is
+  keyword-first with the identifier-headed statement last (§10.3),
+  `groupField` and `symbolVisibility` live in `common.abnf`, and the
+  edition-2024 `fullIdent` extension is gone (§10.4). The grammar is
+  compiled with `tokenClasses: true`.
+
+Measured against §9.5:
+
+| criterion | measured |
+|---|---|
+| shipped grammar, per-decision lookahead alone | 919 open alternates, outputs identical on all 313 inputs |
+| keyword-admitting grammar | 821 open alternates, 430 rules, the largest rule 35 alternates; about 380 ms to build in TypeScript, engine included |
+| the same grammar under the old emitter | 6.1 million alternates, never installs (§8.2) |
+| protoc corpus | 78 of 78 in-scope `valid` cases identical to protoc's goldens, 50 of 50 `accept-only`, in all three runtimes; the `invalid` lane now accepts 50 of 99 (was 48) |
+| §12 inputs, `descriptor.proto` | all parse; pinned in `test/spec/keywords.tsv` and `test/descriptor/` |
+| Go engine, shipped grammar, the 104 KB file of §3.3 | 504 ms to 363 ms per parse with the index; the same grammar, so the alternate count is unchanged here |
+| front-end suites | abnf, ebnf and gbnf green in TypeScript and Go against the new emitter |
+
+The 380 ms build is the compiler's FIRST and FOLLOW analysis and its
+contest checks over 430 rules, paid once per engine; `parse()` in
+TypeScript and Go still builds a fresh engine per call (§10.4's caching
+suggestion stands as a follow-up). What prevents a recurrence is now
+code rather than prose: the emitter's size fixtures, this repository's
+size test in each runtime (at most 1,000 open alternates, at most 60 in
+one rule), and `keywords.tsv`, which fails the moment a keyword stops
+being an identifier.

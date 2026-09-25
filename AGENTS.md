@@ -132,25 +132,47 @@ features added to `@tabnas/abnf` for this project. Wrap a token in a named
 rule (`ident = TX`) so it surfaces as a CST node for the walk.
 
 The grammar is compiled with `{ tag: 'proto', start: 'proto',
-wordKeywords: true }`. `wordKeywords` makes literal keywords match as whole
-words (so `option` doesn't grab the `option` prefix of `optional`). It is
-**required** — without it the grammar mis-tokenises.
+wordKeywords: true, tokenClasses: true }`. `wordKeywords` makes literal
+keywords match as whole words (so `option` doesn't grab the `option`
+prefix of `optional`). `tokenClasses` compiles `ident`, whose alternatives
+are the `TX` and `VL` tokens and every keyword, to one engine token set,
+so a lookahead position peeks an identifier as one token rather than as
+one alternate per keyword. Both are **required**: without the first the
+grammar mis-tokenises, and without the second it compiles to hundreds of
+thousands of alternates (tabnas/bnf#71); `ts/test/size.test.ts` and its
+Go and Rust twins pin the size.
 
 `common.abnf` is a permissive **union** that accepts every version's
 syntax. Per-version legality (proto3 has no `required`, `group` is
 proto2-only, …) is the walk's / protoc's concern, not recognition's. After
 editing any `.abnf` file run `npm run embed` (the build does this).
 
-**Keywords are reserved words in this grammar; in protoc they are not.**
-A field named `message`, a package segment `option`, an enum value
-`max`, an rpc named `stream`, and any identifier that case-folds to a
-keyword (`Edition`) are refused, and protobuf's own `descriptor.proto`
-does not parse. The language is not the obstacle: admitting keywords as
-identifiers multiplies the compiled dispatch tables past what the
-`@tabnas/bnf` emitter can install (tabnas/bnf#71).
+**Keywords are identifiers wherever protoc admits one.** protoc's
+tokenizer has one identifier class and `ConsumeIdentifier` takes any
+member, so a field named `message`, a package segment `option`, an enum
+value `max` and an rpc named `stream` are all legal, and so is
+protobuf's own `descriptor.proto` (`test/descriptor/`). The grammar says
+the same: every keyword is written `%s"..."` (RFC 7405, case-sensitive,
+so `Edition` and `MAX` are plain identifiers), `ident` admits `TX`, `VL`
+and every keyword, and each statement list puts its keyword-headed
+alternatives first and the identifier-headed one (`field`, `enumField`,
+`oneofField`, `rpc`) last, which is protoc's `LookingAt` order. The
+compiler's per-decision lookahead separates the rest: `message message =
+1;` is a field of type `message` once the third token is seen.
+`test/spec/keywords.tsv` pins the inputs in every runtime. This was not
+always so: until tabnas/bnf#71 was fixed, admitting keywords multiplied
+the compiled dispatch tables past what the emitter could install, and
+keywords were reserved words here.
 [`docs/design/alt-explosion.md`](docs/design/alt-explosion.md) measures
 the explosion, reviews how other parsers and the literature handle it,
-and recommends the fix, with what this grammar can do meanwhile.
+and records the fix.
+
+One recognition difference from protoc follows from the lookahead, and
+is deliberate: protoc commits to a nested message at the `message`
+keyword, so `message message = 1;` is an error there, where this grammar
+reads it as a field of type `message`. The union is permissive by design
+(see "Conformance"), and no descriptor is produced for anything protoc
+would not also produce one for.
 
 ## The walk and abnf inlining (the main gotcha)
 
@@ -643,7 +665,9 @@ answer:
 - `invalid` (99 cases): source protoc **rejects**. This lane is
   deliberately NOT a pass/fail gate — `common.abnf` is a permissive union
   and per-version legality is the walk's / protoc's concern (see above), so
-  the parser accepts roughly half of them (48 of 99). Rejection is not part of the
+  the parser accepts roughly half of them (50 of 99, re-measured 2026-09-25
+  after keywords became identifiers: two cases that use a keyword as a name
+  and go wrong elsewhere). Rejection is not part of the
   contract; recognition and descriptor shape are.
 - `leniency`: probes where the shared tabnas lexer is more permissive than
   `.proto` (a `#` comment, `1_0` digit separators, `1e2` where an intLit is

@@ -163,7 +163,7 @@ func TestGrammarText(t *testing.T) {
 	for _, rule := range []string{
 		"proto          = [ syntaxOrEdition ] *topLevelDef",
 		"; ===== edition-2024.abnf =====",
-		"symbolVisibility = \"export\" / \"local\"",
+		"symbolVisibility = %s\"export\" / %s\"local\"",
 	} {
 		if !strings.Contains(GrammarText, rule) {
 			t.Errorf("GrammarText missing %q", rule)

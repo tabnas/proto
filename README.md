@@ -40,7 +40,9 @@ FileDescriptorProto. Version-specific legality is recorded from the
 
 The grammar is pure structure over the lexer's whole-word tokens (`TX`
 identifier, `NR` number, `ST` string, `VL` keyword value); whitespace and
-`//` / `/* */` comments are handled by the lexer.
+`//` / `/* */` comments are handled by the lexer. Keywords are identifiers
+wherever protoc admits one (a field named `message`, an enum value
+`max`, an rpc `stream`), and protobuf's own `descriptor.proto` parses.
 
 ## Conformance
 

@@ -151,11 +151,15 @@ pub fn proto(parser: &mut Tabnas) -> Result<(), ProtoError> {
     }
     // `word_keywords` is REQUIRED: it makes literal keywords match as
     // whole words, so `option` does not grab the `option` prefix of
-    // `optional`. Without it the grammar mis-tokenises.
+    // `optional`. Without it the grammar mis-tokenises. `token_classes`
+    // compiles `ident` (an identifier or any keyword) to one engine token
+    // set, so a lookahead position peeks it as one token rather than one
+    // alternate per keyword.
     let convert = AbnfConvertOptions {
         start: Some("proto".to_string()),
         tag: Some("proto".to_string()),
         word_keywords: true,
+        token_classes: true,
         ..AbnfConvertOptions::default()
     };
     abnf(parser, GRAMMAR_TEXT, Some(&AbnfOptions::new(convert)))

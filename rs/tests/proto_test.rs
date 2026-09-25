@@ -593,7 +593,7 @@ fn the_grammar_text_carries_every_source_file() {
     for rule in [
         "proto          = [ syntaxOrEdition ] *topLevelDef",
         "; ===== edition-2024.abnf =====",
-        "symbolVisibility = \"export\" / \"local\"",
+        "symbolVisibility = %s\"export\" / %s\"local\"",
     ] {
         assert!(
             tabnas_proto::GRAMMAR_TEXT.contains(rule),
@@ -642,16 +642,15 @@ fn one_instance_parses_many_documents_independently() {
     }
 }
 
-// The shared lexer matches a word keyword without regard to case, so an
-// rpc whose NAME is `Stream` collides with the `stream` modifier and the
-// whole service is refused. That is not this port's doing: the canonical
-// TypeScript refuses the identical source, measured on 2026-09-21, and
-// the cause is in the tokeniser rather than in `proto-grammar/`. Pinned
-// here so a repair upstream shows up as a green-to-red here rather than
-// silently changing what this package accepts.
+// Keywords are case-sensitive (`%s"stream"`), so an rpc NAMED `Stream`
+// is an ordinary identifier, and every keyword is admitted as an
+// identifier where protoc admits one, so an rpc named `stream` parses
+// too. Until the grammar admitted keywords this was refused in every
+// runtime and pinned as such; `test/spec/keywords.tsv` now pins the
+// accepting behaviour across the runtimes, and this test keeps the
+// engine-level fact that the name and the modifier are told apart.
 #[test]
-fn an_rpc_named_after_a_keyword_is_refused_in_every_runtime() {
-    // The control: the same service with any other name parses.
+fn an_rpc_named_after_a_keyword_parses_in_every_runtime() {
     let ok = must_parse(
         "service S { rpc A (X) returns (Y); rpc B (X) returns (Y); }",
         None,
@@ -660,13 +659,15 @@ fn an_rpc_named_after_a_keyword_is_refused_in_every_runtime() {
     let ok = must_parse("service S { rpc A (X) returns (stream Y); }", None);
     assert!(ok.service[0].method[0].server_streaming);
 
-    for source in [
-        "service S { rpc Stream (X) returns (Y); }",
-        "service S { rpc A (X) returns (Y); rpc Stream (X) returns (Y); }",
-    ] {
-        let error = parse(source, None).expect_err("an rpc named Stream is refused");
-        assert_eq!(error.code(), "unexpected", "for {source}");
-    }
+    let named = must_parse(
+        "service S { rpc Stream (X) returns (Y); rpc stream (stream X) returns (stream Y); }",
+        None,
+    );
+    let methods = &named.service[0].method;
+    assert_eq!(methods[0].name, "Stream");
+    assert!(!methods[0].server_streaming);
+    assert_eq!(methods[1].name, "stream");
+    assert!(methods[1].client_streaming && methods[1].server_streaming);
 }
 
 // The descriptor serializes the way the canonical runtime's

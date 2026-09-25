@@ -1,7 +1,5 @@
-; proto2 deltas: groups are proto2-only (deprecated). Labels (required/
-; optional/repeated), extend, and extensions live in common (the permissive
-; union); the descriptor walk enforces what each version actually allows.
-messageElement =/ groupField
-; A group is also a legal oneof member (`oneof foo { group D = 4 {…} }`).
-oneofElement   =/ groupField
-groupField     = [ label ] "group" ident "=" fieldNumber messageBody
+; proto2 deltas: groups are proto2-only (deprecated). The `groupField`
+; rule lives in common.abnf, ordered ahead of `field` in messageElement
+; and oneofElement. Labels (required/optional/repeated), extend, and
+; extensions live in common too (the permissive union); the descriptor
+; walk enforces what each version actually allows.

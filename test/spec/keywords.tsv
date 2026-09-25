@@ -1,0 +1,75 @@
+input	expected	opts
+# Keywords and value words as identifiers, as protoc admits them (its
+# tokenizer has one identifier class): the inputs of docs/design/alt-explosion.md
+# section 12, its two controls, the case-fold rows of section 4, and a few
+# more shapes the keyword-first statement ordering has to get right.
+# a field named by a keyword
+syntax = "proto3"; message M { int32 message = 1; }	{"dependency":[],"publicDependency":[],"weakDependency":[],"messageType":[{"name":"M","field":[{"name":"message","number":1,"label":"LABEL_OPTIONAL","type":"TYPE_INT32"}],"nestedType":[],"enumType":[],"oneofDecl":[],"extension":[]}],"enumType":[],"service":[],"extension":[],"syntax":"proto3"}	
+# a field named by a keyword
+syntax = "proto3"; message M { int32 option = 1; }	{"dependency":[],"publicDependency":[],"weakDependency":[],"messageType":[{"name":"M","field":[{"name":"option","number":1,"label":"LABEL_OPTIONAL","type":"TYPE_INT32"}],"nestedType":[],"enumType":[],"oneofDecl":[],"extension":[]}],"enumType":[],"service":[],"extension":[],"syntax":"proto3"}	
+# a field named by a keyword
+syntax = "proto3"; message M { int32 optional = 1; }	{"dependency":[],"publicDependency":[],"weakDependency":[],"messageType":[{"name":"M","field":[{"name":"optional","number":1,"label":"LABEL_OPTIONAL","type":"TYPE_INT32"}],"nestedType":[],"enumType":[],"oneofDecl":[],"extension":[]}],"enumType":[],"service":[],"extension":[],"syntax":"proto3"}	
+# a field named by a keyword
+syntax = "proto3"; message M { int32 map = 1; }	{"dependency":[],"publicDependency":[],"weakDependency":[],"messageType":[{"name":"M","field":[{"name":"map","number":1,"label":"LABEL_OPTIONAL","type":"TYPE_INT32"}],"nestedType":[],"enumType":[],"oneofDecl":[],"extension":[]}],"enumType":[],"service":[],"extension":[],"syntax":"proto3"}	
+# a field named by a keyword
+syntax = "proto3"; message M { int32 to = 1; }	{"dependency":[],"publicDependency":[],"weakDependency":[],"messageType":[{"name":"M","field":[{"name":"to","number":1,"label":"LABEL_OPTIONAL","type":"TYPE_INT32"}],"nestedType":[],"enumType":[],"oneofDecl":[],"extension":[]}],"enumType":[],"service":[],"extension":[],"syntax":"proto3"}	
+# a field named by a keyword
+syntax = "proto3"; message M { int32 max = 1; }	{"dependency":[],"publicDependency":[],"weakDependency":[],"messageType":[{"name":"M","field":[{"name":"max","number":1,"label":"LABEL_OPTIONAL","type":"TYPE_INT32"}],"nestedType":[],"enumType":[],"oneofDecl":[],"extension":[]}],"enumType":[],"service":[],"extension":[],"syntax":"proto3"}	
+# a field named by a keyword
+syntax = "proto3"; message M { int32 stream = 1; }	{"dependency":[],"publicDependency":[],"weakDependency":[],"messageType":[{"name":"M","field":[{"name":"stream","number":1,"label":"LABEL_OPTIONAL","type":"TYPE_INT32"}],"nestedType":[],"enumType":[],"oneofDecl":[],"extension":[]}],"enumType":[],"service":[],"extension":[],"syntax":"proto3"}	
+# a field named by a keyword
+syntax = "proto3"; message M { int32 reserved = 1; }	{"dependency":[],"publicDependency":[],"weakDependency":[],"messageType":[{"name":"M","field":[{"name":"reserved","number":1,"label":"LABEL_OPTIONAL","type":"TYPE_INT32"}],"nestedType":[],"enumType":[],"oneofDecl":[],"extension":[]}],"enumType":[],"service":[],"extension":[],"syntax":"proto3"}	
+# a message named by a keyword
+syntax = "proto3"; message service { int32 a = 1; }	{"dependency":[],"publicDependency":[],"weakDependency":[],"messageType":[{"name":"service","field":[{"name":"a","number":1,"label":"LABEL_OPTIONAL","type":"TYPE_INT32"}],"nestedType":[],"enumType":[],"oneofDecl":[],"extension":[]}],"enumType":[],"service":[],"extension":[],"syntax":"proto3"}	
+# a package segment that is a keyword
+syntax = "proto3"; package foo.message.bar;	{"dependency":[],"publicDependency":[],"weakDependency":[],"messageType":[],"enumType":[],"service":[],"extension":[],"syntax":"proto3","package":"foo.message.bar"}	
+# a type segment that is a keyword
+syntax = "proto3"; message M { foo.option.Bar x = 1; }	{"dependency":[],"publicDependency":[],"weakDependency":[],"messageType":[{"name":"M","field":[{"name":"x","number":1,"label":"LABEL_OPTIONAL","typeName":"foo.option.Bar"}],"nestedType":[],"enumType":[],"oneofDecl":[],"extension":[]}],"enumType":[],"service":[],"extension":[],"syntax":"proto3"}	
+# an enum value named by a keyword
+syntax = "proto3"; enum E { max = 0; }	{"dependency":[],"publicDependency":[],"weakDependency":[],"messageType":[],"enumType":[{"name":"E","value":[{"name":"max","number":0}]}],"service":[],"extension":[],"syntax":"proto3"}	
+# an rpc named by a keyword
+syntax = "proto3"; message M {} service S { rpc stream (M) returns (M); }	{"dependency":[],"publicDependency":[],"weakDependency":[],"messageType":[{"name":"M","field":[],"nestedType":[],"enumType":[],"oneofDecl":[],"extension":[]}],"enumType":[],"service":[{"name":"S","method":[{"name":"stream","inputType":"M","outputType":"M"}]}],"extension":[],"syntax":"proto3"}	
+# an option named by a keyword
+syntax = "proto3"; option message = 1;	{"dependency":[],"publicDependency":[],"weakDependency":[],"messageType":[],"enumType":[],"service":[],"extension":[],"syntax":"proto3","options":{"message":1}}	
+# a field named by an edition-2024 keyword
+edition = "2024"; message M { int32 export = 1; }	{"dependency":[],"publicDependency":[],"weakDependency":[],"messageType":[{"name":"M","field":[{"name":"export","number":1,"label":"LABEL_OPTIONAL","type":"TYPE_INT32"}],"nestedType":[],"enumType":[],"oneofDecl":[],"extension":[]}],"enumType":[],"service":[],"extension":[],"edition":"EDITION_2024","syntax":"editions"}	
+# a field named by a value word
+syntax = "proto3"; message M { int32 true = 1; }	{"dependency":[],"publicDependency":[],"weakDependency":[],"messageType":[{"name":"M","field":[{"name":"true","number":1,"label":"LABEL_OPTIONAL","type":"TYPE_INT32"}],"nestedType":[],"enumType":[],"oneofDecl":[],"extension":[]}],"enumType":[],"service":[],"extension":[],"syntax":"proto3"}	
+# a field named by a value word
+syntax = "proto3"; message M { int32 false = 1; }	{"dependency":[],"publicDependency":[],"weakDependency":[],"messageType":[{"name":"M","field":[{"name":"false","number":1,"label":"LABEL_OPTIONAL","type":"TYPE_INT32"}],"nestedType":[],"enumType":[],"oneofDecl":[],"extension":[]}],"enumType":[],"service":[],"extension":[],"syntax":"proto3"}	
+# a field named by a value word
+syntax = "proto3"; message M { int32 null = 1; }	{"dependency":[],"publicDependency":[],"weakDependency":[],"messageType":[{"name":"M","field":[{"name":"null","number":1,"label":"LABEL_OPTIONAL","type":"TYPE_INT32"}],"nestedType":[],"enumType":[],"oneofDecl":[],"extension":[]}],"enumType":[],"service":[],"extension":[],"syntax":"proto3"}	
+# an enum value named by a value word
+syntax = "proto3"; enum E { true = 0; }	{"dependency":[],"publicDependency":[],"weakDependency":[],"messageType":[],"enumType":[{"name":"E","value":[{"name":"true","number":0}]}],"service":[],"extension":[],"syntax":"proto3"}	
+# control: a type whose first segment is a visibility keyword
+edition = "2024"; message M { local.pkg.T x = 1; }	{"dependency":[],"publicDependency":[],"weakDependency":[],"messageType":[{"name":"M","field":[{"name":"x","number":1,"label":"LABEL_OPTIONAL","typeName":"local.pkg.T"}],"nestedType":[],"enumType":[],"oneofDecl":[],"extension":[]}],"enumType":[],"service":[],"extension":[],"edition":"EDITION_2024","syntax":"editions"}	
+# control: an identifier that begins with a value word
+syntax = "proto3"; message M { int32 truth = 1; }	{"dependency":[],"publicDependency":[],"weakDependency":[],"messageType":[{"name":"M","field":[{"name":"truth","number":1,"label":"LABEL_OPTIONAL","type":"TYPE_INT32"}],"nestedType":[],"enumType":[],"oneofDecl":[],"extension":[]}],"enumType":[],"service":[],"extension":[],"syntax":"proto3"}	
+# case-fold: an enum named like a keyword
+syntax = "proto3"; enum Edition { EDITION_UNKNOWN = 0; }	{"dependency":[],"publicDependency":[],"weakDependency":[],"messageType":[],"enumType":[{"name":"Edition","value":[{"name":"EDITION_UNKNOWN","number":0}]}],"service":[],"extension":[],"syntax":"proto3"}	
+# case-fold: names that fold to keywords
+syntax = "proto3"; message Message { int32 Service = 1; int32 MAX = 2; }	{"dependency":[],"publicDependency":[],"weakDependency":[],"messageType":[{"name":"Message","field":[{"name":"Service","number":1,"label":"LABEL_OPTIONAL","type":"TYPE_INT32"},{"name":"MAX","number":2,"label":"LABEL_OPTIONAL","type":"TYPE_INT32"}],"nestedType":[],"enumType":[],"oneofDecl":[],"extension":[]}],"enumType":[],"service":[],"extension":[],"syntax":"proto3"}	
+# a field and a nested message both named message
+syntax = "proto3"; message M { int32 message = 1; message message { int32 m = 1; } }	{"dependency":[],"publicDependency":[],"weakDependency":[],"messageType":[{"name":"M","field":[{"name":"message","number":1,"label":"LABEL_OPTIONAL","type":"TYPE_INT32"}],"nestedType":[{"name":"message","field":[{"name":"m","number":1,"label":"LABEL_OPTIONAL","type":"TYPE_INT32"}],"nestedType":[],"enumType":[],"oneofDecl":[],"extension":[]}],"enumType":[],"oneofDecl":[],"extension":[]}],"enumType":[],"service":[],"extension":[],"syntax":"proto3"}	
+# protoc commits to a nested message at `message` and refuses this; the union reads a field of type `message` (see AGENTS.md)
+syntax = "proto3"; message M { message message = 1; }	{"dependency":[],"publicDependency":[],"weakDependency":[],"messageType":[{"name":"M","field":[{"name":"message","number":1,"label":"LABEL_OPTIONAL","typeName":"message"}],"nestedType":[],"enumType":[],"oneofDecl":[],"extension":[]}],"enumType":[],"service":[],"extension":[],"syntax":"proto3"}	
+# a label needs a type and a name
+syntax = "proto3"; message M { optional message = 1; }	ERROR:unexpected	
+# edition-style reserved names that are keywords
+syntax = "proto3"; message M { reserved message, option; }	{"dependency":[],"publicDependency":[],"weakDependency":[],"messageType":[{"name":"M","field":[],"nestedType":[],"enumType":[],"oneofDecl":[],"extension":[],"reservedName":["message","option"]}],"enumType":[],"service":[],"extension":[],"syntax":"proto3"}	
+# a oneof member needs a type
+syntax = "proto3"; message M { oneof o { option = 1; } }	ERROR:unexpected	
+# an option named message, a oneof and its member named option
+syntax = "proto3"; message M { option message = true; oneof option { int32 option = 1; } }	{"dependency":[],"publicDependency":[],"weakDependency":[],"messageType":[{"name":"M","field":[{"name":"option","number":1,"label":"LABEL_OPTIONAL","type":"TYPE_INT32","oneofIndex":0}],"nestedType":[],"enumType":[],"oneofDecl":[{"name":"option"}],"extension":[],"options":{"message":true}}],"enumType":[],"service":[],"extension":[],"syntax":"proto3"}	
+# enum values named by statement keywords
+syntax = "proto3"; enum E { option = 1; reserved = 2; }	{"dependency":[],"publicDependency":[],"weakDependency":[],"messageType":[],"enumType":[{"name":"E","value":[{"name":"option","number":1},{"name":"reserved","number":2}]}],"service":[],"extension":[],"syntax":"proto3"}	
+# an rpc named returns
+syntax = "proto3"; message M {} service S { rpc returns (M) returns (stream M); }	{"dependency":[],"publicDependency":[],"weakDependency":[],"messageType":[{"name":"M","field":[],"nestedType":[],"enumType":[],"oneofDecl":[],"extension":[]}],"enumType":[],"service":[{"name":"S","method":[{"name":"returns","inputType":"M","outputType":"M","serverStreaming":true}]}],"extension":[],"syntax":"proto3"}	
+# a map value type named message
+syntax = "proto3"; message M { map<string, message> m = 1; }	{"dependency":[],"publicDependency":[],"weakDependency":[],"messageType":[{"name":"M","field":[{"name":"m","number":1,"label":"LABEL_REPEATED","typeName":"MEntry"}],"nestedType":[{"name":"MEntry","field":[{"name":"key","number":1,"label":"LABEL_OPTIONAL","type":"TYPE_STRING"},{"name":"value","number":2,"label":"LABEL_OPTIONAL","typeName":"message"}],"nestedType":[],"enumType":[],"oneofDecl":[],"extension":[],"options":{"mapEntry":true}}],"enumType":[],"oneofDecl":[],"extension":[]}],"enumType":[],"service":[],"extension":[],"syntax":"proto3"}	
+# visibility modifiers beside names that are the same words
+edition = "2024"; export message M { int32 export = 1; local enum E { local = 0; } }	{"dependency":[],"publicDependency":[],"weakDependency":[],"messageType":[{"name":"M","field":[{"name":"export","number":1,"label":"LABEL_OPTIONAL","type":"TYPE_INT32"}],"nestedType":[],"enumType":[{"name":"E","value":[{"name":"local","number":0}],"visibility":"VISIBILITY_LOCAL"}],"oneofDecl":[],"extension":[],"visibility":"VISIBILITY_EXPORT"}],"enumType":[],"service":[],"extension":[],"edition":"EDITION_2024","syntax":"editions"}	
+# a group named group, with a field named to
+syntax = "proto2"; message M { optional group group = 1 { optional int32 to = 1; } }	{"dependency":[],"publicDependency":[],"weakDependency":[],"messageType":[{"name":"M","field":[{"name":"group","number":1,"label":"LABEL_OPTIONAL","type":"TYPE_GROUP","typeName":"group"}],"nestedType":[{"name":"group","field":[{"name":"to","number":1,"label":"LABEL_OPTIONAL","type":"TYPE_INT32"}],"nestedType":[],"enumType":[],"oneofDecl":[],"extension":[]}],"enumType":[],"oneofDecl":[],"extension":[]}],"enumType":[],"service":[],"extension":[],"syntax":"proto2"}	
+# the descriptor.proto field names
+syntax = "proto3"; message M { int32 syntax = 1; int32 edition = 2; int32 package = 3; int32 weak = 4; int32 public = 5; int32 import = 6; }	{"dependency":[],"publicDependency":[],"weakDependency":[],"messageType":[{"name":"M","field":[{"name":"syntax","number":1,"label":"LABEL_OPTIONAL","type":"TYPE_INT32"},{"name":"edition","number":2,"label":"LABEL_OPTIONAL","type":"TYPE_INT32"},{"name":"package","number":3,"label":"LABEL_OPTIONAL","type":"TYPE_INT32"},{"name":"weak","number":4,"label":"LABEL_OPTIONAL","type":"TYPE_INT32"},{"name":"public","number":5,"label":"LABEL_OPTIONAL","type":"TYPE_INT32"},{"name":"import","number":6,"label":"LABEL_OPTIONAL","type":"TYPE_INT32"}],"nestedType":[],"enumType":[],"oneofDecl":[],"extension":[]}],"enumType":[],"service":[],"extension":[],"syntax":"proto3"}	
