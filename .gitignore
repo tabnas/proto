@@ -56,3 +56,5 @@ test/protobuf-suite/tools/__pycache__/
 # The crate's build directory. rs/Cargo.lock IS committed: the crate is
 # not published, so the lock is the record of what a gate resolved.
 target/
+
+.DS_Store
