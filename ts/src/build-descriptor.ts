@@ -569,6 +569,23 @@ function buildService(n: Node): ServiceDescriptorProto {
   return svc
 }
 
+// The contents of the first two parenthesised spans of a statement's
+// text. No identifier or type holds a parenthesis, so for an rpc these
+// are its input and its output, whatever the names in them are spelled.
+function parenthesised(src: string): string[] {
+  const out: string[] = []
+  let at = 0
+  while (out.length < 2) {
+    const open = src.indexOf('(', at)
+    if (open < 0) break
+    const close = src.indexOf(')', open + 1)
+    if (close < 0) break
+    out.push(src.slice(open + 1, close))
+    at = close + 1
+  }
+  return out
+}
+
 // rpc ident "(" ["stream"] messageType ")" "returns" "(" ["stream"] messageType ")"
 function buildRpc(el: Node): MethodDescriptorProto {
   const ids = R(el).filter((k) => k.rule === 'ident')
@@ -578,14 +595,17 @@ function buildRpc(el: Node): MethodDescriptorProto {
     inputType: types[0] ? types[0].src : '',
     outputType: types[1] ? types[1].src : '',
   }
-  // `stream` is a bare terminal, so it never becomes a node — but it sits
-  // immediately ahead of the type it modifies, which is exactly what the
-  // gap holds. Searching the statement for `(stream` instead marks an
-  // ordinary type whose name merely BEGINS with those letters, so
-  // `rpc M (streaming.Request)` came back client-streaming.
-  const modifiers = gapsBefore(el, 'messageType')
-  if (modifiers[0]?.endsWith('stream')) m.clientStreaming = true
-  if (modifiers[1]?.endsWith('stream')) m.serverStreaming = true
+  // `stream` is a bare terminal, so it never becomes a node, and the name
+  // and both types are identifiers that may themselves be spelled
+  // `stream` (`rpc stream (stream stream)`), so no search for a child's
+  // text can say which copy is the modifier. The parentheses can: a name
+  // or a type never holds one, so the first two parenthesised spans are
+  // the input and the output, each the type's own text with or without
+  // `stream` ahead of it. A type that merely begins with those letters
+  // (`rpc M (streaming.Request)`) is its own text, and is not streaming.
+  const [input, output] = parenthesised(el.src)
+  if ('stream' + m.inputType === input) m.clientStreaming = true
+  if ('stream' + m.outputType === output) m.serverStreaming = true
   for (const o of R(el).filter((k) => k.rule === 'optionStmt')) {
     m.options = { ...(m.options || {}), ...optionFrom(o) }
   }

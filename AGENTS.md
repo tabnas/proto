@@ -190,7 +190,13 @@ node (`topLevelDef`, `messageElement`, `ranges`). The walk therefore:
   leading field type, the first `reserved` range, option names) — safe
   because tokens are whole words, so `src` boundaries are unambiguous;
 - unwraps the edition-2024 `export`/`local` visibility wrapper, where the
-  `message`/`enumDef` stays a *child* node instead of inlining.
+  `message`/`enumDef` stays a *child* node instead of inlining;
+- reads a bare terminal's presence from structure a name cannot contain,
+  never from a search for a child's text. Keywords are identifiers, so a
+  child's text can recur in the terminals that follow it: in
+  `rpc stream (stream M)` a search for the name finds the modifier. An
+  rpc's streaming flags come from its first two parenthesised spans
+  instead, since no name or type holds a parenthesis.
 
 When you add a construct, dump the CST first (parse with the bare grammar
 and print `{rule, src, kids}`) to see how it inlined, then map it.

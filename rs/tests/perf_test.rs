@@ -112,6 +112,6 @@ fn every_fixture_input_parses_through_one_instance() {
     let elapsed = start.elapsed().as_secs_f64();
     // Ratcheted at what is on disk, so a corpus that shrinks cannot pass
     // by measuring less.
-    assert_eq!(rows, 174, "the shared fixtures hold 174 rows");
+    assert_eq!(rows, 211, "the shared fixtures hold 211 rows");
     assert!(elapsed < 60.0, "{rows} fixture rows took {elapsed:.1}s");
 }
