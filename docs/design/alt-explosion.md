@@ -2,7 +2,7 @@
 
 | | |
 |---|---|
-| **Status** | Investigation and recommendation. Nothing here is implemented; §9 says what to build, in which repository, and how to know it worked. |
+| **Status** | Implemented (2026-09-25). §9 says what to build, in which repository, and how to know it worked; §13 records what shipped, in tabnas/bnf#74, tabnas/parser#232 and this repository, and what was measured. |
 | **Scope** | `@tabnas/bnf` (the emitter, where the cause is), `@tabnas/parser` (dispatch cost, token sets), this repository (the grammar, and what it can do meanwhile). |
 | **Repo** | This document lives in `tabnas/proto` because proto is where the problem is met: the grammar the language needs is the one the compiler cannot compile. The emitter half is tracked as `tabnas/bnf#71`. |
 | **Measured against** | `@tabnas/parser` 0.12.2, `@tabnas/abnf` 0.4.15, `@tabnas/bnf` 0.1.19 (`main` at 103b619), `@tabnas/proto` 0.5.0 (`main` at 366fd21), Node 22.22, Go 1.24.7, Rust 1.94 (release profile). Every figure below was produced by a script run against this tree, except where a row is credited to `tabnas/bnf#71`; §11 says how. |
@@ -713,8 +713,8 @@ and Rust:
   stands as one token at every lookahead position (§9.2). Where Paull's
   substitution would inline such a class at the head of an alternative,
   it consumes the set's one token instead, so the tree is the one the
-  plain compile builds: no walk had to change, here or in any front-end
-  suite. Size fixtures in all three runtimes pin the counts.
+  plain compile builds, and no walk or front-end suite had to change for
+  it. Size fixtures in all three runtimes pin the counts.
 - **Engine** (tabnas/parser#232): alternates are indexed by the token
   they can take first, in every runtime, and the Go lexer's gate reads
   per-slot columns instead of walking the alternates (§9.3). Rust keeps
@@ -726,7 +726,12 @@ and Rust:
   keyword-first with the identifier-headed statement last (§10.3),
   `groupField` and `symbolVisibility` live in `common.abnf`, and the
   edition-2024 `fullIdent` extension is gone (§10.4). The grammar is
-  compiled with `tokenClasses: true`.
+  compiled with `tokenClasses: true`. The walk changed in one place, for
+  a reason of its own: once a name can be a keyword, a search of a
+  statement's text for a child can land on a terminal spelled the same,
+  and `rpc stream (stream M)` lost its client streaming that way. An
+  rpc's `stream` modifiers are now read from its parentheses, which no
+  name or type can contain.
 
 Measured against §9.5:
 
