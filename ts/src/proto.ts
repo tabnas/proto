@@ -10,7 +10,9 @@ import { abnf } from '@tabnas/abnf'
 
 import { grammarText } from './grammar'
 import { buildFile } from './build-descriptor'
-import { recordAggregate, makeAggregateWord } from './aggregate'
+import {
+  recordAggregate, makeAggregateWord, markAggregate, pushedRules,
+} from './aggregate'
 import {
   ProtoVersion, declaredVersion, resolveVersion,
 } from './detect-version'
@@ -43,6 +45,13 @@ const Proto = ((tn: AnyTabnas, _options?: Partial<ProtoOptions>) => {
   // drops whitespace and comments. This action reads it from the source
   // while the brace tokens are to hand; see ./aggregate.ts.
   tn.rule('constant', (rs: any) => rs.ac(recordAggregate))
+  // Every rule inside an aggregate value carries a mark, set on the rules
+  // the `constant` rule pushes and kept by the rules below them, so the
+  // matchers below can tell inside from outside at once; see
+  // ./aggregate.ts.
+  for (const name of pushedRules(tn.rule('constant'))) {
+    tn.rule(name, (rs: any) => rs.bo(markAggregate))
+  }
   // Text format has no keywords: inside an aggregate value a word the
   // grammar spells as a keyword, and a bracketed extension or Any name,
   // are identifiers. This matcher runs ahead of the grammar's own (order

@@ -6,9 +6,11 @@
 package tabnasproto
 
 import (
+	"math"
 	"regexp"
 	"strings"
 	"testing"
+	"time"
 
 	tabnas "github.com/tabnas/parser/go"
 )
@@ -242,5 +244,69 @@ func TestStringLiteralsOneAsWrittenAdjacentAsProtocReadsThem(t *testing.T) {
 	}
 	if got := strings.Join(fdp.Dependency, " "); got != `a\x41 aA` {
 		t.Errorf("imports: got %q", got)
+	}
+}
+
+// The answer to "is the lexer inside an aggregate" once came from walking up
+// the rule stack, which every top-level definition and every aggregate entry
+// deepens, so each keyword cost more than the one before it. Port of the
+// "telling inside an aggregate from outside" suite in ts/test/proto.test.ts.
+func TestInAggregateAsksOnlyTheRuleAtHand(t *testing.T) {
+	brace := &tabnas.Token{Src: "{"}
+	constant := &tabnas.Rule{Name: "constant", O0: brace}
+	lex := &tabnas.Lex{Ctx: &tabnas.Context{}}
+	// The parent is an aggregate's constant, but only the mark says so.
+	unmarked := &tabnas.Rule{Name: "messageValueEntry", Parent: constant}
+	if inAggregate(lex, unmarked) {
+		t.Error("an unmarked rule: inAggregate walked up the rule stack")
+	}
+	marked := &tabnas.Rule{Name: "messageValueEntry", Parent: constant, K: map[string]any{insideKey: true}}
+	if !inAggregate(lex, marked) {
+		t.Error("a marked rule: want inside")
+	}
+	if !inAggregate(lex, constant) {
+		t.Error("the aggregate's own constant: want inside")
+	}
+	peeking := &tabnas.Lex{Ctx: &tabnas.Context{T: []*tabnas.Token{brace}}}
+	if !inAggregate(peeking, &tabnas.Rule{Name: "constant"}) {
+		t.Error("a constant with the brace in the lookahead: want inside")
+	}
+	// markAggregate marks a rule an aggregate's constant pushed, and no other.
+	markAggregate(unmarked, nil)
+	if !inAggregate(lex, unmarked) {
+		t.Error("markAggregate did not mark a rule the aggregate pushed")
+	}
+	plain := &tabnas.Rule{Name: "constant", O0: &tabnas.Token{Src: "1"}}
+	other := &tabnas.Rule{Name: "constant$alt4", Parent: plain}
+	markAggregate(other, nil)
+	if inAggregate(lex, other) {
+		t.Error("markAggregate marked a rule under a constant that is not an aggregate")
+	}
+}
+
+// A keyword deep in angle brackets costs what any other word costs. On the
+// walk this replaced, `message <` nested 2,000 deep took longer than
+// `abcdefg <`, and the gap grew with the square of the depth. The comparison
+// is between spellings of one shape, so it holds on any machine and whatever
+// the engine's own curve.
+func TestInAggregateCostsTheSameForAKeyword(t *testing.T) {
+	j := aggregateEngine(t)
+	best := func(src string) time.Duration {
+		fastest := time.Duration(math.MaxInt64)
+		for i := 0; i < 3; i++ {
+			start := time.Now()
+			if _, err := j.Parse(src); err != nil {
+				t.Fatal(err)
+			}
+			fastest = min(fastest, time.Since(start))
+		}
+		return fastest
+	}
+	angle := func(word string) string {
+		return "option (f) = {" + strings.Repeat(" "+word+" <", 2000) + strings.Repeat(" >", 2000) + " };"
+	}
+	keyword, plain := best(angle("message")), best(angle("abcdefg"))
+	if keyword > plain*6/5+50*time.Millisecond {
+		t.Errorf("%v with a keyword, against %v without", keyword, plain)
 	}
 }

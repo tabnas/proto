@@ -262,25 +262,54 @@ func bracketName(src string, open int) (int, string, bool) {
 
 func isOpenBrace(t *tabnas.Token) bool { return t != nil && t.Src == "{" }
 
-// inAggregate reports whether the lexer is inside an aggregate value: the
-// `constant` rule whose first token is its `{`. While that rule is still
-// choosing its alternative it peeks the tokens after the brace itself, so
-// the rule asking may be that `constant` with the brace already in the
-// lookahead; after that, it is one of the rules below it.
+// insideKey is the keep prop that marks a rule inside an aggregate value.
+const insideKey = "protoAggregate"
+
+// markAggregate is the before-open action Proto installs on every rule the
+// grammar's `constant` rule pushes: a rule whose parent is an aggregate
+// value's `constant`, the one whose first token is its `{`, is marked. The
+// engine copies keep props to each rule pushed below a rule and to a rule
+// that replaces one, so each rule inside the value carries the mark and no
+// rule outside does. Port of markAggregate in ts/src/aggregate.ts.
+func markAggregate(r *tabnas.Rule, _ *tabnas.Context) {
+	p := r.Parent
+	if p != nil && p != tabnas.NoRule && p.Name == "constant" && isOpenBrace(p.O0) {
+		r.EnsureK()[insideKey] = true
+	}
+}
+
+// pushedRules is the rules the grammar's `constant` rule pushes, which
+// markAggregate is installed on.
+func pushedRules(rs *tabnas.RuleSpec) []string {
+	seen := map[string]bool{}
+	var names []string
+	for _, alt := range rs.OpenAlts() {
+		if alt != nil && alt.P != "" && !seen[alt.P] {
+			seen[alt.P] = true
+			names = append(names, alt.P)
+		}
+	}
+	return names
+}
+
+// inAggregate reports whether the lexer is inside an aggregate value. Every
+// rule inside one carries the mark markAggregate sets, bar the value's
+// `constant` itself: that is inside once its first token is the `{`, and
+// while it is still choosing its alternative it peeks the tokens after the
+// brace, with the brace already in the lookahead. Each test is a lookup, so
+// the answer costs the same however deep the rule stack is.
 func inAggregate(lex *tabnas.Lex, rule *tabnas.Rule) bool {
-	if rule != nil && rule.Name == "constant" && lex.Ctx != nil && len(lex.Ctx.T) > 0 &&
-		isOpenBrace(lex.Ctx.T[0]) {
+	if rule == nil || rule == tabnas.NoRule {
+		return false
+	}
+	if inside, _ := rule.K[insideKey].(bool); inside {
 		return true
 	}
-	for r, n := rule, 0; r != nil && r != tabnas.NoRule && n < 100000; r, n = r.Parent, n+1 {
-		if r.Name == "constant" && isOpenBrace(r.O0) {
-			return true
-		}
-		if r == r.Parent {
-			break
-		}
+	if rule.Name != "constant" {
+		return false
 	}
-	return false
+	return isOpenBrace(rule.O0) ||
+		(lex.Ctx != nil && len(lex.Ctx.T) > 0 && isOpenBrace(lex.Ctx.T[0]))
 }
 
 // aggregateWord is the lexer matcher: an identifier token, or nil to let the

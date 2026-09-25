@@ -10,7 +10,7 @@
 //! closing brace leaves nothing. Columns are protoc's: a tab moves to the
 //! next multiple of 8, and every other byte of UTF-8 is one column.
 
-use tabnas::{Context, Lexer, Rule, RuleSnapshot, Token, Value, TIN_TX};
+use tabnas::{Context, Lexer, Rule, RuleSpec, Token, Value, TIN_TX};
 
 const TAB_WIDTH: usize = 8;
 
@@ -298,23 +298,54 @@ fn is_open_brace(token: Option<&Token>) -> bool {
     token.is_some_and(|token| "{" == &*token.src)
 }
 
-/// Is the lexer inside an aggregate value? The value is the `constant`
-/// rule whose first token is its `{`. While that rule is still choosing
-/// its alternative it peeks the tokens after the brace itself, so the rule
-/// asking may be that `constant` with the brace already in the lookahead;
-/// after that, it is one of the rules below it.
-fn in_aggregate(rule: &Rule, context: &Context) -> bool {
-    if "constant" == &*rule.name && is_open_brace(context.t.first()) {
+/// The keep prop that marks a rule inside an aggregate value.
+const INSIDE: &str = "protoAggregate";
+
+/// The before-open action [`crate::proto`] installs on every rule the
+/// grammar's `constant` rule pushes: a rule whose parent is an aggregate
+/// value's `constant`, the one whose first token is its `{`, is marked.
+///
+/// The engine copies keep props to each rule pushed below a rule and to a
+/// rule that replaces one, so each rule inside the value carries the mark
+/// and no rule outside does. It is set on the rules the `constant` pushes
+/// rather than on the `constant` itself because the engine copies them at
+/// the push, which comes before an after-open action runs. Port of
+/// `markAggregate` in `ts/src/aggregate.ts`.
+pub(crate) fn mark_aggregate(rule: &mut Rule, _context: &mut Context) {
+    let under_aggregate = rule
+        .parent_rule
+        .as_deref()
+        .is_some_and(|parent| "constant" == &*parent.name && is_open_brace(parent.o.first()));
+    if under_aggregate {
+        rule.k_mut().insert(INSIDE.to_string(), Value::Bool(true));
+    }
+}
+
+/// The rules the grammar's `constant` rule pushes, which
+/// [`mark_aggregate`] is installed on.
+pub(crate) fn pushed_rules(constant: &RuleSpec) -> Vec<String> {
+    let mut names: Vec<String> = Vec::new();
+    for name in constant.open.iter().filter_map(|alt| alt.p.as_ref()) {
+        if !names.contains(name) {
+            names.push(name.clone());
+        }
+    }
+    names
+}
+
+/// Is the lexer inside an aggregate value? `lookahead` is the first token
+/// the parser holds unconsumed, `context.t.first()`.
+///
+/// Every rule inside one carries the mark [`mark_aggregate`] sets, bar the
+/// value's `constant` itself: that is inside once its first token is the
+/// `{`, and while it is still choosing its alternative it peeks the tokens
+/// after the brace, with the brace already in the lookahead. Each test is a
+/// lookup, so the answer costs the same however deep the rule stack is.
+pub(crate) fn in_aggregate(rule: &Rule, lookahead: Option<&Token>) -> bool {
+    if matches!(rule.k.get(INSIDE), Some(Value::Bool(true))) {
         return true;
     }
-    let mut current: Option<&RuleSnapshot> = Some(rule);
-    while let Some(snapshot) = current {
-        if "constant" == &*snapshot.name && is_open_brace(snapshot.o.first()) {
-            return true;
-        }
-        current = snapshot.parent_rule.as_deref();
-    }
-    false
+    "constant" == &*rule.name && (is_open_brace(rule.o.first()) || is_open_brace(lookahead))
 }
 
 /// The lexer matcher [`crate::proto`] installs: an identifier token, or
@@ -353,7 +384,7 @@ pub(crate) fn aggregate_word(
     } else {
         return None;
     };
-    if !in_aggregate(rule, context) {
+    if !in_aggregate(rule, context.t.first()) {
         return None;
     }
     // A bracketed name may cross lines and hold comments, so advance by the
@@ -404,6 +435,29 @@ mod tests {
         let mut keywords: Vec<String> = KEYWORDS.iter().map(|word| word.to_string()).collect();
         keywords.sort();
         assert_eq!(keywords, words);
+    }
+
+    /// The answer once came from walking up the rule stack, which every
+    /// top-level definition and every aggregate entry deepens, so each
+    /// keyword cost more than the one before it. Port of the "telling
+    /// inside an aggregate from outside" suite in `ts/test/proto.test.ts`.
+    #[test]
+    fn in_aggregate_asks_only_the_rule_at_hand() {
+        let mut brace = Token::no_token();
+        brace.src = "{".into();
+        let mut constant = Rule::new("constant", Value::Undefined);
+        constant.o = std::rc::Rc::new(vec![brace.clone()]);
+        // The parent is an aggregate's constant, but only the mark says so.
+        let mut unmarked = Rule::new("messageValueEntry", Value::Undefined);
+        unmarked.parent_rule = Some(constant.snapshot());
+        assert!(!in_aggregate(&unmarked, None), "walked up the rule stack");
+        let mut marked = unmarked.clone();
+        marked.k_mut().insert(INSIDE.to_string(), Value::Bool(true));
+        assert!(in_aggregate(&marked, None));
+        assert!(in_aggregate(&constant, None));
+        let choosing = Rule::new("constant", Value::Undefined);
+        assert!(in_aggregate(&choosing, Some(&brace)));
+        assert!(!in_aggregate(&choosing, None));
     }
 
     #[test]

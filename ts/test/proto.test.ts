@@ -285,4 +285,58 @@ describe('string literals', () => {
     assert.equal(fdp.options['(g)'], 'A')
     assert.deepEqual(fdp.dependency, ['a\\x41', 'aA'])
   })
+
+})
+
+describe('telling inside an aggregate from outside', () => {
+  const tn = new Tabnas({ rewind: { history: 8192 } }).use(Proto)
+
+  // Best of three, in milliseconds.
+  const time = (src: string): number => {
+    let best = Infinity
+    for (let i = 0; i < 3; i++) {
+      const start = performance.now()
+      tn.parse(src)
+      best = Math.min(best, performance.now() - start)
+    }
+    return best
+  }
+
+  it('asks only the rule at hand, not the rules above it', () => {
+    // The answer once came from walking up the rule stack, which every
+    // top-level definition and every aggregate entry deepens, so each
+    // keyword cost more than the one before it. Now the rule is marked.
+    const { inAggregate } = require('../dist/aggregate')
+    const lex = { ctx: { t: [] } }
+    const rule = (name: string, keep: any) => ({
+      name,
+      o0: { src: 'x' },
+      rawk: () => keep,
+      get parent(): any {
+        throw new Error('walked up the rule stack')
+      },
+    })
+    assert.equal(inAggregate(lex, rule('messageValueEntry', { protoAggregate: true })), true)
+    assert.equal(inAggregate(lex, rule('field', undefined)), false)
+    assert.equal(inAggregate({ ctx: { t: [{ src: '{' }] } }, rule('constant', undefined)), true)
+  })
+
+  it('reads a keyword inside an aggregate as fast as any other word', () => {
+    // On the walk this replaced, 4,000 `message: 1` entries, or `message <`
+    // nested 2,000 deep, took longer than the same shape spelt `abcdefg`,
+    // and the gap grew with the square of the size. Now the two spellings
+    // cost the same. The comparison is between spellings of one shape, so
+    // it holds on any machine and whatever the engine's own curve.
+    const flat = (word: string) => 'option (f) = {' + ` ${word}: 1`.repeat(4000) + ' };'
+    const angle = (word: string) =>
+      'option (f) = {' + ` ${word} <`.repeat(2000) + ' >'.repeat(2000) + ' };'
+    for (const shape of [flat, angle]) {
+      const keyword = time(shape('message'))
+      const plain = time(shape('abcdefg'))
+      assert.ok(
+        keyword < 1.5 * plain + 50,
+        `${keyword.toFixed(0)} ms with a keyword, against ${plain.toFixed(0)} ms without`,
+      )
+    }
+  })
 })

@@ -151,7 +151,17 @@ URL (`[x.y]`, `[type.googleapis.com/x.Y]`), and `true`, `false`, `null`,
 `export` or `local` where they name a field. Its word list is every word
 the grammar spells as a literal, bar `export` and `local`; a test in each
 runtime compares the two, so a keyword added to an `.abnf` file fails
-until the list has it. `ts/src/aggregate.ts` states the rest.
+until the list has it.
+
+It tells inside from outside by a keep prop, `protoAggregate`: a
+before-open action sets it on each rule the `constant` rule pushes once
+that `constant` has opened on `{`, and the engine copies keep props to
+every rule below, in all three runtimes. The test is one lookup on the
+rule at hand. Walking up the rule stack instead, for every keyword, costs
+more the deeper the stack is, and a file's top-level definitions, a flat
+aggregate and nested angle brackets all deepen it, so the parse time grew
+with the square of the file's size. A test in each runtime pins the
+lookup. `ts/src/aggregate.ts` states the rest.
 
 `common.abnf` is a permissive **union** that accepts every version's
 syntax. Per-version legality (proto3 has no `required`, `group` is

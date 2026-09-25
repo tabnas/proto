@@ -50,9 +50,19 @@ func Proto(j *tabnas.Tabnas) error {
 	// between its braces, which the CST's src does not keep: the lexer drops
 	// whitespace and comments. This action reads it from the source while
 	// the brace tokens are to hand; see aggregate.go.
+	var pushed []string
 	j.Rule("constant", func(rs *tabnas.RuleSpec, _ *tabnas.Parser) {
 		rs.AddAC(recordAggregate)
+		pushed = pushedRules(rs)
 	})
+	// Every rule inside an aggregate value carries a mark, set on the rules
+	// the `constant` rule pushes and kept by the rules below them, so the
+	// matchers below can tell inside from outside at once; see aggregate.go.
+	for _, name := range pushed {
+		j.Rule(name, func(rs *tabnas.RuleSpec, _ *tabnas.Parser) {
+			rs.AddBO(markAggregate)
+		})
+	}
 	// Text format has no keywords: inside an aggregate value a word the
 	// grammar spells as a keyword, and a bracketed extension or Any name, are
 	// identifiers. This matcher runs ahead of the grammar's own (priority

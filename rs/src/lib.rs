@@ -167,9 +167,20 @@ pub fn proto(parser: &mut Tabnas) -> Result<(), ProtoError> {
     // between its braces, which the CST's `src` does not keep: the lexer
     // drops whitespace and comments. This action reads it from the source
     // while the brace tokens are to hand; see `aggregate.rs`.
+    let mut pushed = Vec::new();
     parser.define_rule("constant", |spec| {
         spec.add_ac(aggregate::record_aggregate);
+        pushed = aggregate::pushed_rules(spec);
     });
+    // Every rule inside an aggregate value carries a mark, set on the
+    // rules the `constant` rule pushes and kept by the rules below them,
+    // so the matchers below can tell inside from outside at once; see
+    // `aggregate.rs`.
+    for name in pushed {
+        parser.define_rule(name, |spec| {
+            spec.add_bo(aggregate::mark_aggregate);
+        });
+    }
     // Text format has no keywords: inside an aggregate value a word the
     // grammar spells as a keyword, and a bracketed extension or Any name,
     // are identifiers. This matcher runs ahead of the grammar's own (the

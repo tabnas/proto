@@ -231,18 +231,40 @@ function bracketName(src: string, open: number): { end: number; name: string } |
 
 const isOpenBrace = (t: any): boolean => null != t && '{' === t.src
 
-// Is the lexer inside an aggregate value? The value is the `constant` rule
-// whose first token is its `{`. While that rule is still choosing its
-// alternative it peeks the tokens after the brace itself, so the rule
-// asking may be that `constant` with the brace already in the lookahead;
-// after that, it is one of the rules below it.
+// The keep prop that marks a rule inside an aggregate value.
+const INSIDE = 'protoAggregate'
+
+// Before-open action, which the `Proto` plugin installs on every rule the
+// grammar's `constant` rule pushes: a rule whose parent is an aggregate
+// value's `constant`, the one whose first token is its `{`, is marked. The
+// mark is a keep prop, and the engine copies keep props to each rule
+// pushed below a rule and to a rule that replaces one, in every runtime,
+// so each rule inside the value carries it and no rule outside does. It
+// is set on the rules the `constant` pushes rather than on the `constant`
+// itself because the engine copies them at the push, which comes before
+// an after-open action runs.
+function markAggregate(rule: any): void {
+  const parent = rule?.parent
+  if ('constant' === parent?.name && isOpenBrace(parent.o0)) rule.k[INSIDE] = true
+}
+
+// The rules the grammar's `constant` rule pushes, which markAggregate is
+// installed on.
+function pushedRules(constant: any): string[] {
+  const names = (constant?.def?.open || []).map((alt: any) => alt?.p)
+  return [...new Set<string>(names.filter((p: any) => 'string' === typeof p))]
+}
+
+// Is the lexer inside an aggregate value? Every rule inside one carries
+// the mark markAggregate sets, bar the value's `constant` itself: that is
+// inside once its first token is the `{`, and while it is still choosing
+// its alternative it peeks the tokens after the brace, with the brace
+// already in the lookahead. Each test is a lookup, so the answer costs the
+// same however deep the rule stack is.
 function inAggregate(lex: any, rule: any): boolean {
-  if ('constant' === rule?.name && isOpenBrace(lex.ctx?.t?.[0])) return true
-  for (let r = rule, n = 0; r && r.name && n < 100000; r = r.parent, n++) {
-    if ('constant' === r.name && isOpenBrace(r.o0)) return true
-    if (r === r.parent) break
-  }
-  return false
+  const keep = 'function' === typeof rule?.rawk ? rule.rawk() : rule?.k
+  if (true === keep?.[INSIDE]) return true
+  return 'constant' === rule?.name && (isOpenBrace(rule.o0) || isOpenBrace(lex.ctx?.t?.[0]))
 }
 
 // The lexer matcher. Returns an identifier token, or undefined to let the
@@ -290,4 +312,7 @@ function aggregateWord(lex: any, rule: any): any {
 // The matcher's factory, for the engine's `lex.match` option.
 const makeAggregateWord = () => aggregateWord
 
-export { aggregateText, recordAggregate, makeAggregateWord, KEYWORDS }
+export {
+  aggregateText, recordAggregate, makeAggregateWord, markAggregate, pushedRules,
+  inAggregate, KEYWORDS,
+}
