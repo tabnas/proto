@@ -129,7 +129,7 @@ is a descriptor 100 levels deep.
 
 ## 3. Divergences this repository records that are NOT Rust's
 
-The register carries four more rows, where Rust agrees with the canonical
+The register carries nine more rows, where Rust agrees with the canonical
 TypeScript and **Go** does not. They are here so the file and the register
 say the same thing, and because a reader looking for "where do the ports
 disagree" should find all of it in one place.
@@ -140,6 +140,11 @@ disagree" should find all of it in one place.
 | `optional int32 a = 1 [x = -0x10];` | `"x":"-0x10"` | `"x":-16` | `"x":"-0x10"` |
 | `optional int32 a = 1_0;` | `"number":null` | `"number":10` | `"number":null` |
 | proto3 `optional group G = 1 { }` | `proto3Optional`, `_g` oneof | neither | `proto3Optional`, `_g` oneof |
+| `optional string s = 1 [default = ""];` | `"defaultValue":""` | no `defaultValue` | `"defaultValue":""` |
+| `optional string s = 1 [default = "" ""];` | `"defaultValue":""` | no `defaultValue` | `"defaultValue":""` |
+| `optional bytes b = 1 [default = "" ""];` | `"defaultValue":""` | no `defaultValue` | `"defaultValue":""` |
+| `optional string s = 1 [json_name = ""];` | `"jsonName":""` | no `jsonName` | `"jsonName":""` |
+| `optional string s = 1 [json_name = "" ""];` | `"jsonName":""` | no `jsonName` | `"jsonName":""` |
 
 Why each one is what it is:
 
@@ -171,9 +176,20 @@ Why each one is what it is:
    flag, and `generateSyntheticOneofs` then adds the `_g` oneof. Go's
    `buildGroup` discards the flag with `lbl, _ := fieldLabel(...)`.
 
-**Owner: Go**, for all four.
+5. **An empty `default` or `json_name` is dropped.** protoc's parser
+   records either as present and empty, and so do TypeScript and Rust.
+   Go's walk records it too (`hasDefault` and `hasJSONName` in
+   `go/build_descriptor.go`), but `FieldDescriptorProto.DefaultValue` and
+   `.JsonName` are tagged `omitempty` in `go/descriptor.go`, so the value
+   never reaches the descriptor's JSON. 0.5.0 did this for one literal;
+   the adjacent literals 0.5.1 accepts inherit it, for a field of any
+   type. Serialising the two on presence repairs it, which either changes
+   an exported field's type (to `*string`) or needs a `MarshalJSON` of
+   Go's own; the maintainer chooses which.
 
-**Executed:** `test/divergent.tsv`, rows 3 to 6.
+**Owner: Go**, for all nine.
+
+**Executed:** `test/divergent.tsv`, rows 3 to 11.
 
 ## What is NOT a divergence
 

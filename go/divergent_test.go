@@ -17,7 +17,7 @@ package tabnasproto
 // its own repair, and why the file sits beside test/spec/ rather than in
 // it, where TestSpec would run it.
 //
-// Four of these rows record a defect in THIS port. The register is where
+// Nine of these rows record a defect in THIS port. The register is where
 // they are pinned until the repair lands; see ../DIVERGENCE.md for the
 // prose and ../test/divergent.tsv for the rows.
 
