@@ -5,7 +5,7 @@
 | **Status** | Investigation and recommendation. Nothing here is implemented; §9 says what to build, in which repository, and how to know it worked. |
 | **Scope** | `@tabnas/bnf` (the emitter, where the cause is), `@tabnas/parser` (dispatch cost, token sets), this repository (the grammar, and what it can do meanwhile). |
 | **Repo** | This document lives in `tabnas/proto` because proto is where the problem is met: the grammar the language needs is the one the compiler cannot compile. The emitter half is tracked as `tabnas/bnf#71`. |
-| **Measured against** | `@tabnas/parser` 0.12.2, `@tabnas/abnf` 0.4.15, `@tabnas/bnf` 0.1.19, `@tabnas/proto` 0.5.0 (`main` at 366fd21), Node 22.22, Go 1.24.7, Rust 1.94 (release profile). Every figure below was produced by a script run against this tree; §11 says how. |
+| **Measured against** | `@tabnas/parser` 0.12.2, `@tabnas/abnf` 0.4.15, `@tabnas/bnf` 0.1.19 (`main` at 103b619), `@tabnas/proto` 0.5.0 (`main` at 366fd21), Node 22.22, Go 1.24.7, Rust 1.94 (release profile). Every figure below was produced by a script run against this tree, except where a row is credited to `tabnas/bnf#71`; §11 says how. |
 
 ## 1. Summary
 
@@ -47,6 +47,23 @@ the rest once the emitter lands.
 pass, and the Rust crate builds and parses once its sibling checkouts
 (`parser`, `abnf`, `bnf`, `support`) sit beside the repository. Nothing
 needed merging.
+
+One branch is in flight without a pull request: `fix/protoc-forms`, nine
+commits on top of the 0.5.0 release commit and two behind `main`, which
+bumps the version to 0.5.1 (npm still serves 0.5.0). It accepts the
+text-format forms protoc 36 takes inside an aggregate option value
+(adjacent string literals, lists, angle-bracket messages, bracketed
+extension and Any names) and reads keyword-named fields inside an
+aggregate through a lexer matcher rather than the grammar, because
+spelling them in the grammar is what `tabnas/bnf#71` measures. That
+branch is the "Branch" row of the issue's table: 3,672 open alternates.
+It does not touch the keyword-as-identifier gap in the IDL itself (§4).
+
+`tabnas/bnf` (`main` at 103b619, green) has two open issues and no open
+pull requests: `#71`, which is this problem seen from the emitter, and
+`#63`, a Go-only serialisation defect (`optionsToData` drops three
+comment-definition fields) that does not affect proto, whose spec never
+leaves the process.
 
 `tabnas/parser` has two open issues, both lexer-level divergences
 (`#217`, a Rust token-set override that does not reach earlier
@@ -402,6 +419,12 @@ to keep green.
 
 So the shipped grammar's tables are between 2.4 and 3.2 times larger
 than they need to be, and the excess is not paying for correctness.
+`tabnas/bnf#71` reaches the same place from the other side: its scratch
+patch of first-token dispatch, gated on a contest check, takes proto
+0.5.0 from 2,888 to 946 alternates (1,122 under the character-level
+contest test), the gbnf corpus from 11,968 to 3,656, and the issue's
+own N = 26 reproduction from 457,711 to 85, with the bnf, gbnf, ebnf and
+abnf suites passing.
 
 ### 8.2 A protoc-faithful grammar compiles once the window is small
 
@@ -487,7 +510,13 @@ The TypeScript engine already resolves set names per position in
 `normalt`; Go resolves them per parse in `Context.altS` (§3.3 shows the
 cost) and should resolve them at install; the Rust engine expands them
 at install and does not re-resolve (`parser#217`). Making all three
-resolve once, at install, is the engine half.
+resolve once, at install, is the engine half. The emitter half has a
+known obstacle, recorded in `tabnas/bnf#71`: the compiler's own passes
+(`applyDebtGuard`, `reorderKeywordShadow`, `specificityPermute`) read
+an alternate's `s` as a string, so a set-valued position is treated as
+having no head and is guarded or ordered wrongly. Those passes have to
+learn the set form before the emitter can produce it; the issue's
+token-set trial failed one bnf test for exactly that reason.
 
 This is also the soft-keyword facility proto needs. With it, the front
 end can offer an option (`wordKeywords: { contextual: true }`, or an
