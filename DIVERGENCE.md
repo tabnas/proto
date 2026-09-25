@@ -82,9 +82,13 @@ from. A port that can build an unbounded tree therefore has to bound it.
 
 `rs/src/build_descriptor.rs` `MAX_NESTING_DEPTH` is 100. `parse` counts
 braces, and the angle brackets that nest a message inside an aggregate
-value (`{ a < b: 1 > }`), outside strings and comments, and refuses past
-that BEFORE the engine builds a tree that deep; `build_file` refuses a
-CST it is handed directly.
+value (`{ a < b: 1 > }`), and refuses a document past the cap BEFORE the
+engine builds a tree that deep; `build_file` refuses a CST it is handed
+directly. The count reads the tokens the engine's lexer cuts, so a string
+or a comment of any kind hides what it holds, as it does from the parse. A
+scan of the bytes by the lexer's rules settles nearly every document, and
+hands the few it cannot settle, such as one with a backtick string or a
+quote inside a word, to the engine's lexer itself.
 
 Measured, on the smallest stack a caller is likely to have, the 1 MiB a
 spawned `std::thread` gets by default, with a debug build:
@@ -114,9 +118,14 @@ discipline, not a defect to repair.
 
 **Executed:** `rs/tests/untrusted_test.rs`, which parses AT the cap and one
 level under it as well as past it, for messages and for angle brackets in
-an aggregate value. A fixture row cannot express it: the input is larger
-than a cell, and the canonical runtime's answer is a descriptor 100
-levels deep.
+an aggregate value. It also pins the count to the lexer's reading. Angle
+brackets in a backtick string, or in a string a quote inside a word runs
+into, are not nesting, and those documents parse. Nesting after a quote
+inside a word, after a line comment that a bare CR ends, or after a `>`
+in a backtick string is nesting, and past the cap is refused; the byte
+scan of 0.5.0 missed the first two. A fixture row cannot express any of
+this: the input is larger than a cell, and the canonical runtime's answer
+is a descriptor 100 levels deep.
 
 ## 3. Divergences this repository records that are NOT Rust's
 

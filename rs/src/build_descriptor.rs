@@ -11,7 +11,7 @@
 //!
 //! Rust port of `ts/src/build-descriptor.ts`.
 
-use tabnas::Value;
+use tabnas::{Lexer, Value};
 
 use crate::descriptor::{
     scalar_type, DescriptorProto, DescriptorRange, EnumDescriptorProto, EnumValueDescriptorProto,
@@ -1173,8 +1173,8 @@ pub fn build_file(proto: &Value, version: ProtoVersion) -> Result<FileDescriptor
 }
 
 /// The nesting depth of a `.proto` source: its braces, and the angle
-/// brackets that nest a message inside an aggregate value, skipping the
-/// string literals and the comments the tabnas lexer skips.
+/// brackets that nest a message inside an aggregate value, counted over the
+/// tokens the engine's lexer cuts from it.
 ///
 /// `parse` uses it to refuse a runaway document BEFORE the engine builds
 /// a tree that deep, because a `tabnas::Value` drops recursively and a
@@ -1186,74 +1186,192 @@ pub fn build_file(proto: &Value, version: ProtoVersion) -> Result<FileDescriptor
 /// and both nest, so both count. Outside one an angle bracket belongs to a
 /// `map<K, V>` field, which nests nothing, and is not counted.
 ///
-/// Over-counting is safe and under-counting is not, so an unterminated
-/// string or comment counts every brace it contains: the engine will
-/// reject that source anyway.
-pub(crate) fn nesting_depth(src: &str) -> usize {
-    let bytes = src.as_bytes();
+/// The count has to see what the parse sees: a string or a comment hides
+/// what it holds, and nothing else does. Until 0.5.1 a byte scan counted
+/// on its own, and it lost its place at a backtick string, at a quote
+/// inside a word and at a line comment ended by a bare CR. It then refused
+/// documents the engine reads without nesting, or passed documents nesting
+/// far past the cap. [`scan_depth`] now reads the bytes by the lexer's own
+/// rules and answers for nearly every document. Where it meets something
+/// those rules do not settle byte by byte, it hands the source to
+/// [`lexed_depth`], which asks the engine's lexer and is exact, but costs
+/// a large part of what the parse itself costs.
+///
+/// `options` gives the options of the parser that will read the source,
+/// called only when the lexer is needed.
+pub(crate) fn nesting_depth(src: &str, options: impl FnOnce() -> tabnas::Options) -> usize {
+    scan_depth(src.as_bytes()).unwrap_or_else(|| lexed_depth(src, options()))
+}
+
+/// The count [`scan_depth`] and [`lexed_depth`] both keep, one token at a
+/// time, leaving out space and comments.
+#[derive(Default)]
+struct Depth {
+    depth: usize,
+    deepest: usize,
+    /// The depth outside the aggregate value the count is in, if it is in
+    /// one.
+    aggregate: Option<usize>,
+    /// Whether the last token was `=`.
+    after_equals: bool,
+}
+
+impl Depth {
+    /// A token, by its text.
+    fn token(&mut self, text: &[u8]) {
+        match text {
+            b"{" => self.open(),
+            b"<" if self.aggregate.is_some() => self.open(),
+            b"}" => self.close(),
+            b">" if self.aggregate.is_some() => self.close(),
+            _ => {}
+        }
+        self.after_equals = b"=" == text;
+    }
+
+    fn open(&mut self) {
+        if self.aggregate.is_none() && self.after_equals {
+            self.aggregate = Some(self.depth);
+        }
+        self.depth += 1;
+        self.deepest = self.deepest.max(self.depth);
+    }
+
+    fn close(&mut self) {
+        self.depth = self.depth.saturating_sub(1);
+        if Some(self.depth) == self.aggregate {
+            self.aggregate = None;
+        }
+    }
+}
+
+/// [`nesting_depth`] read from the bytes by the rules the engine's lexer
+/// follows, or `None` where those rules do not settle the reading.
+///
+/// Space is a space, a tab, a CR or an LF, and nothing else. `#` and `//`
+/// open a comment anywhere outside a string, inside a word too, and it
+/// ends at the first CR or LF; `/*` opens one that ends at the first `*/`.
+/// Each of `{}[]:,;=()<>` is a token of its own, and so is each of `-.+`
+/// except inside a number. A `"` or a `'` opens a string where a token
+/// starts, and inside a word is part of the word, as every other byte is.
+///
+/// Where a token starts is the one thing bytes alone do not always say: a
+/// word the grammar spells as a keyword ends before a quote (`message"x"`
+/// is a keyword and a string), any other word runs on through one, and a
+/// number decides for itself where it ends. So a quote opens a string here
+/// only at the start of the source, after space or a token from the first
+/// set, or where a comment or a string ends, and anywhere else the source
+/// goes to the lexer. So does a backtick, a raw control character inside a
+/// string, which the lexer refuses, and a string or block comment left
+/// open.
+///
+/// It does not check a string's escapes. Where the lexer refuses one, the
+/// parse stops at that string, and a count that goes on past it only
+/// counts more than the parse can build.
+fn scan_depth(src: &[u8]) -> Option<usize> {
+    let mut count = Depth::default();
     let mut at = 0;
-    let mut depth: usize = 0;
-    let mut deepest: usize = 0;
-    // The depth outside the aggregate value the scan is in, if it is in one.
-    let mut aggregate: Option<usize> = None;
-    // The last byte that is neither space nor inside a comment.
-    let mut last = 0u8;
-    while at < bytes.len() {
-        let byte = bytes[at];
+    // Whether a quote at `at` opens a string.
+    let mut token_start = true;
+    while let Some(&byte) = src.get(at) {
         match byte {
-            b'{' | b'<' if b'{' == byte || aggregate.is_some() => {
-                if aggregate.is_none() && b'=' == last {
-                    aggregate = Some(depth);
-                }
-                depth += 1;
-                deepest = deepest.max(depth);
-                at += 1;
-            }
-            b'}' | b'>' if b'}' == byte || aggregate.is_some() => {
-                depth = depth.saturating_sub(1);
-                if Some(depth) == aggregate {
-                    aggregate = None;
-                }
-                at += 1;
-            }
-            quote @ (b'"' | b'\'') => {
-                at += 1;
-                while at < bytes.len() && bytes[at] != quote {
-                    at += if b'\\' == bytes[at] { 2 } else { 1 };
-                }
-                at += 1;
-            }
-            b'#' => {
-                // The shared tabnas lexer reads `#` as a line comment;
-                // `.proto` does not, which the leniency corpus records.
-                while at < bytes.len() && b'\n' != bytes[at] {
-                    at += 1;
-                }
-                continue;
-            }
-            b'/' if Some(&b'/') == bytes.get(at + 1) => {
-                while at < bytes.len() && b'\n' != bytes[at] {
-                    at += 1;
-                }
-                continue;
-            }
-            b'/' if Some(&b'*') == bytes.get(at + 1) => {
-                at += 2;
-                while at < bytes.len() && !(b'*' == bytes[at] && Some(&b'/') == bytes.get(at + 1)) {
-                    at += 1;
-                }
-                at += 2;
-                continue;
-            }
             b' ' | b'\t' | b'\r' | b'\n' => {
                 at += 1;
-                continue;
+                token_start = true;
             }
-            _ => at += 1,
+            b'#' => {
+                at = line_end(src, at);
+                token_start = true;
+            }
+            b'/' if Some(&b'/') == src.get(at + 1) => {
+                at = line_end(src, at);
+                token_start = true;
+            }
+            b'/' if Some(&b'*') == src.get(at + 1) => {
+                let close = src
+                    .get(at + 2..)?
+                    .windows(2)
+                    .position(|pair| b"*/" == pair)?;
+                at += 2 + close + 2;
+                token_start = true;
+            }
+            b'"' | b'\'' if token_start => {
+                at = string_end(src, at)?;
+                count.token(b"\"");
+            }
+            b'"' | b'\'' | b'`' => return None,
+            b'{' | b'}' | b'[' | b']' | b':' | b',' | b';' | b'=' | b'(' | b')' | b'<' | b'>' => {
+                count.token(&src[at..=at]);
+                at += 1;
+                token_start = true;
+            }
+            _ => {
+                count.token(&src[at..=at]);
+                at += 1;
+                token_start = false;
+            }
         }
-        last = byte;
     }
-    deepest
+    Some(count.deepest)
+}
+
+/// The index of the first CR or LF at or after `at`, or the end of the
+/// source: where the lexer ends a `#` or `//` comment.
+fn line_end(src: &[u8], at: usize) -> usize {
+    src[at..]
+        .iter()
+        .position(|&byte| b'\r' == byte || b'\n' == byte)
+        .map_or(src.len(), |offset| at + offset)
+}
+
+/// The index after the `"` or `'` string that opens at `at`, or `None`
+/// where it is left open or holds a raw control character. A backslash
+/// takes the byte after it, whatever it is, as the lexer's does.
+fn string_end(src: &[u8], at: usize) -> Option<usize> {
+    let quote = src[at];
+    let mut index = at + 1;
+    loop {
+        let byte = *src.get(index)?;
+        if quote == byte {
+            return Some(index + 1);
+        }
+        if byte < 0x20 {
+            return None;
+        }
+        index += if b'\\' == byte { 2 } else { 1 };
+    }
+}
+
+/// [`nesting_depth`] over the tokens the engine's lexer cuts with
+/// `options`: exact, for what [`scan_depth`] hands over.
+///
+/// It runs without the plugin's two lexer matchers, which read the rule the
+/// parser is in, and a lexer run on its own has none. Neither moves a
+/// brace. The word matcher relabels a word, which holds none, and reads a
+/// bracketed name, which holds only name characters, space and comments.
+/// The string matcher refuses adjacent literals outside an aggregate, and
+/// the parse stops there, so the count need not; with no rule to say it is
+/// inside one, it would stop the count at a pair inside an aggregate too,
+/// and pass the nesting after it.
+///
+/// The count stops at the first token the lexer refuses: the engine
+/// refuses the source there too, and builds nothing past it.
+fn lexed_depth(src: &str, mut options: tabnas::Options) -> usize {
+    options
+        .lex
+        .matchers
+        .retain(|name, _| crate::AGGREGATE_WORD != name && crate::ADJACENT_STRINGS != name);
+    let mut lexer = Lexer::new(src, options);
+    let mut count = Depth::default();
+    while let Ok(token) = lexer.next_raw_token() {
+        match &*token.name {
+            "#SP" | "#LN" | "#CM" => {}
+            // The end, or a token the lexer refuses and does not step past.
+            name if "#ZZ" == name || "#BD" == name || token.src.is_empty() => break,
+            _ => count.token(token.src.as_bytes()),
+        }
+    }
+    count.deepest
 }
 
 #[cfg(test)]
@@ -1282,6 +1400,33 @@ mod tests {
         // `.` does not cross a newline, so the first `=` cannot match and
         // the second one does.
         assert_eq!(strip_from_equals("a=b\nc=d"), "a=b\nc");
+    }
+
+    /// The depth the shared parser counts.
+    fn nesting_depth(src: &str) -> usize {
+        super::nesting_depth(src, || crate::shared().config())
+    }
+
+    /// The depth the shared parser's lexer counts: what the scan must
+    /// agree with wherever it answers.
+    fn lexed(src: &str) -> usize {
+        lexed_depth(src, crate::shared().config())
+    }
+
+    /// Does the shared parser's lexer read `src` to the end, refusing
+    /// nothing on the way?
+    fn lexes_clean(src: &str) -> bool {
+        let mut options = crate::shared().config();
+        options.lex.matchers.clear();
+        let mut lexer = Lexer::new(src, options);
+        loop {
+            match lexer.next_raw_token() {
+                Ok(token) if "#ZZ" == &*token.name => return true,
+                Ok(token) if "#BD" == &*token.name || token.src.is_empty() => return false,
+                Ok(_) => {}
+                Err(_) => return false,
+            }
+        }
     }
 
     #[test]
@@ -1314,5 +1459,138 @@ mod tests {
         assert_eq!(nesting_depth("option (f) = { a: \"<<<<\" };"), 1);
         // Unclosed, every opening bracket counts.
         assert_eq!(nesting_depth("option (f) = { a < a < a <"), 4);
+    }
+
+    #[test]
+    fn nesting_depth_reads_the_source_as_the_lexer_does() {
+        // A backtick string is a string to the lexer, `<` and all.
+        assert_eq!(nesting_depth("option (f) = { a: `<<<<` };"), 1);
+        assert_eq!(nesting_depth("option (f) = `{{{{`;"), 0);
+        // A quote inside a word is part of the word, so what follows it is
+        // not a string: the `<` after it is counted, and a real string
+        // later on still hides its own.
+        assert_eq!(nesting_depth("message A\"B { option (x) = \"={<<\"; }"), 1);
+        assert_eq!(
+            nesting_depth("option (f) = { a: x'y b < c: \"'<<\" > };"),
+            2
+        );
+        assert_eq!(
+            nesting_depth("message A\"B { message C { message D { } } }"),
+            3
+        );
+        // A word the grammar spells as a keyword ends before a quote.
+        assert_eq!(nesting_depth("message\"{{\" M { }"), 1);
+        // A line comment ends at a bare CR, as it does at an LF.
+        assert_eq!(nesting_depth("// c\rmessage M { message N { } }"), 2);
+        assert_eq!(nesting_depth("# c\rmessage M { }"), 1);
+        // The count stops where the lexer refuses the source, as the engine
+        // does: nothing past an unclosed string is built.
+        assert_eq!(nesting_depth("message M { \"abc {{{{"), 1);
+        // But not at adjacent literals the parse refuses outside an
+        // aggregate: inside one they are text format, and nest nothing.
+        assert_eq!(
+            nesting_depth("option (f) = { a: \"\\e\" \"x\" b < c < d: 1 > > };"),
+            3
+        );
+    }
+
+    #[test]
+    fn the_scan_hands_over_what_the_bytes_do_not_settle() {
+        for src in [
+            "option (f) = `{`;",
+            "message A\"B { }",
+            "message\"x\" { }",
+            "option (f) = 1\"x\";",
+            "option (f) = -\"x\";",
+            "option (f) = \"a\tb\";",
+            "option (f) = \"abc",
+            "/* {",
+        ] {
+            assert_eq!(None, scan_depth(src.as_bytes()), "{src:?}");
+        }
+        for src in [
+            "option (f) = \"a\\\"{\" '{' \"\"'';",
+            "option (f) = { a: [\"<\"] b < c: '>' > };",
+            "/* \" */ message M { } // '\r\"x\"",
+        ] {
+            assert_eq!(Some(lexed(src)), scan_depth(src.as_bytes()), "{src:?}");
+        }
+    }
+
+    /// Wherever the scan answers, it answers what the lexer does, over
+    /// sources built at random from the pieces that decide a reading.
+    #[test]
+    fn the_scan_agrees_with_the_lexer_wherever_it_answers() {
+        const PIECES: [&str; 40] = [
+            "{",
+            "}",
+            "<",
+            ">",
+            "=",
+            "[",
+            "]",
+            ";",
+            ":",
+            ",",
+            "(",
+            ")",
+            "-",
+            ".",
+            "+",
+            "\"",
+            "'",
+            "`",
+            "\\",
+            "#",
+            "//",
+            "/*",
+            "*/",
+            "\r",
+            "\n",
+            " ",
+            "\t",
+            "\u{c}",
+            "a",
+            "message",
+            "true",
+            "1",
+            "0x",
+            "\u{e9}",
+            "\"{\"",
+            "'<'",
+            "= {",
+            "option (f) = {",
+            "a <",
+            "\"a\\\"}\"",
+        ];
+        // xorshift64: the same sources on every run and every machine.
+        let mut state: u64 = 0x9e37_79b9_7f4a_7c15;
+        let mut next = move |bound: usize| {
+            state ^= state << 13;
+            state ^= state >> 7;
+            state ^= state << 17;
+            (state % bound as u64) as usize
+        };
+        let (mut answered, total) = (0, 3000);
+        for _ in 0..total {
+            let pieces = 1 + next(24);
+            let src: String = (0..pieces).map(|_| PIECES[next(PIECES.len())]).collect();
+            if let Some(depth) = scan_depth(src.as_bytes()) {
+                answered += 1;
+                // The scan does not check a string's escapes. Where the
+                // lexer refuses one, the parse stops there, and the scan's
+                // count past it can only add to the lexer's.
+                if lexes_clean(&src) {
+                    assert_eq!(lexed(&src), depth, "{src:?}");
+                } else {
+                    assert!(lexed(&src) <= depth, "{src:?}");
+                }
+            }
+        }
+        // Enough answered that the agreement means something.
+        assert!(
+            answered > total / 5,
+            "the scan answered {answered} of {total}"
+        );
     }
 }

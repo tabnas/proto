@@ -162,10 +162,13 @@ CAP, `MAX_NESTING_DEPTH`. The descriptor walk recurses, `tabnas::Value`
 drops recursively and `Value::to_json` recurses; a Rust stack that runs
 out ABORTS the process, where a JavaScript one raises something a caller
 can catch. `parse` counts braces, and the angle brackets that nest a
-message inside an aggregate value (`{ a < b: 1 > }`), outside strings
-and comments, and refuses a document past the cap before the engine
-builds a tree that deep, and `build_file` refuses one it is handed
-directly.
+message inside an aggregate value (`{ a < b: 1 > }`), and refuses a
+document past the cap before the engine builds a tree that deep, and
+`build_file` refuses one it is handed directly. The count reads the
+source as the engine's lexer does, so a string or comment of any kind
+hides what it holds, as it does from the parse: a byte scan by the
+lexer's rules settles nearly every document, and hands the rest to the
+engine's lexer itself (`nesting_depth` in `src/build_descriptor.rs`).
 
 Refusing a CST is the weaker half, and it is not the protection: the
 tree already exists by then, and a `Value` nesting far enough aborts as

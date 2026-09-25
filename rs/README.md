@@ -238,11 +238,13 @@ drops a 900-level document, and aborts on a 1000-level one, having
 already refused to walk it. The refusal is not the protection; parsing
 no such tree is.
 
-The cap counts braces outside string literals and comments, so a document
-that merely mentions braces is not refused for nesting. Inside an
-aggregate option value it also counts angle brackets, because text format
-nests a message in them as it does in braces: `{ a < b < c: 1 > > }`. It
-leaves a `map<K, V>` field's alone.
+The cap counts braces as the engine's lexer reads the source. A brace
+inside a string or a comment counts for nothing, whatever the kind, a
+backtick string or a `#` comment included, so a document that merely
+mentions braces is not refused for nesting. Inside an aggregate option
+value it also counts angle brackets, because text format nests a message
+in them as it does in braces: `{ a < b < c: 1 > > }`. It leaves a
+`map<K, V>` field's alone.
 
 ## Install
 

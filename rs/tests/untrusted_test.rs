@@ -65,7 +65,7 @@ fn nesting_past_the_cap_is_refused() {
 }
 
 /// Deeply nested and never closed: refused rather than aborting. The
-/// brace scan counts opening braces, so an unterminated pile is caught
+/// nesting count counts opening braces, so an unterminated pile is caught
 /// before the engine sees it.
 #[test]
 fn deep_unclosed_nesting_is_refused() {
@@ -86,7 +86,7 @@ fn nested_angles(depth: usize) -> String {
 
 /// Inside an aggregate text format nests a message in angle brackets as
 /// well as in braces, and the tree the engine builds nests with it, so the
-/// scan counts both, to the same cap.
+/// nesting count counts both, to the same cap.
 #[test]
 fn angle_brackets_in_an_aggregate_nest_to_the_same_cap() {
     let file = parse(&nested_angles(MAX_NESTING_DEPTH), None)
@@ -111,7 +111,7 @@ fn angle_brackets_in_an_aggregate_nest_to_the_same_cap() {
 
 /// Outside an aggregate an angle bracket is a map field's, which nests
 /// nothing, so a map in a message nested to the cap still parses, as it
-/// did before the scan counted angle brackets at all.
+/// did before the nesting count counted angle brackets at all.
 #[test]
 fn a_map_field_is_not_nesting() {
     let src = format!(
@@ -122,8 +122,8 @@ fn a_map_field_is_not_nesting() {
     parse(&src, None).expect("a map field at the cap parses");
 }
 
-/// The brace scan does not count a brace inside a string or a comment, so
-/// a document that merely MENTIONS braces is not refused for nesting.
+/// The nesting count does not count a brace inside a string or a comment,
+/// so a document that merely MENTIONS braces is not refused for nesting.
 #[test]
 fn braces_in_strings_and_comments_do_not_count_as_nesting() {
     let noise = "{".repeat(MAX_NESTING_DEPTH * 4);
@@ -139,6 +139,45 @@ fn braces_in_strings_and_comments_do_not_count_as_nesting() {
                 "refused for nesting: {src:.60}"
             );
         }
+    }
+}
+
+/// The nesting count reads the source as the engine's lexer does. Until
+/// 0.5.1 a byte scan counted on its own and lost its place: at a backtick
+/// string, which it did not know, at a quote inside a word, which it took
+/// for the start of a string, and at a line comment that a bare CR ends.
+/// Each document in the first list parses in every runtime, and the scan
+/// refused it once it counted angle brackets as well as braces.
+#[test]
+fn nesting_is_counted_as_the_lexer_reads_the_source() {
+    let angles = "<".repeat(MAX_NESTING_DEPTH + 1);
+    for src in [
+        format!("syntax = \"proto2\";\noption (x) = {{ a: `{angles}` }};\n"),
+        format!("syntax = \"proto2\";\noption (x) = `={{{angles}`;\n"),
+        format!("message A\"B {{ option (x) = \"={{{angles}\"; }}"),
+        format!("message A'B {{ option (x) = '={{{angles}'; }}"),
+        format!("option java_package = `a\"b`; option (x) = \"={{{angles}\";"),
+        format!("option (f) = {{ a: x'y b: \"'{angles}\" }};"),
+    ] {
+        parse(&src, None).unwrap_or_else(|error| panic!("{src:.60}: {error}"));
+    }
+    // The other way round, nothing hides the nesting after it any more:
+    // the scan let each of these through to abort the process.
+    let angles = |depth: usize| format!("{}c: 1 {}", "a < ".repeat(depth), "> ".repeat(depth));
+    let deep = 10 * MAX_NESTING_DEPTH;
+    for src in [
+        // A quote inside a word opened a string that ran to the next quote.
+        format!("message A\"B {{ option (f) = {{ {} }}; }}", angles(deep)),
+        // A `>` inside a backtick string ended the aggregate early.
+        format!("option (f) = {{ a: `>` b < {} > }};", angles(deep)),
+        // A bare CR ends a line comment, where the scan read on to an LF.
+        format!("syntax = \"proto2\";\n// c\r{}", "message M {".repeat(deep)),
+    ] {
+        let error = parse(&src, None).expect_err("past the cap is refused");
+        assert!(
+            error.to_string().contains("nests"),
+            "{src:.60}: got {error}"
+        );
     }
 }
 

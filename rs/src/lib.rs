@@ -312,10 +312,14 @@ pub fn to_descriptor(
 /// the check has to come before the tree exists.
 ///
 /// The depth is counted in braces, and in the angle brackets that nest a
-/// message inside an aggregate value (`{ a < b: 1 > }`), skipping the
-/// string literals and comments the lexer skips. Over-counting is safe
-/// here and under-counting is not, so an unterminated string or comment
-/// counts every brace inside it; the engine rejects that source anyway.
+/// message inside an aggregate value (`{ a < b: 1 > }`), over the tokens
+/// the engine's lexer cuts, so a string or a comment of any kind hides what
+/// it holds, as it does from the parse. A scan of the bytes by the lexer's
+/// rules settles nearly every document; the few it cannot settle, such as
+/// one with a backtick string or a quote inside a word, go to the engine's
+/// lexer itself. For those this uses the shared parser's lexer, compiling
+/// that parser if nothing has yet; [`parse_with`] uses the lexer of the
+/// parser it is given.
 ///
 /// ```
 /// fn main() -> Result<(), Box<dyn std::error::Error>> {
@@ -334,7 +338,18 @@ pub fn to_descriptor(
 /// }
 /// ```
 pub fn preflight(src: &str) -> Result<(), ProtoError> {
-    let depth = build_descriptor::nesting_depth(src);
+    check_depth(src, || shared().config())
+}
+
+/// [`preflight`], with the lexer of the parser that will read the source.
+fn preflight_with(parser: &Tabnas, src: &str) -> Result<(), ProtoError> {
+    check_depth(src, || parser.config())
+}
+
+/// Refuse `src` past the cap. `options` gives the options of the lexer to
+/// count with, and is called only for a source the byte scan hands over.
+fn check_depth(src: &str, options: impl FnOnce() -> tabnas::Options) -> Result<(), ProtoError> {
+    let depth = build_descriptor::nesting_depth(src, options);
     if depth > MAX_NESTING_DEPTH {
         return Err(ProtoError::TooDeep(format!(
             "proto: document nests {depth} levels deep, past the {MAX_NESTING_DEPTH} this \
@@ -367,7 +382,7 @@ pub fn parse_with(
     src: &str,
     options: Option<&ProtoOptions>,
 ) -> Result<FileDescriptorProto, ProtoError> {
-    preflight(src)?;
+    preflight_with(parser, src)?;
     let cst = parser.parse(src)?;
     to_descriptor(&cst, options)
 }
