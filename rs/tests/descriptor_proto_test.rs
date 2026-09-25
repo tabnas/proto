@@ -18,13 +18,29 @@ fn descriptor_proto_parses_to_the_descriptor_protoc_sees() {
     assert_eq!(
         names,
         [
-            "FileDescriptorSet", "FileDescriptorProto", "DescriptorProto",
-            "ExtensionRangeOptions", "FieldDescriptorProto", "OneofDescriptorProto",
-            "EnumDescriptorProto", "EnumValueDescriptorProto", "ServiceDescriptorProto",
-            "MethodDescriptorProto", "FileOptions", "MessageOptions", "FieldOptions",
-            "OneofOptions", "EnumOptions", "EnumValueOptions", "ServiceOptions",
-            "MethodOptions", "UninterpretedOption", "FeatureSet", "FeatureSetDefaults",
-            "SourceCodeInfo", "GeneratedCodeInfo",
+            "FileDescriptorSet",
+            "FileDescriptorProto",
+            "DescriptorProto",
+            "ExtensionRangeOptions",
+            "FieldDescriptorProto",
+            "OneofDescriptorProto",
+            "EnumDescriptorProto",
+            "EnumValueDescriptorProto",
+            "ServiceDescriptorProto",
+            "MethodDescriptorProto",
+            "FileOptions",
+            "MessageOptions",
+            "FieldOptions",
+            "OneofOptions",
+            "EnumOptions",
+            "EnumValueOptions",
+            "ServiceOptions",
+            "MethodOptions",
+            "UninterpretedOption",
+            "FeatureSet",
+            "FeatureSetDefaults",
+            "SourceCodeInfo",
+            "GeneratedCodeInfo",
         ]
     );
     let enums: Vec<&str> = fdp.enum_type.iter().map(|e| e.name.as_str()).collect();
@@ -38,9 +54,20 @@ fn descriptor_proto_parses_to_the_descriptor_protoc_sees() {
     assert_eq!(
         file_fields,
         [
-            "name", "package", "dependency", "public_dependency", "weak_dependency",
-            "option_dependency", "message_type", "enum_type", "service", "extension",
-            "options", "source_code_info", "syntax", "edition",
+            "name",
+            "package",
+            "dependency",
+            "public_dependency",
+            "weak_dependency",
+            "option_dependency",
+            "message_type",
+            "enum_type",
+            "service",
+            "extension",
+            "options",
+            "source_code_info",
+            "syntax",
+            "edition",
         ]
     );
     let weak = fdp
@@ -52,7 +79,10 @@ fn descriptor_proto_parses_to_the_descriptor_protoc_sees() {
     assert_eq!(weak.number, 10.0);
     assert_eq!(weak.default_value.as_deref(), Some("false"));
     assert_eq!(serde_json::to_value(weak).unwrap()["type"], "TYPE_BOOL");
-    assert_eq!(serde_json::to_value(weak).unwrap()["options"]["deprecated"], true);
+    assert_eq!(
+        serde_json::to_value(weak).unwrap()["options"]["deprecated"],
+        true
+    );
 
     let edition = &fdp.enum_type[0];
     assert_eq!(edition.value.len(), 14);

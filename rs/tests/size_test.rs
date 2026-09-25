@@ -19,5 +19,8 @@ fn the_compiled_grammar_is_a_few_hundred_alternates() {
     assert!(rules.len() <= 500, "{} rules", rules.len());
     assert!(total <= 1000, "{total} open alternates");
     assert!(biggest_n <= 60, "{biggest} has {biggest_n} open alternates");
-    assert!(parser.token_set("ident").is_some(), "the identifier class is not a token set");
+    assert!(
+        parser.token_set("ident").is_some(),
+        "the identifier class is not a token set"
+    );
 }
