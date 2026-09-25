@@ -141,6 +141,17 @@ syntax. Per-version legality (proto3 has no `required`, `group` is
 proto2-only, …) is the walk's / protoc's concern, not recognition's. After
 editing any `.abnf` file run `npm run embed` (the build does this).
 
+**Keywords are reserved words in this grammar; in protoc they are not.**
+A field named `message`, a package segment `option`, an enum value
+`max`, an rpc named `stream`, and any identifier that case-folds to a
+keyword (`Edition`) are refused, and protobuf's own `descriptor.proto`
+does not parse. The language is not the obstacle: admitting keywords as
+identifiers multiplies the compiled dispatch tables past what the
+`@tabnas/bnf` emitter can install (tabnas/bnf#71).
+[`docs/design/alt-explosion.md`](docs/design/alt-explosion.md) measures
+the explosion, reviews how other parsers and the literature handle it,
+and recommends the fix, with what this grammar can do meanwhile.
+
 ## The walk and abnf inlining (the main gotcha)
 
 `@tabnas/abnf` inlines a sub-rule referenced at the very start of an
