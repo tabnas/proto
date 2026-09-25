@@ -737,15 +737,15 @@ Measured against §9.5:
 
 | criterion | measured |
 |---|---|
-| shipped grammar, per-decision lookahead alone | 919 open alternates, outputs identical on all 313 inputs |
-| keyword-admitting grammar | 821 open alternates, 430 rules, the largest rule 35 alternates; about 380 ms to build in TypeScript, engine included |
+| shipped grammar, per-decision lookahead alone | 982 open alternates, outputs identical on all 313 inputs |
+| keyword-admitting grammar | 834 open alternates, 430 rules, the largest rule 45 alternates; about 320 ms to build in TypeScript, engine included |
 | the same grammar under the old emitter | 6.1 million alternates, never installs (§8.2) |
 | protoc corpus | 78 of 78 in-scope `valid` cases identical to protoc's goldens, 50 of 50 `accept-only`, in all three runtimes; the `invalid` lane now accepts 50 of 99 (was 48) |
 | §12 inputs, `descriptor.proto` | all parse; pinned in `test/spec/keywords.tsv` and `test/descriptor/` |
 | Go engine, shipped grammar, the 104 KB file of §3.3 | 504 ms to 363 ms per parse with the index; the same grammar, so the alternate count is unchanged here |
 | front-end suites | abnf, ebnf and gbnf green in TypeScript and Go against the new emitter |
 
-The 380 ms build is the compiler's FIRST and FOLLOW analysis and its
+The 320 ms build is the compiler's FIRST and FOLLOW analysis and its
 contest checks over 430 rules, paid once per engine; `parse()` in
 TypeScript and Go still builds a fresh engine per call (§10.4's caching
 suggestion stands as a follow-up). What prevents a recurrence is now
