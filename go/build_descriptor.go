@@ -912,6 +912,30 @@ func buildService(n map[string]any) ServiceDescriptorProto {
 }
 
 // buildRpc reads
+// parenthesised is the contents of the first two parenthesised spans of a
+// statement's text. No identifier or type holds a parenthesis, so for an
+// rpc these are its input and its output, whatever the names in them are
+// spelled. Mirrors the TS parenthesised.
+func parenthesised(src string) []string {
+	out := []string{}
+	at := 0
+	for len(out) < 2 {
+		open := strings.IndexByte(src[at:], '(')
+		if open < 0 {
+			break
+		}
+		open += at
+		close := strings.IndexByte(src[open+1:], ')')
+		if close < 0 {
+			break
+		}
+		close += open + 1
+		out = append(out, src[open+1:close])
+		at = close + 1
+	}
+	return out
+}
+
 // `rpc ident "(" ["stream"] messageType ")" "returns" "(" ["stream"] messageType ")"`.
 func buildRpc(el map[string]any) MethodDescriptorProto {
 	var ids, types []map[string]any
@@ -928,16 +952,19 @@ func buildRpc(el map[string]any) MethodDescriptorProto {
 		InputType:  srcAt(types, 0),
 		OutputType: srcAt(types, 1),
 	}
-	// `stream` is a bare terminal, so it never becomes a node — but it sits
-	// immediately ahead of the type it modifies, which is exactly what the gap
-	// holds. Searching the statement for `(stream` instead marks an ordinary
-	// type whose name merely BEGINS with those letters, so
-	// `rpc M (streaming.Request)` came back client-streaming.
-	modifiers := gapsBefore(el, "messageType")
-	if len(modifiers) > 0 && strings.HasSuffix(modifiers[0], "stream") {
+	// `stream` is a bare terminal, so it never becomes a node, and the name
+	// and both types are identifiers that may themselves be spelled
+	// `stream` (`rpc stream (stream stream)`), so no search for a child's
+	// text can say which copy is the modifier. The parentheses can: a name
+	// or a type never holds one, so the first two parenthesised spans are
+	// the input and the output, each the type's own text with or without
+	// `stream` ahead of it. A type that merely begins with those letters
+	// (`rpc M (streaming.Request)`) is its own text, and is not streaming.
+	spans := parenthesised(nsrc(el))
+	if len(spans) > 0 && spans[0] == "stream"+m.InputType {
 		m.ClientStreaming = true
 	}
-	if len(modifiers) > 1 && strings.HasSuffix(modifiers[1], "stream") {
+	if len(spans) > 1 && spans[1] == "stream"+m.OutputType {
 		m.ServerStreaming = true
 	}
 	for _, o := range childRules(el) {

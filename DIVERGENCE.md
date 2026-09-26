@@ -182,10 +182,14 @@ reader should not have to measure it again.
   Every ANSWER is the same, so it is not a divergence; the cause is
   `Rule::accept_child_node` in the engine, and `rs/AGENTS.md` records the
   curve, the diagnosis and why no test pins it.
-- **An rpc named `Stream`.** Refused, in TypeScript and in Rust alike: the
-  shared lexer matches a word keyword without regard to case, so the name
-  collides with the `stream` modifier. `rs/tests/proto_test.rs`
-  `an_rpc_named_after_a_keyword_is_refused_in_every_runtime` pins it.
+- **An rpc named `Stream`, or `stream`.** Accepted, in every runtime:
+  keywords are case-sensitive in the grammar and every keyword is an
+  identifier where protoc admits one. `test/spec/keywords.tsv` pins the
+  keyword-as-identifier inputs in all three runtimes, and
+  `rs/tests/proto_test.rs` `an_rpc_named_after_a_keyword_parses_in_every_runtime`
+  keeps the name and the modifier told apart. (Before the grammar admitted
+  keywords, both names were refused in every runtime, and the old pin
+  said so.)
 - **Everything else.** A differential run over 450 inputs (every shared
   fixture row, the whole of protoc's `valid`, `accept-only` and `invalid`
   lanes, the leniency probes and 90 hand-written edge cases aimed at the

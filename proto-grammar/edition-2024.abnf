@@ -1,11 +1,7 @@
 ; edition 2024 deltas: `import option "...";` and symbol visibility
-; (export / local) on message and enum declarations.
-importStmt      =/ "import" "option" strLit ";"
+; (export / local) on message and enum declarations. `symbolVisibility`
+; and its messageElement alternatives live in common.abnf, ordered ahead
+; of `field`. `export` and `local` are identifiers everywhere else, as
+; every keyword is (`local.pkg.SomeMessage`), so fullIdent needs nothing.
+importStmt      =/ %s"import" %s"option" strLit ";"
 topLevelDef     =/ symbolVisibility message / symbolVisibility enumDef
-messageElement  =/ symbolVisibility message / symbolVisibility enumDef
-symbolVisibility = "export" / "local"
-; `export` and `local` are contextual: they are only visibility modifiers
-; ahead of `message`/`enum`, and stay usable as ordinary name components
-; (`local.pkg.SomeMessage`). The union grammar lexes them as keywords, so
-; give fullIdent an alternative that may open with one.
-fullIdent       =/ symbolVisibility *( "." ident )

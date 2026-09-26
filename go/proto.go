@@ -17,7 +17,7 @@ import (
 // VERSION is this module's version. It MUST equal ts/package.json
 // "version": the release orchestrator rewrites both, and
 // TestVersionMatchesPackageJSON fails the build if they drift.
-const VERSION = "0.5.0"
+const VERSION = "0.6.0"
 
 //go:generate go run grammar_gen.go
 
@@ -35,13 +35,16 @@ type ProtoOptions struct {
 // into a {rule, src, kids} CST. Use ToDescriptor to turn that CST into a
 // FileDescriptorProto. Mirrors the TS `tn.use(Proto)` plugin.
 func Proto(j *tabnas.Tabnas) error {
-	// Proto drives parsing through @tabnas/abnf. wordKeywords is required so
+	// Proto drives parsing through @tabnas/abnf. WordKeywords is required so
 	// literal keywords match as whole words (e.g. `option` does not grab the
-	// `option` prefix of `optional`).
+	// `option` prefix of `optional`); TokenClasses compiles `ident` (an
+	// identifier or any keyword) to one engine token set, so a lookahead
+	// position peeks it as one token rather than one alternate per keyword.
 	_, err := abnf.Install(j, GrammarText, &abnf.AbnfConvertOptions{
 		Tag:          "proto",
 		Start:        "proto",
 		WordKeywords: true,
+		TokenClasses: true,
 	}, nil)
 	if err != nil {
 		return err

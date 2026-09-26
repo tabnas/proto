@@ -11,56 +11,71 @@ export const grammarText = `
 ; Whitespace and // and /* */ comments are ignored by the lexer.
 ; The grammar is a permissive superset of proto2 / proto3 / editions;
 ; version-specific legality is enforced in the descriptor walk.
+;
+; Keywords are written %s"..." (RFC 7405, case-sensitive): protoc's
+; keywords are lower-case, so \`Message\`, \`Edition\` and \`MAX\` are
+; identifiers. Every keyword is also admitted as an identifier by
+; \`ident\`, as protoc's ConsumeIdentifier admits it: a field named
+; \`message\`, an enum value \`max\`, an rpc \`stream\`, a package segment
+; \`option\`. Where a statement list can begin with either a keyword or an
+; identifier, the keyword-headed alternatives come first and the
+; identifier-headed one last, which is protoc's LookingAt order; the
+; compiler's lookahead separates the rest (\`message message = 1;\` is a
+; field of type \`message\` once the third token is seen).
 
 proto          = [ syntaxOrEdition ] *topLevelDef
 
-syntaxOrEdition = "syntax" "=" strLit ";"
+syntaxOrEdition = %s"syntax" "=" strLit ";"
 
 topLevelDef    = importStmt / packageStmt / optionStmt / message / enumDef
                / service / extendStmt / emptyStmt
 
-importStmt     = "import" [ "weak" / "public" ] strLit ";"
-packageStmt    = "package" fullIdent ";"
+importStmt     = %s"import" [ %s"weak" / %s"public" ] strLit ";"
+packageStmt    = %s"package" fullIdent ";"
 
-optionStmt     = "option" optionName "=" constant ";"
+optionStmt     = %s"option" optionName "=" constant ";"
 optionName     = optionNamePart *( "." optionNamePart )
 optionNamePart = ident / "(" [ "." ] fullIdent ")"
 
-message        = "message" ident messageBody
+message        = %s"message" ident messageBody
 messageBody    = "{" *messageElement "}"
-messageElement = field / enumDef / message / optionStmt / oneof / mapField
+; Keyword-headed statements first, \`field\` last: a field's type is an
+; identifier, and an identifier may be any keyword.
+messageElement = enumDef / message / optionStmt / oneof / mapField
                / extendStmt / extensions / reserved / emptyStmt
+               / symbolVisibility message / symbolVisibility enumDef
+               / groupField / field
 
 field          = [ label ] fieldType ident "=" fieldNumber [ fieldOptions ] ";"
-label          = "required" / "optional" / "repeated"
+label          = %s"required" / %s"optional" / %s"repeated"
 fieldType      = messageType
 fieldNumber    = NR
 fieldOptions   = "[" fieldOption *( "," fieldOption ) "]"
 fieldOption    = optionName "=" constant
 
-oneof          = "oneof" ident "{" *oneofElement "}"
-oneofElement   = optionStmt / oneofField / emptyStmt
+oneof          = %s"oneof" ident "{" *oneofElement "}"
+oneofElement   = optionStmt / emptyStmt / groupField / oneofField
 oneofField     = fieldType ident "=" fieldNumber [ fieldOptions ] ";"
 
-mapField       = "map" "<" fieldType "," fieldType ">" ident "=" fieldNumber
+mapField       = %s"map" "<" fieldType "," fieldType ">" ident "=" fieldNumber
                  [ fieldOptions ] ";"
 
-enumDef        = "enum" ident "{" *enumElement "}"
-enumElement    = optionStmt / enumField / reserved / emptyStmt
+enumDef        = %s"enum" ident "{" *enumElement "}"
+enumElement    = optionStmt / reserved / emptyStmt / enumField
 enumField      = ident "=" [ "-" ] fieldNumber [ fieldOptions ] ";"
 
-service        = "service" ident "{" *serviceElement "}"
-serviceElement = optionStmt / rpc / emptyStmt
-rpc            = "rpc" ident "(" [ "stream" ] messageType ")"
-                 "returns" "(" [ "stream" ] messageType ")"
+service        = %s"service" ident "{" *serviceElement "}"
+serviceElement = optionStmt / emptyStmt / rpc
+rpc            = %s"rpc" ident "(" [ %s"stream" ] messageType ")"
+                 %s"returns" "(" [ %s"stream" ] messageType ")"
                  ( ";" / "{" *( optionStmt / emptyStmt ) "}" )
 
-extendStmt     = "extend" messageType "{" *( field / emptyStmt ) "}"
-extensions     = "extensions" ranges [ fieldOptions ] ";"
-reserved       = "reserved" ( ranges / fieldNames ) ";"
+extendStmt     = %s"extend" messageType "{" *( field / emptyStmt ) "}"
+extensions     = %s"extensions" ranges [ fieldOptions ] ";"
+reserved       = %s"reserved" ( ranges / fieldNames ) ";"
 ranges         = range *( "," range )
 ; Enum reserved ranges may be negative, so a range bound is signed.
-range          = [ "-" ] NR [ "to" ( [ "-" ] NR / "max" ) ]
+range          = [ "-" ] NR [ %s"to" ( [ "-" ] NR / %s"max" ) ]
 ; Reserved names are string literals in proto2/proto3 and bare identifiers
 ; from edition 2023 on; the union accepts either (and a mix).
 fieldNames     = reservedName *( "," reservedName )
@@ -81,18 +96,36 @@ messageValueEntry = ident [ ":" ] ( strLit 1*strLit / constant ) [ "," / ";" ]
 
 messageType    = [ "." ] fullIdent
 fullIdent      = ident *( "." ident )
-ident          = TX
+; An identifier is a TX token, a value word (\`true\`, \`false\` and \`null\`
+; lex as VL) or any keyword: protoc's tokenizer has one identifier class.
+; The grammar is compiled with \`tokenClasses\`, so this rule is one engine
+; token set and a lookahead position peeks it as one token.
+ident          = TX / VL / %s"syntax" / %s"edition" / %s"import" / %s"weak"
+               / %s"public" / %s"package" / %s"option" / %s"message"
+               / %s"enum" / %s"service" / %s"extend" / %s"required"
+               / %s"optional" / %s"repeated" / %s"oneof" / %s"map"
+               / %s"extensions" / %s"reserved" / %s"to" / %s"max"
+               / %s"rpc" / %s"returns" / %s"stream" / %s"group"
+               / %s"export" / %s"local"
 strLit         = ST
 emptyStmt      = ";"
 
+; A group is proto2's (and a legal oneof member: \`oneof foo { group D = 4
+; {…} }\`); the descriptor walk enforces the version. It lives here rather
+; than in proto2.abnf because messageElement and oneofElement order it
+; ahead of \`field\`, and a rule added by \`=/\` is appended after it.
+groupField     = [ label ] %s"group" ident "=" fieldNumber messageBody
+; Edition 2024's visibility modifier ahead of a message or enum, here for
+; the same reason. \`export\` and \`local\` stay ordinary identifiers
+; everywhere else (\`local.pkg.SomeMessage\`), as every keyword does.
+symbolVisibility = %s"export" / %s"local"
+
 ; ===== proto2.abnf =====
-; proto2 deltas: groups are proto2-only (deprecated). Labels (required/
-; optional/repeated), extend, and extensions live in common (the permissive
-; union); the descriptor walk enforces what each version actually allows.
-messageElement =/ groupField
-; A group is also a legal oneof member (\`oneof foo { group D = 4 {…} }\`).
-oneofElement   =/ groupField
-groupField     = [ label ] "group" ident "=" fieldNumber messageBody
+; proto2 deltas: groups are proto2-only (deprecated). The \`groupField\`
+; rule lives in common.abnf, ordered ahead of \`field\` in messageElement
+; and oneofElement. Labels (required/optional/repeated), extend, and
+; extensions live in common too (the permissive union); the descriptor
+; walk enforces what each version actually allows.
 
 ; ===== proto3.abnf =====
 ; proto3 deltas: none. proto3's surface syntax is the common base
@@ -103,18 +136,14 @@ groupField     = [ label ] "group" ident "=" fieldNumber messageBody
 ; edition 2023 deltas: the file may open with an \`edition = "2023";\`
 ; declaration instead of \`syntax = ...\`.
 syntaxOrEdition =/ editionDecl
-editionDecl     = "edition" "=" strLit ";"
+editionDecl     = %s"edition" "=" strLit ";"
 
 ; ===== edition-2024.abnf =====
 ; edition 2024 deltas: \`import option "...";\` and symbol visibility
-; (export / local) on message and enum declarations.
-importStmt      =/ "import" "option" strLit ";"
+; (export / local) on message and enum declarations. \`symbolVisibility\`
+; and its messageElement alternatives live in common.abnf, ordered ahead
+; of \`field\`. \`export\` and \`local\` are identifiers everywhere else, as
+; every keyword is (\`local.pkg.SomeMessage\`), so fullIdent needs nothing.
+importStmt      =/ %s"import" %s"option" strLit ";"
 topLevelDef     =/ symbolVisibility message / symbolVisibility enumDef
-messageElement  =/ symbolVisibility message / symbolVisibility enumDef
-symbolVisibility = "export" / "local"
-; \`export\` and \`local\` are contextual: they are only visibility modifiers
-; ahead of \`message\`/\`enum\`, and stay usable as ordinary name components
-; (\`local.pkg.SomeMessage\`). The union grammar lexes them as keywords, so
-; give fullIdent an alternative that may open with one.
-fullIdent       =/ symbolVisibility *( "." ident )
 `

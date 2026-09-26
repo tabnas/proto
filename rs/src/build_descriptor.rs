@@ -1042,6 +1042,26 @@ fn build_service(node: &Value) -> ServiceDescriptorProto {
     service
 }
 
+/// The contents of the first two parenthesised spans of a statement's
+/// text. No identifier or type holds a parenthesis, so for an rpc these
+/// are its input and its output, whatever the names in them are spelled.
+/// Mirrors the TypeScript `parenthesised`.
+fn parenthesised(src: &str) -> Vec<&str> {
+    let mut out = Vec::new();
+    let mut at = 0;
+    while out.len() < 2 {
+        let Some(open) = src[at..].find('(').map(|i| i + at) else {
+            break;
+        };
+        let Some(close) = src[open + 1..].find(')').map(|i| i + open + 1) else {
+            break;
+        };
+        out.push(&src[open + 1..close]);
+        at = close + 1;
+    }
+    out
+}
+
 /// `rpc ident "(" ["stream"] messageType ")" "returns"
 /// "(" ["stream"] messageType ")"`.
 fn build_rpc(element: &Value) -> MethodDescriptorProto {
@@ -1061,16 +1081,25 @@ fn build_rpc(element: &Value) -> MethodDescriptorProto {
         server_streaming: false,
         options: None,
     };
-    // `stream` is a bare terminal, so it never becomes a node, but it sits
-    // immediately ahead of the type it modifies, which is exactly what the
-    // gap holds. Searching the statement for `(stream` instead marks an
-    // ordinary type whose name merely BEGINS with those letters, so
-    // `rpc M (streaming.Request)` came back client-streaming.
-    let modifiers = gaps_before(element, "messageType");
-    if modifiers.first().is_some_and(|gap| gap.ends_with("stream")) {
+    // `stream` is a bare terminal, so it never becomes a node, and the name
+    // and both types are identifiers that may themselves be spelled
+    // `stream` (`rpc stream (stream stream)`), so no search for a child's
+    // text can say which copy is the modifier. The parentheses can: a name
+    // or a type never holds one, so the first two parenthesised spans are
+    // the input and the output, each the type's own text with or without
+    // `stream` ahead of it. A type that merely begins with those letters
+    // (`rpc M (streaming.Request)`) is its own text, and is not streaming.
+    let spans = parenthesised(nsrc(element));
+    if spans
+        .first()
+        .is_some_and(|span| *span == format!("stream{}", method.input_type))
+    {
         method.client_streaming = true;
     }
-    if modifiers.get(1).is_some_and(|gap| gap.ends_with("stream")) {
+    if spans
+        .get(1)
+        .is_some_and(|span| *span == format!("stream{}", method.output_type))
+    {
         method.server_streaming = true;
     }
     for option in children(element, "optionStmt") {
