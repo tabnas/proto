@@ -24,8 +24,8 @@ import (
 	"sync"
 	"unicode/utf8"
 
-	plug "github.com/tabnas/proto/go"
 	host "github.com/tabnas/parser/go"
+	plug "github.com/tabnas/proto/go"
 )
 
 const (
@@ -86,7 +86,17 @@ var _ = &sharedMu // referenced only by opt-in constructs
 // ignore it; a row that defines options must validate it here, since
 // nothing upstream does.
 func newParser(opts string) (parseFn, error) {
-	j := host.Make(); if err := plug.Proto(j); err != nil { return nil, err }; return func(src string) (any, error) { cst, err := j.Parse(src); if err != nil { return nil, err }; return plug.ToDescriptor(cst, nil) }, nil
+	j := host.Make()
+	if err := plug.Proto(j); err != nil {
+		return nil, err
+	}
+	return func(src string) (any, error) {
+		cst, err := j.Parse(src)
+		if err != nil {
+			return nil, err
+		}
+		return plug.ToDescriptor(cst, nil)
+	}, nil
 }
 
 // reply marshals a result document. Marshalling cannot fail for the
