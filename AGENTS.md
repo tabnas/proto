@@ -208,13 +208,18 @@ cd ts && npm i && npm run build && npm test
 ```
 
 Dependencies: `@tabnas/abnf` and `@tabnas/parser` are `peerDependencies`
-(`">=0"`) and `"*"` devDependencies in `ts/package.json`, and
-`@tabnas/support` is a dev-only `"*"` devDependency (the shared fixture
-loader). None is a `file:` path, so `npm i` resolves all three from the
-registry. The `TX`/`NR`/`ST`/`VL` token terminals and the `wordKeywords`
-option proto relies on are in the published releases (`wordKeywords` is
-implemented by `@tabnas/bnf`, which `@tabnas/abnf` builds on). Node ≥ 24
-in CI (warns but runs on 22).
+and `"*"` devDependencies in `ts/package.json`, and `@tabnas/support` is a
+dev-only `"*"` devDependency (the shared fixture loader). None is a
+`file:` path, so `npm i` resolves all three from the registry. The peer
+ranges are floors at the versions `go/go.mod` requires, today
+`@tabnas/abnf` `>=0.4.16` and `@tabnas/parser` `>=0.12.4`, and they move
+with each release, as they do in abnf, ebnf and gbnf. Those are the
+releases the Go module builds and tests against, so a TypeScript install
+never pairs this grammar with an older compiler or engine than that. They
+were a bare `">=0"` through 0.6.1. The `TX`/`NR`/`ST`/`VL` token terminals
+and the `wordKeywords` option proto relies on are in the published
+releases (`wordKeywords` is implemented by `@tabnas/bnf`, which
+`@tabnas/abnf` builds on). Node ≥ 24 in CI (warns but runs on 22).
 
 ## Verify your work
 
@@ -326,6 +331,11 @@ The steps, in order:
    Bumping `rs/Cargo.toml` also moves `rs/Cargo.lock`'s entry for this
    crate, which `ci/rust/run.sh` compares before it runs anything. Run
    `cargo update --workspace` in `rs/` and commit the lock with the bump.
+
+   When the release also moves a `require` in `go/go.mod`, move the
+   matching `peerDependencies` floor in `ts/package.json` to the same
+   version. The floors track what the Go module requires, as in abnf,
+   ebnf and gbnf.
 2. Verify against the **published** dependencies rather than your checkout.
    The release runner installs fresh from the registry; a working tree
    usually does not, so reproduce that before believing anything:

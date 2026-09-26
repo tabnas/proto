@@ -1,6 +1,6 @@
 {
   "name": "@tabnas/proto",
-  "version": "0.6.1",
+  "version": "0.6.2",
   "description": "Parse Protocol Buffers .proto IDL (proto2, proto3, edition 2023/2024) into FileDescriptorProto-shaped JSON, using the Tabnas parser and an ABNF grammar.",
   "main": "dist/proto.js",
   "type": "commonjs",
@@ -54,8 +54,8 @@
     "LICENSE"
   ],
   "peerDependencies": {
-    "@tabnas/abnf": ">=0",
-    "@tabnas/parser": ">=0"
+    "@tabnas/abnf": ">=0.4.16",
+    "@tabnas/parser": ">=0.12.4"
   },
   "devDependencies": {
     "@tabnas/abnf": "*",
