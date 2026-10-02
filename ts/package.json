@@ -55,7 +55,7 @@
   ],
   "peerDependencies": {
     "@tabnas/abnf": ">=0.4.16",
-    "@tabnas/parser": ">=0.12.7"
+    "@tabnas/parser": ">=0.12.8"
   },
   "devDependencies": {
     "@tabnas/abnf": "*",
