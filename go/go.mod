@@ -3,9 +3,9 @@ module github.com/tabnas/proto/go
 go 1.24.7
 
 require (
-	github.com/tabnas/abnf/go v0.4.16
-	github.com/tabnas/parser/go v0.12.8
-	github.com/tabnas/support/go v0.3.5
+	github.com/tabnas/abnf/go v0.4.17
+	github.com/tabnas/parser/go v0.12.9
+	github.com/tabnas/support/go v0.3.6
 )
 
-require github.com/tabnas/bnf/go v0.1.22 // indirect
+require github.com/tabnas/bnf/go v0.1.25 // indirect
