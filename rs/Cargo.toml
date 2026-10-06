@@ -20,22 +20,26 @@ name = "tabnas_proto"
 path = "src/lib.rs"
 
 [dependencies]
-# The engine and the ABNF compiler are consumed as SIBLING CHECKOUTS, the
-# standard tabnas development model: clone https://github.com/tabnas/parser
-# and https://github.com/tabnas/abnf next to this repo. Neither crate is
-# published, so there is no registry version to fall back on.
-#
-# Clone https://github.com/tabnas/bnf as well. It gets no entry here,
-# because it is tabnas-abnf that depends on it, but cargo reads the whole
-# manifest graph before it compiles anything, so without that checkout
-# nothing here resolves.
+# The engine is consumed as a SIBLING CHECKOUT, the standard tabnas
+# development model: clone https://github.com/tabnas/parser next to this
+# repo. It is not published, so there is no registry version to fall
+# back on. It is the crate's only tabnas dependency: the grammar arrives
+# compiled, in proto-grammar.json.
 tabnas = { package = "tabnas-parser", path = "../../parser/rs" }
-tabnas-abnf = { path = "../../abnf/rs" }
 indexmap = { version = "2", features = ["serde"] }
 serde = { version = "1.0", features = ["derive"] }
 serde_json = { version = "1.0", features = ["preserve_order", "raw_value"] }
 
 [dev-dependencies]
+# The ABNF compiler, which compiles the union grammar into
+# proto-grammar.json at build time: tests/grammar_spec_test.rs writes that
+# file and fails when it is stale. A dev-dependency only, so the library
+# never builds it. Also a SIBLING CHECKOUT: clone
+# https://github.com/tabnas/abnf next to this repo, and
+# https://github.com/tabnas/bnf too, which gets no entry here because it
+# is tabnas-abnf that depends on it, but cargo reads the whole manifest
+# graph before it compiles anything.
+tabnas-abnf = { path = "../../abnf/rs" }
 # The shared fixture loader, runner and divergence register: one loader in
 # three languages, so the rows mean the same thing in every runtime.
 tabnas-support = { path = "../../support/rs", features = ["serde_json"] }

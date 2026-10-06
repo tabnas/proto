@@ -33,8 +33,9 @@ The grammar is authored once in ABNF (`proto-grammar/*.abnf`): a shared
 `edition-2023`, `edition-2024`) that extend it with ABNF incremental
 alternatives (`name =/ alt`). `embed-grammar.js` concatenates them into a
 single permissive union grammar embedded in the package. `@tabnas/abnf`
-compiles that grammar to a Tabnas `GrammarSpec`; the engine parses a
-`.proto` file into a CST, and a small walk assembles the
+compiles that grammar to a Tabnas `GrammarSpec` at build time, and each
+port ships the result (`proto-grammar.json`) and installs it with no
+compiler at run time; the engine parses a `.proto` file into a CST, and a small walk assembles the
 FileDescriptorProto. Version-specific legality is recorded from the
 `syntax` / `edition` declaration.
 

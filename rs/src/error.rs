@@ -18,7 +18,7 @@ pub enum ProtoError {
     /// The engine rejected the source. Carries the engine's own error,
     /// with its code, position and rendered report.
     Parse(Box<TabnasError>),
-    /// The embedded grammar could not be compiled or installed. Only a
+    /// The embedded compiled grammar could not be loaded or installed. Only a
     /// broken build reaches this.
     Grammar(String),
     /// The plugin's own version check refused the document: an unknown

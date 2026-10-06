@@ -4,3 +4,9 @@
 # Preserve line endings in test fixtures - some tests depend on specific line endings
 test/fixtures/*.csv binary
 test/fixtures/*.json binary
+
+# Each port's compiled grammar (ts/src, go and rs proto-grammar.json) is
+# generated, and its test compares it byte for byte with the compiler's
+# output: keep LF on every platform, and fold it in review diffs as
+# generated.
+proto-grammar.json text eol=lf linguist-generated=true

@@ -16,15 +16,15 @@ use std::time::Instant;
 
 use tabnas_proto::{make, parse, to_descriptor};
 
-/// Compiling the grammar dominates everything else, which is why `parse`
-/// keeps one instance. Pinned so a change that started recompiling per
-/// call shows up as the order-of-magnitude regression it would be.
+/// Installing the grammar dominates everything else, which is why `parse`
+/// keeps one instance. Pinned so a change that started rebuilding the
+/// parser per call shows up as the regression it would be.
 #[test]
 fn compiling_the_grammar_happens_once() {
     let start = Instant::now();
     let parser = make();
     let compile = start.elapsed().as_secs_f64();
-    assert!(compile < 60.0, "compiling the grammar took {compile:.1}s");
+    assert!(compile < 60.0, "installing the grammar took {compile:.1}s");
 
     let source = "syntax = \"proto3\";\nmessage M { int32 a = 1; }";
     let start = Instant::now();
@@ -35,7 +35,7 @@ fn compiling_the_grammar_happens_once() {
     let fifty = start.elapsed().as_secs_f64();
     assert!(
         fifty < compile.max(1.0) * 10.0,
-        "50 parses took {fifty:.2}s against a {compile:.2}s compile, which is not the \
+        "50 parses took {fifty:.2}s against a {compile:.2}s install, which is not the \
          one-off cost this instance reuse exists for"
     );
 }
@@ -71,7 +71,7 @@ fn a_realistic_file_parses_quickly() {
          rpc Watch (stream M0) returns (stream M1);\n}\n",
     );
 
-    // Warm the shared instance: the grammar compile is measured above.
+    // Warm the shared instance: the grammar install is measured above.
     let _ = parse("syntax = \"proto3\";", None);
     let start = Instant::now();
     let file = parse(&source, None).expect("a realistic file parses");

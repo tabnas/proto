@@ -8,9 +8,10 @@ Protocol Buffers' `.proto` language is published only as informal EBNF on
 [protobuf.dev](https://protobuf.dev/), with one spec page per version and
 no single reusable parser. This package authors the language **once in
 ABNF** and lets [`@tabnas/abnf`](https://github.com/tabnas/abnf) compile it
-to a Tabnas `GrammarSpec`. The engine parses a `.proto` file into a generic
-`{rule, src, kids}` CST; a small TypeScript walk turns that into a
-FileDescriptorProto.
+to a Tabnas `GrammarSpec` once, at build time: the package ships that
+spec, `src/proto-grammar.json`, and installs it without the compiler.
+The engine parses a `.proto` file into a generic `{rule, src, kids}`
+CST; a small TypeScript walk turns that into a FileDescriptorProto.
 
 ## Simple lexer, structure in the grammar
 

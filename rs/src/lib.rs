@@ -16,7 +16,9 @@
 //! [`tabnas`](https://github.com/tabnas/parser) engine rather than a
 //! hand-written parser: `proto-grammar/*.abnf` at the repository root is
 //! the single source of truth, embedded into every runtime by
-//! `ts/embed-grammar.js`.
+//! `ts/embed-grammar.js`. `tabnas-abnf` compiles it at build time into
+//! `proto-grammar.json`, which this crate embeds and installs, so the
+//! crate itself depends on no ABNF compiler.
 //!
 //! ```
 //! fn main() -> Result<(), Box<dyn std::error::Error>> {
@@ -58,8 +60,9 @@ use std::sync::OnceLock;
 
 use indexmap::IndexMap;
 use serde::Deserialize;
-use tabnas::{Options as EngineOptions, Plugin, PluginError, RewindOptions, Tabnas, Value};
-use tabnas_abnf::{abnf, AbnfConvertOptions, AbnfOptions};
+use tabnas::{
+    GrammarSpec, Options as EngineOptions, Plugin, PluginError, RewindOptions, Tabnas, Value,
+};
 
 pub use build_descriptor::{build_file, MAX_NESTING_DEPTH};
 pub use descriptor::{
@@ -84,6 +87,12 @@ pub const VERSION: &str = "0.6.3";
 /// The plugin's name on an instance, and the key its option bag hangs
 /// under.
 pub const PLUGIN_NAME: &str = "Proto";
+
+/// The compiled grammar: `proto-grammar.json`, the engine's serialized
+/// rule set, which `tabnas-abnf` compiles from [`GRAMMAR_TEXT`] at build
+/// time (`tests/grammar_spec_test.rs` writes it, and fails when it is
+/// stale). Generated: never edit it.
+const GRAMMAR_SPEC: &str = include_str!("../proto-grammar.json");
 
 /// The engine's retained backtracking history, as the canonical
 /// `new Tabnas({ rewind: { history: 8192 } })` sets it.
@@ -143,26 +152,25 @@ impl Default for ProtoOptions {
 /// ```
 pub fn proto(parser: &mut Tabnas) -> Result<(), ProtoError> {
     // Guard against re-invocation on the same instance: the grammar is
-    // stateless, but compiling and installing it twice is wasted work.
+    // stateless, but loading and installing it twice is wasted work.
     // The engine's own rule list answers the question without inventing
     // a decoration key.
     if parser.rule_names().iter().any(|name| "proto" == name) {
         return Ok(());
     }
-    // `word_keywords` is REQUIRED: it makes literal keywords match as
-    // whole words, so `option` does not grab the `option` prefix of
-    // `optional`. Without it the grammar mis-tokenises. `token_classes`
-    // compiles `ident` (an identifier or any keyword) to one engine token
-    // set, so a lookahead position peeks it as one token rather than one
-    // alternate per keyword.
-    let convert = AbnfConvertOptions {
-        start: Some("proto".to_string()),
-        tag: Some("proto".to_string()),
-        word_keywords: true,
-        token_classes: true,
-        ..AbnfConvertOptions::default()
-    };
-    abnf(parser, GRAMMAR_TEXT, Some(&AbnfOptions::new(convert)))
+    // The union grammar, compiled at build time with the options this
+    // function used to pass at every install. `word_keywords` is REQUIRED:
+    // it makes literal keywords match as whole words, so `option` does not
+    // grab the `option` prefix of `optional`. Without it the grammar
+    // mis-tokenises. `token_classes` compiles `ident` (an identifier or any
+    // keyword) to one engine token set, so a lookahead position peeks it as
+    // one token rather than one alternate per keyword. The CST builders are
+    // the engine's own `@node$` / `@capture$` / `@bubble$` builtins, so the
+    // document is pure data and installs with no compiler.
+    let spec = GrammarSpec::from_json(GRAMMAR_SPEC)
+        .map_err(|error| ProtoError::Grammar(format!("proto: {error}")))?;
+    parser
+        .grammar(&spec)
         .map_err(|error| ProtoError::Grammar(format!("proto: {error}")))?;
     // An aggregate value (`option (f) = { a: 1 };`) is recorded as the text
     // between its braces, which the CST's `src` does not keep: the lexer
@@ -205,7 +213,7 @@ pub fn engine() -> Tabnas {
 /// Build a proto parser: [`engine`] with this plugin installed, the
 /// counterpart of `new Tabnas().use(Proto)` and the Go `Proto(j)`.
 ///
-/// Compiling the grammar dominates a parse, so build one and reuse it.
+/// Installing the grammar dominates a parse, so build one and reuse it.
 /// Read each document through [`parse_with`], which runs the nesting
 /// [`preflight`] the engine's own `parse` does not.
 ///
@@ -226,8 +234,8 @@ pub fn make() -> Tabnas {
 
 /// The shared default parser.
 ///
-/// Compiling the grammar dominates a parse by orders of magnitude, and
-/// the plugin keeps no per-parse state on the instance, so one instance
+/// Installing the grammar dominates a parse by more than an order of
+/// magnitude, and the plugin keeps no per-parse state on the instance, so one instance
 /// serves every call to [`parse`]. Parsing builds a fresh context and
 /// only reads instance state, so it is safe for concurrent use.
 fn shared() -> &'static Tabnas {
@@ -301,8 +309,8 @@ pub fn preflight(src: &str) -> Result<(), ProtoError> {
 
 /// Parse a `.proto` source string on a parser the caller holds.
 ///
-/// The high-throughput path. Compiling the grammar dominates a parse by
-/// orders of magnitude, so a caller reading many documents builds one
+/// The high-throughput path. Installing the grammar dominates a parse by
+/// more than an order of magnitude, so a caller reading many documents builds one
 /// instance with [`make`] and passes it here, rather than driving the
 /// engine directly: this runs the same [`preflight`] [`parse`] runs, and
 /// the engine's own `parse` does not.

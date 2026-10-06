@@ -8,6 +8,7 @@
 
 .PHONY: all build test clean build-ts build-go build-rs test-ts test-go test-rs \
         clean-ts clean-go clean-rs publish-ts publish-go tags-go reset embed generate \
+        gen-grammar \
         prose prose-counts
 
 all: build test
@@ -31,6 +32,20 @@ clean-ts:
 embed:
 	cd ts && npm run embed
 
+# Recompile the grammar into every port's compiled grammar, after editing
+# a proto-grammar/*.abnf file (run `make embed` first, which brings the
+# Rust copy of the text up to date) or after an ABNF compiler release
+# that changes what it emits. Each port compiles with its own compiler,
+# because the TypeScript one writes a regex lookahead that the Go and Rust
+# engines cannot run: ts/src/proto-grammar.json (@tabnas/abnf),
+# go/proto-grammar.json (go generate, which also rewrites go/grammar.go)
+# and rs/proto-grammar.json (tabnas-abnf). Each port's suite fails while
+# its file is stale.
+gen-grammar:
+	cd ts && npm run gen-grammar
+	cd go && go generate ./...
+	cd rs && TABNAS_WRITE_GRAMMAR=1 cargo test --test grammar_spec_test
+
 # Publish the TypeScript package at its current package.json version.
 publish-ts: test-ts
 	cd ts && npm publish --access public
@@ -45,7 +60,8 @@ test-go:
 clean-go:
 	cd go && go clean
 
-# Regenerate go/grammar.go from proto-grammar/*.abnf (Go counterpart of embed).
+# Regenerate go/grammar.go from proto-grammar/*.abnf (Go counterpart of
+# embed), and go/proto-grammar.json, the Go port's compiled grammar.
 generate:
 	cd go && go generate ./...
 
@@ -69,8 +85,10 @@ tags-go:
 # --- Rust (crate in rs/) ---
 #
 # Nothing to fetch: the engine, the ABNF compiler and the shared fixture
-# runner are path dependencies on sibling checkouts (parser, abnf, bnf,
-# support). `ci/rust/run.sh` is the full gate; these are the inner loop.
+# runner are path dependencies on sibling checkouts (parser, support, and
+# abnf and bnf for the dev-only compiler that regenerates
+# rs/proto-grammar.json). `ci/rust/run.sh` is the full gate; these are
+# the inner loop.
 build-rs:
 	cd rs && cargo build --all-targets
 

@@ -8,6 +8,19 @@
 // the Go counterpart of ts/embed-grammar.js and produces a byte-identical
 // grammar string.
 //
+// It then compiles that grammar, here, at build time, into
+// proto-grammar.json, the engine's serialized rule set, which proto.go
+// embeds and installs: so the module itself never imports the ABNF
+// compiler, and github.com/tabnas/abnf/go is a build- and test-time
+// dependency only. The options are the ones the plugin used to pass at
+// every install, plus Builtins, so the {rule, src, kids} builders are the
+// engine's own @node$ / @capture$ / @bubble$ builtins rather than closures,
+// and ToPureSpec, which keeps them and refuses any closure. The output is
+// the Go compiler's, deterministic, and loadable by the Go engine (a
+// whole-word keyword guard is `\b`, where the TypeScript compiler writes a
+// lookahead RE2 cannot run; see AGENTS.md, "The compiled grammar").
+// grammar_spec_test.go compiles again and fails when the file is stale.
+//
 // Run:  go generate ./...   (or:  go run grammar_gen.go)
 package main
 
@@ -16,6 +29,8 @@ import (
 	"os"
 	"strconv"
 	"strings"
+
+	abnf "github.com/tabnas/abnf/go"
 )
 
 // common first (defines every base rule); deltas extend via `name =/ alt`.
@@ -48,4 +63,28 @@ func main() {
 		os.Exit(1)
 	}
 	fmt.Println("Embedded", len(order), "grammar files into grammar.go")
+
+	// The compiled grammar. grammar_spec_test.go repeats these calls with
+	// the same options: change them together.
+	spec, err := abnf.Abnf(grammar, &abnf.AbnfConvertOptions{
+		Tag:          "proto",
+		Start:        "proto",
+		WordKeywords: true,
+		TokenClasses: true,
+		Builtins:     true,
+	})
+	if err != nil {
+		fmt.Fprintln(os.Stderr, "grammar_gen:", err)
+		os.Exit(1)
+	}
+	data, err := abnf.ToPureSpec(spec)
+	if err != nil {
+		fmt.Fprintln(os.Stderr, "grammar_gen:", err)
+		os.Exit(1)
+	}
+	if err := os.WriteFile("proto-grammar.json", []byte(abnf.ToJsonic(data, true, 2)+"\n"), 0o644); err != nil {
+		fmt.Fprintln(os.Stderr, "grammar_gen:", err)
+		os.Exit(1)
+	}
+	fmt.Println("Compiled the grammar into proto-grammar.json")
 }
