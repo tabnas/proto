@@ -4,9 +4,12 @@
 # you. `make test-rs` is the fast inner loop; this is the full gate.
 #
 # The engine and the ABNF compiler are PATH DEPENDENCIES on sibling
-# checkouts (rs/Cargo.toml: `tabnas = { package = "tabnas-parser", path = "../../parser/rs" }` and
-# `tabnas-abnf = { path = "../../abnf/rs" }`), and neither crate is
-# published, so there is no registry version to fall back on. Clone
+# checkouts (rs/Cargo.toml: `tabnas = { package = "tabnas-parser", path = "../../parser/rs" }`,
+# and, as a dev-dependency only, `tabnas-abnf = { path = "../../abnf/rs" }`:
+# the library installs the grammar already compiled, and the compiler is
+# for tests/grammar_spec_test.rs, which regenerates rs/proto-grammar.json
+# and fails when it is stale). Neither crate is published, so there is no
+# registry version to fall back on. Clone
 # https://github.com/tabnas/parser and https://github.com/tabnas/abnf next
 # to this repo before running. `tabnas-abnf` in turn depends on
 # https://github.com/tabnas/bnf, which gets no entry in rs/Cargo.toml but

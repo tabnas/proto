@@ -32,6 +32,7 @@
     "pretest-watch": "npm run build",
     "test-watch": "node --test --watch dist-test/proto.test.js",
     "embed": "node embed-grammar.js",
+    "gen-grammar": "node gen-grammar.js",
     "example": "node examples/wire-poc/demo.js",
     "preexample-test": "npm run build",
     "example-test": "node --test examples/wire-poc/codec.test.js",
@@ -54,7 +55,6 @@
     "LICENSE"
   ],
   "peerDependencies": {
-    "@tabnas/abnf": ">=0.4.16",
     "@tabnas/parser": ">=0.12.8"
   },
   "devDependencies": {

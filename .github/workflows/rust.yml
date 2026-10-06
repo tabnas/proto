@@ -60,9 +60,10 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       # Checked out into a NAMED directory. rs/Cargo.toml takes the
-      # engine as `path = "../../parser/rs"` and the ABNF compiler as
-      # `path = "../../abnf/rs"`, which resolve relative to rs/, so both
-      # have to sit beside this checkout rather than inside it. A bare
+      # engine as `path = "../../parser/rs"` and the ABNF compiler (a
+      # dev-dependency, for the test that holds rs/proto-grammar.json to
+      # it) as `path = "../../abnf/rs"`, which resolve relative to rs/, so
+      # both have to sit beside this checkout rather than inside it. A bare
       # `actions/checkout` into the workspace root leaves nowhere for a
       # sibling to go.
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7.0.1

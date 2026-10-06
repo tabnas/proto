@@ -2,15 +2,19 @@
 
 // Package tabnasproto parses Protocol Buffers .proto IDL (proto2, proto3,
 // edition 2023/2024) into FileDescriptorProto-shaped Go values. It drives the
-// Tabnas engine with an ABNF grammar (via @tabnas/abnf) rather than a
-// hand-written parser. The version is auto-detected from the file's
-// syntax/edition declaration and/or supplied via ProtoOptions.
+// Tabnas engine with an ABNF grammar rather than a hand-written parser: the
+// grammar is compiled by github.com/tabnas/abnf/go at build time (go
+// generate) and embedded, so the package imports no compiler. The version
+// is auto-detected from the file's syntax/edition declaration and/or
+// supplied via ProtoOptions.
 //
 // Go port of ts/src/proto.ts.
 package tabnasproto
 
 import (
-	abnf "github.com/tabnas/abnf/go"
+	_ "embed"
+	"fmt"
+
 	tabnas "github.com/tabnas/parser/go"
 )
 
@@ -20,6 +24,14 @@ import (
 const VERSION = "0.6.3"
 
 //go:generate go run grammar_gen.go
+
+// grammarSpec is the compiled grammar: proto-grammar.json, the engine's
+// serialized rule set, which grammar_gen.go compiles from GrammarText with
+// github.com/tabnas/abnf/go when `go generate` runs. Generated: never edit
+// it; grammar_spec_test.go fails when it is stale.
+//
+//go:embed proto-grammar.json
+var grammarSpec []byte
 
 // ProtoOptions configures descriptor construction.
 type ProtoOptions struct {
@@ -35,18 +47,20 @@ type ProtoOptions struct {
 // into a {rule, src, kids} CST. Use ToDescriptor to turn that CST into a
 // FileDescriptorProto. Mirrors the TS `tn.use(Proto)` plugin.
 func Proto(j *tabnas.Tabnas) error {
-	// Proto drives parsing through @tabnas/abnf. WordKeywords is required so
-	// literal keywords match as whole words (e.g. `option` does not grab the
-	// `option` prefix of `optional`); TokenClasses compiles `ident` (an
-	// identifier or any keyword) to one engine token set, so a lookahead
-	// position peeks it as one token rather than one alternate per keyword.
-	_, err := abnf.Install(j, GrammarText, &abnf.AbnfConvertOptions{
-		Tag:          "proto",
-		Start:        "proto",
-		WordKeywords: true,
-		TokenClasses: true,
-	}, nil)
+	// The union grammar, compiled at build time by grammar_gen.go with the
+	// options this function used to pass at every install. WordKeywords is
+	// required so literal keywords match as whole words (e.g. `option` does
+	// not grab the `option` prefix of `optional`); TokenClasses compiles
+	// `ident` (an identifier or any keyword) to one engine token set, so a
+	// lookahead position peeks it as one token rather than one alternate
+	// per keyword. The CST builders are the engine's own @node$ / @capture$
+	// / @bubble$ builtins, so the file is pure data and installs through
+	// the engine's serialized-grammar door, with no compiler.
+	gs, err := tabnas.GrammarSpecFromJSON(grammarSpec)
 	if err != nil {
+		return fmt.Errorf("proto: the compiled grammar failed to load: %w", err)
+	}
+	if err := j.Grammar(gs); err != nil {
 		return err
 	}
 	// An aggregate value (`option (f) = { a: 1 };`) is recorded as the text

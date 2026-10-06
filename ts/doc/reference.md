@@ -17,8 +17,10 @@ returns the raw `{rule, src, kids}` CST. A node's `src` holds its tokens
 run together and no whitespace. The `constant` node of an aggregate option
 value also carries `aggregate`, the text the descriptor records for that
 value, described under Options below. `Proto.defaults` is
-`{ version: null, reconcile: true }`. The plugin installs `@tabnas/abnf`
-automatically if it is not already present.
+`{ version: null, reconcile: true }`. The grammar arrives compiled
+(`src/proto-grammar.json`, built by `@tabnas/abnf` when the package is
+made), so the plugin installs no ABNF compiler and needs none: the
+engine is the only peer dependency.
 
 ### `toDescriptor(cst, options?) => FileDescriptorProto`
 

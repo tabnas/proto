@@ -5,7 +5,7 @@ This walks you from nothing to a parsed FileDescriptorProto.
 ## 1. Install
 
 ```sh
-npm install @tabnas/proto @tabnas/parser @tabnas/abnf
+npm install @tabnas/proto @tabnas/parser
 ```
 
 ## 2. Parse a file

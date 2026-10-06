@@ -13,15 +13,17 @@ The parser is a grammar rather than hand-written code.
 [`../proto-grammar`](../proto-grammar) holds five RFC 5234 ABNF files, a
 permissive union of every version's syntax plus the per-version deltas,
 and [`tabnas-abnf`](https://github.com/tabnas/abnf) compiles them into
-the engine's rule set when the plugin is installed. What each version
-actually allows is the descriptor walk's concern, not recognition's.
+the engine's rule set at build time. The crate embeds that compiled rule
+set, [`proto-grammar.json`](proto-grammar.json), and installs it with no
+compiler. What each version actually allows is the descriptor walk's concern, not recognition's.
 
 This is the Rust port of the canonical TypeScript implementation in
 [`../ts`](../ts); the TypeScript version is authoritative and this crate
 tracks it. The Go port is in [`../go`](../go). All three embed the same
 grammar text, written by
 [`../ts/embed-grammar.js`](../ts/embed-grammar.js) and
-[`../go/grammar_gen.go`](../go/grammar_gen.go).
+[`../go/grammar_gen.go`](../go/grammar_gen.go), and each compiles it with
+its own ABNF compiler at build time.
 
 ## Use
 
@@ -39,9 +41,9 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 }
 ```
 
-`parse` builds one parser on first use and reuses it. Compiling the ABNF
-and installing the rule set costs orders of magnitude more than a parse,
-so for anything but a one-off call build an instance once and keep it,
+`parse` builds one parser on first use and reuses it. Loading the
+compiled grammar and installing its rule set costs many times more than
+a parse, so for anything but a one-off call build an instance once and keep it,
 and read each document with `parse_with`:
 
 ```rust
@@ -241,11 +243,10 @@ that merely mentions braces is not refused for nesting.
 
 ## Install
 
-Neither the engine nor the ABNF compiler is published to a registry, so
-both are consumed as **sibling checkouts**, the standard tabnas
-development model. Clone `https://github.com/tabnas/parser`,
-`https://github.com/tabnas/abnf` and `https://github.com/tabnas/bnf`
-next to this repository and point at them:
+The engine is not published to a registry, so it is consumed as a
+**sibling checkout**, the standard tabnas development model. Clone
+`https://github.com/tabnas/parser` next to this repository and point at
+it:
 
 ```toml
 [dependencies]
@@ -253,14 +254,14 @@ tabnas-proto = { path = "../proto/rs" }
 tabnas = { package = "tabnas-parser", path = "../parser/rs" }
 ```
 
-`tabnas-bnf` needs no entry of its own, because it is `tabnas-abnf` that
-depends on it, but cargo reads the whole manifest graph before it
-compiles anything, so the checkout has to be on disk. The `tabnas` entry
-is there because a crate's dependencies are not passed on to its
+The crate needs no ABNF compiler, because it carries its grammar
+already compiled. The `tabnas` entry is there because a crate's dependencies are not passed on to its
 dependents: `tabnas_proto` alone does not put `tabnas::Tabnas` or
 `tabnas::Value` in scope. The test suite additionally needs
 `https://github.com/tabnas/support` beside the repository, for the shared
-fixture runner.
+fixture runner, and `https://github.com/tabnas/abnf` and
+`https://github.com/tabnas/bnf`, for the test that compiles the grammar
+again and holds `proto-grammar.json` to the result.
 
 ## Differences from the canonical TypeScript
 
@@ -308,8 +309,9 @@ runtimes to the rest.
 
 ## Build and test
 
-The engine, the ABNF compiler and the fixture runner are path
-dependencies on sibling checkouts, so there is nothing to fetch:
+The engine, the fixture runner and the ABNF compiler (a dev-dependency)
+are path dependencies on sibling checkouts, so there is nothing to
+fetch:
 
 ```bash
 cargo test --all-targets && cargo test --doc
@@ -317,7 +319,10 @@ cargo test --all-targets && cargo test --doc
 
 Or, from the repository root, `make test-rs`. For what CI would say,
 including formatting, Clippy and the lockfile check, run
-`ci/rust/run.sh`.
+`ci/rust/run.sh`. After an edit to the grammar, regenerate the compiled
+grammar with
+`TABNAS_WRITE_GRAMMAR=1 cargo test --test grammar_spec_test`; the
+suite fails while `proto-grammar.json` is stale.
 
 The suite runs every shared `../test/spec/*.tsv` fixture through the
 shared runner, protoc's vendored parser corpus, and this crate's column
@@ -332,7 +337,8 @@ exclusion set asserted to be exactly those. Beside them are the
 in-language tests: the descriptor shape, version detection and
 reconciliation, the exported helpers, the CST accessors, the version
 sites, the embedded grammar against the files on disk and against both
-other runtimes' copies, and the untrusted input boundaries.
+other runtimes' copies, the compiled grammar against a fresh compile,
+the library's dependencies, and the untrusted input boundaries.
 
 Every example in this file is compiled and run as a doctest, so a stale
 one fails the build.

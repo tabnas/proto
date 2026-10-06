@@ -6,9 +6,11 @@
 // declaration and/or supplied via the `version` option.
 
 import { Tabnas } from '@tabnas/parser'
-import { abnf } from '@tabnas/abnf'
+import type { GrammarSpec } from '@tabnas/parser'
 
-import { grammarText } from './grammar'
+// The grammar, compiled at build time from proto-grammar/*.abnf by `npm
+// run gen-grammar` (gen-grammar.js). Generated: never edit it.
+import compiledGrammar from './proto-grammar.json'
 import { buildFile } from './build-descriptor'
 import { recordAggregate } from './aggregate'
 import {
@@ -25,42 +27,34 @@ export interface ProtoOptions {
   reconcile: boolean
 }
 
-type AnyTabnas = Tabnas & { abnf?: Function }
+// The engine's GrammarSpec type describes a match token as a RegExp; the
+// serialized form carries it as an `@~/…/` string, which `tn.grammar()`
+// resolves on install. Hence the cast.
+const COMPILED = compiledGrammar as unknown as GrammarSpec
 
 // The Tabnas plugin: installs the union proto grammar so the engine can
 // parse `.proto` source into a `{rule, src, kids}` CST. Use the exported
 // `parse()` / `toDescriptor()` to turn that CST into a FileDescriptorProto.
-const Proto = ((tn: AnyTabnas, _options?: Partial<ProtoOptions>) => {
-  // Proto drives parsing through @tabnas/abnf; ensure it is installed.
-  if ('function' !== typeof tn.abnf) tn.use(abnf)
-  // The grammar admits every keyword as an identifier, which a compiler
-  // without `tokenClasses` expands into millions of alternates
-  // (tabnas/bnf#71) and never finishes installing. Probe the installed
-  // compiler with a three-token grammar first, so an old @tabnas/bnf
-  // fails here, at once and by name, rather than hanging.
-  const probe = (tn.abnf as any).toSpec('s = a a\na = "x" / "y"\n',
-    { tag: 'proto', start: 's', tokenClasses: true })
-  if (!probe?.options?.tokenSet?.a) {
-    throw new Error('@tabnas/proto: the installed @tabnas/bnf does not ' +
-      'support tokenClasses; upgrade @tabnas/bnf (tabnas/bnf#74)')
-  }
-  // `wordKeywords` makes a keyword match as a whole word; `tokenClasses`
-  // compiles `ident` (an identifier or any keyword) to one engine token
-  // set, so a lookahead position peeks it as one token rather than one
-  // alternate per keyword. Both are required: see AGENTS.md.
-  ;(tn.abnf as Function)(grammarText, {
-    tag: 'proto',
-    start: 'proto',
-    wordKeywords: true,
-    tokenClasses: true,
-  })
+const Proto = ((tn: Tabnas, _options?: Partial<ProtoOptions>) => {
+  // The union grammar, compiled. gen-grammar.js ran @tabnas/abnf over the
+  // union text (src/grammar.ts) at build time, with the options this
+  // plugin used to pass at every install: `wordKeywords` makes a keyword
+  // match as a whole word, and `tokenClasses` compiles `ident` (an
+  // identifier or any keyword) to one engine token set, so a lookahead
+  // position peeks it as one token rather than one alternate per keyword;
+  // both are required (see AGENTS.md). The compiler wrote the CST
+  // builders as the engine's own `@node$` / `@capture$` / `@bubble$`
+  // builtins, so the file is pure data and installing it loads no
+  // compiler. The engine installs a copy: the imported object is shared,
+  // and nothing writes to it.
+  tn.grammar(COMPILED)
   // An aggregate value (`option (f) = { a: 1 };`) is recorded as the text
   // between its braces, which the CST's `src` does not keep: the lexer
   // drops whitespace and comments. This action reads it from the source
   // while the brace tokens are to hand; see ./aggregate.ts.
   tn.rule('constant', (rs: any) => rs.ac(recordAggregate))
 }) as {
-  (tn: AnyTabnas, options?: Partial<ProtoOptions>): void
+  (tn: Tabnas, options?: Partial<ProtoOptions>): void
   defaults: ProtoOptions
 }
 
@@ -82,7 +76,7 @@ function toDescriptor(cst: any, options?: Partial<ProtoOptions>): FileDescriptor
 // engine via `const j = new Tabnas().use(Proto)` and call
 // `toDescriptor(j.parse(src), opts)`.
 function parse(src: string, options?: Partial<ProtoOptions>): FileDescriptorProto {
-  const tn = new Tabnas({ rewind: { history: 8192 } }) as AnyTabnas
+  const tn = new Tabnas({ rewind: { history: 8192 } })
   Proto(tn, options)
   return toDescriptor(tn.parse(src), options)
 }
