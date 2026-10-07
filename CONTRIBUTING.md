@@ -25,14 +25,30 @@ cd go && go build ./... && go test ./...
 cd rs && cargo test --all-targets && cargo test --doc
 ```
 
-Tabnas repos resolve their unpublished `@tabnas/*` siblings from
-**side-by-side checkouts**, so clone this repo's tabnas dependencies into the
-same parent directory. Check `.github/workflows/` for the exact list.
+The TypeScript and Go sides install published packages, `@tabnas/*` from
+the npm registry and `github.com/tabnas/*/go` from the module proxy, so they
+need no other checkout. Sibling checkouts are optional there: to work
+against unreleased siblings, clone them into the same parent directory and
+run admin's `scripts/link.sh`, which links them over
+`ts/node_modules/@tabnas/*` and writes a `go.work` one level up. Never commit
+that wiring. CI builds the siblings named in `.github/workflows/ci.yml`'s
+`deps` from source. `rs/` is the exception: `rs/Cargo.toml` takes the engine
+as a path dependency, and the ABNF compiler and the shared fixture runner as
+path dev-dependencies, so it needs `parser`, `abnf`, `bnf` (which `abnf`
+takes by path) and `support` checked out beside this repository even for a
+plain build. The crates are on crates.io, but the committed manifest stays
+path-only: only when it publishes `tabnas-proto` does the release workflow
+swap the engine's path for a crates.io version and drop the two test-only
+ones.
 
 ## Commit messages
 
-[Conventional Commits](https://www.conventionalcommits.org/) — release
-automation derives versions and changelogs from them, so this is required:
+[Conventional Commits](https://www.conventionalcommits.org/) are required,
+for commit messages and PR titles alike. PRs are squash-merged, so a PR's
+title is its commit message, and the GitHub Release that each release creates
+lists those titles in its generated notes. They do not set the version: a
+release is its own version-bump pull request, then a `release.yml` dispatch
+(see [`AGENTS.md`](AGENTS.md), "Releasing"). For example:
 
 ```
 feat: add lax mode for trailing commas

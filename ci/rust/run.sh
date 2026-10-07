@@ -8,8 +8,9 @@
 # and, as a dev-dependency only, `tabnas-abnf = { path = "../../abnf/rs" }`:
 # the library installs the grammar already compiled, and the compiler is
 # for tests/grammar_spec_test.rs, which regenerates rs/proto-grammar.json
-# and fails when it is stale). Neither crate is published, so there is no
-# registry version to fall back on. Clone
+# and fails when it is stale). Both crates are on crates.io (tabnas-parser,
+# tabnas-abnf), but the committed manifest names them by path alone, so
+# there is no registry version to fall back on. Clone
 # https://github.com/tabnas/parser and https://github.com/tabnas/abnf next
 # to this repo before running. `tabnas-abnf` in turn depends on
 # https://github.com/tabnas/bnf, which gets no entry in rs/Cargo.toml but

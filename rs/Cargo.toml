@@ -22,7 +22,9 @@ path = "src/lib.rs"
 [dependencies]
 # The engine is consumed as a SIBLING CHECKOUT, the standard tabnas
 # development model: clone https://github.com/tabnas/parser next to this
-# repo. It is not published, so there is no registry version to fall
+# repo. It is on crates.io as tabnas-parser, but this committed manifest
+# stays path-only (crates-release.yml rewrites the path into a crates.io
+# requirement when it publishes), so there is no registry version to fall
 # back on. It is the crate's only tabnas dependency: the grammar arrives
 # compiled, in proto-grammar.json.
 tabnas = { package = "tabnas-parser", path = "../../parser/rs" }
