@@ -243,21 +243,22 @@ that merely mentions braces is not refused for nesting.
 
 ## Install
 
-The engine is not published to a registry, so it is consumed as a
-**sibling checkout**, the standard tabnas development model. Clone
-`https://github.com/tabnas/parser` next to this repository and point at
-it:
+The crate and the engine are published on crates.io. The engine's
+package is `tabnas-parser`, and in code it is `tabnas`, so add both:
 
-```toml
-[dependencies]
-tabnas-proto = { path = "../proto/rs" }
-tabnas = { package = "tabnas-parser", path = "../parser/rs" }
+```bash
+cargo add tabnas-proto tabnas-parser
 ```
 
 The crate needs no ABNF compiler, because it carries its grammar
-already compiled. The `tabnas` entry is there because a crate's dependencies are not passed on to its
+already compiled. The engine entry is there because a crate's dependencies are not passed on to its
 dependents: `tabnas_proto` alone does not put `tabnas::Tabnas` or
-`tabnas::Value` in scope. The test suite additionally needs
+`tabnas::Value` in scope.
+
+In this repository, `Cargo.toml` does not take the engine from crates.io:
+it names a sibling checkout of `https://github.com/tabnas/parser` by path,
+and the release workflow swaps that path for a crates.io version when it
+publishes this crate. The test suite additionally needs
 `https://github.com/tabnas/support` beside the repository, for the shared
 fixture runner, and `https://github.com/tabnas/abnf` and
 `https://github.com/tabnas/bnf`, for the test that compiles the grammar

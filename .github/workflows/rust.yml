@@ -70,10 +70,11 @@ jobs:
         with:
           path: proto
 
-      # Sibling main branches, not releases: none of these crates is
-      # published, so this is the only resolution there is. `bnf` gets no
-      # entry in rs/Cargo.toml, because it is `abnf` that depends on it,
-      # but cargo reads the whole manifest graph before it compiles
+      # Sibling main branches, not releases: rs/Cargo.toml names these
+      # crates by path (they are on crates.io, but the committed manifest
+      # stays path-only), so this is the only resolution there is. `bnf`
+      # gets no entry in rs/Cargo.toml, because it is `abnf` that depends
+      # on it, but cargo reads the whole manifest graph before it compiles
       # anything, so the checkout has to be here. `support` carries the
       # shared fixture runner and is a dev-dependency.
       - name: Clone the sibling crates

@@ -439,12 +439,14 @@ The steps, in order:
    suite then passes against unreleased code while appearing to verify the
    published one. Reinstalling is the part that matters.
 
-   One thing a clean install does **not** isolate:
-   `ts/test/doc-examples.test.*` resolves `@tabnas/*` by filesystem path
-   (`const TABNAS = path.join(REPO, '..')`), not through `node_modules`. If
-   unbuilt sibling checkouts sit beside this repo, those blocks fail with
-   `MODULE_NOT_FOUND` no matter what you installed — build the siblings, or
-   verify somewhere they are absent.
+   The clean install covers the doc examples too:
+   `ts/test/doc-examples.test.*` resolves a doc example's `require`
+   through `node_modules` first, and only a `@tabnas/*` package that is
+   not installed falls back to the sibling checkout `../<x>/ts`
+   (`const TABNAS = path.join(REPO, '..')`), with `@tabnas/proto` itself
+   served from this repository's `ts/`. The tested examples name only
+   `@tabnas/parser`, an installed devDependency, and `@tabnas/proto`, so
+   none of them reaches a sibling checkout.
 
    `npm test` already compiles here: `ts/package.json` sets `pretest` to
    `npm run build`, which npm runs automatically. No separate build step is
@@ -458,13 +460,17 @@ The steps, in order:
    ```bash
    (
      cd go
-     go mod edit -json | grep -q '"Replace": null' || { echo 'go.mod has a replace'; exit 1; }
+     go mod edit -json | jq -e '.Replace == null' >/dev/null || { echo 'go.mod has a replace'; exit 1; }
      GOWORK=off go test -count=1 ./...
    )
    ```
 
    `-count=1` because shared fixtures live outside the Go module, so a
-   changed corpus does not invalidate the test cache.
+   changed corpus does not invalidate the test cache. The check asks `jq`,
+   not `grep`: current Go leaves the `Replace` key out when there is no
+   replace, where older Go printed `"Replace": null`, and `jq` reads a
+   missing key as null, so the check passes on a clean `go.mod` and fails
+   on a replace either way.
 3. **Merge the bump through a reviewed PR.** That is the house convention —
    `CONTRIBUTING.md` squash-merges PRs and takes the title as the commit
    message — and what `release.yml`'s own header describes. A direct push to
@@ -633,7 +639,7 @@ They stay in the Makefile because removing them is a separate change.
 ## Error codes
 
 This package declares no error codes of its own — there is no
-`error`/`hint` catalogue in either runtime; input the grammar cannot
+`error`/`hint` catalogue in any runtime; input the grammar cannot
 recognise fails under the engine's base codes, and no shared fixture pins
 one with `ERROR:<code>`.
 
@@ -644,7 +650,7 @@ syntax/edition reconciliation (`detect-version`), not from a coded parse
 error, so the runners match it against the message text. That row is a
 conversion target for the org's A3/A4 error-code work: give the version
 check a declared code and pin `ERROR:<code>` instead, since a message can
-be reworded without either runtime noticing, where a code cannot.
+be reworded without any runtime noticing, where a code cannot.
 
 The machine-readable list is [`tabnas.plugin.json`](tabnas.plugin.json)
 (`errorCodes` — currently empty, matching the empty declared set). Keep the

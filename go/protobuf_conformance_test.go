@@ -9,10 +9,11 @@ package tabnasproto
 // `src/google/protobuf/compiler/parser_unittest.cc` (v36.2) — see
 // `../test/protobuf-suite/AGENTS.md` for provenance and lane meanings.
 //
-// This is the Go counterpart of `ts/test/protobuf-conformance.test.ts`. It
-// reads the SAME files with the SAME contracts and the SAME normalisation, so
-// the two runtimes cannot drift on the third-party corpus without one of them
-// going red. Until this file existed, only TypeScript was measured against
+// This is the Go counterpart of `ts/test/protobuf-conformance.test.ts`, and
+// `rs/tests/protobuf_conformance_test.rs` is the Rust one. All three read the
+// SAME files with the SAME contracts and the SAME normalisation, so the
+// runtimes cannot drift on the third-party corpus without one of them going
+// red. Until this file existed, only TypeScript was measured against
 // protoc; Go was measured only against the in-repo `test/spec/*.tsv` fixtures.
 //
 // The corpus is vendored, so this never skips: if the files are missing the
