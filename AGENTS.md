@@ -229,7 +229,7 @@ Dependencies: `@tabnas/parser` is the one `peerDependency` in
 `src/proto-grammar.json` to it, and `@tabnas/support` is a dev-only `"*"`
 devDependency (the shared fixture loader). None is a `file:` path, so
 `npm i` resolves all three from the registry. The peer range is a floor
-at the version `go/go.mod` requires, today `@tabnas/parser` `>=0.12.8`,
+at the version `go/go.mod` requires, today `@tabnas/parser` `>=0.12.11`,
 and it moves with each release, as it does in abnf, ebnf and gbnf. Until
 the grammar was compiled at build time `@tabnas/abnf` was a peer too,
 floored the same way; the ranges were a bare `">=0"` through 0.6.1. The
