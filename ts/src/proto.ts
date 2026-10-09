@@ -89,3 +89,5 @@ const VERSION = '0.6.6'
 export { Proto, parse, toDescriptor, VERSION }
 export type { ProtoVersion }
 export * from './descriptor'
+export { translate } from './translate'
+export type { TranslationPart, TranslationParts } from './translate'

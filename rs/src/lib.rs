@@ -353,3 +353,85 @@ pub fn parse_with(
 pub fn parse(src: &str, options: Option<&ProtoOptions>) -> Result<FileDescriptorProto, ProtoError> {
     parse_with(shared(), src, options)
 }
+
+/// One optional alchemy translation source and its explicit entry point.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub struct TranslationPart {
+    /// The definition a host calls after linking the source.
+    pub entry: &'static str,
+    /// The source text, or `None` for an entry supplied by alchemy.
+    pub source: Option<&'static str>,
+}
+
+/// The package-local structural translation interface.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub struct TranslationParts {
+    /// The complete `tabnas.plugin.json` text.
+    pub manifest: &'static str,
+    /// An optional lift from the grammar's events to its first read shape.
+    pub lift: Option<TranslationPart>,
+    /// An optional embedding of a plain tree in the format's schema, with its reverse.
+    pub embed: Option<TranslationPart>,
+    /// An optional render from the write shape to text.
+    pub render: Option<TranslationPart>,
+}
+
+const TRANSLATION: TranslationParts = TranslationParts {
+    manifest: include_str!("../translate/manifest.json"),
+    lift: None,
+    embed: None,
+    render: Some(TranslationPart {
+        entry: "proto-render",
+        source: Some(include_str!("../translate/render.alc")),
+    }),
+};
+
+/// Return the translation parts of `.proto` files: the manifest, and the
+/// render that writes a FileDescriptorProto, the reader's tree, back as a
+/// `.proto` file. There is no lift, and no embed: the tree is the
+/// descriptor's own shape, the schema `proto-descriptor`, which a host
+/// renders only from a source of the same schema or from a program that
+/// builds a descriptor.
+///
+/// ```
+/// let parts = tabnas_proto::translate().expect("proto carries translation parts");
+/// assert_eq!(parts.render.map(|part| part.entry), Some("proto-render"));
+/// assert_eq!(parts.embed, None);
+/// ```
+#[must_use]
+pub const fn translate() -> Option<TranslationParts> {
+    Some(TRANSLATION)
+}
+
+/// The plugin's manifest, `tabnas.plugin.json`, as the repository carries
+/// it. Its `translate` object is what a host that translates reads: the
+/// shape the format is read as and written from (`tree`), the schema of
+/// that tree (`proto-descriptor`), the root the render needs (`object`),
+/// the file that holds the render, and the sentences that say what a
+/// written file does not keep. The crate embeds its own copy,
+/// `translate/manifest.json`, since a packaged crate holds nothing outside
+/// `rs/`; `tests/translate_test.rs` holds the copy to the file.
+///
+/// ```
+/// assert!(tabnas_proto::manifest_text().contains("\"proto-descriptor\""));
+/// ```
+pub fn manifest_text() -> &'static str {
+    TRANSLATION.manifest
+}
+
+/// The render, `alchemy/render.alc`, the file the manifest's
+/// `translate.render` names: a library of alchemy definitions, with no
+/// `export`, whose entry point `proto-render` writes a FileDescriptorProto's
+/// events as one `.proto` file that reads back as the same descriptor. A
+/// host links it with its own program. The crate embeds its own copy,
+/// `translate/render.alc`, held to the file as the manifest's is.
+///
+/// ```
+/// assert!(tabnas_proto::render_text().contains("def proto-render [input]"));
+/// ```
+pub fn render_text() -> &'static str {
+    match TRANSLATION.render {
+        Some(part) => part.source.unwrap_or_default(),
+        None => "",
+    }
+}
