@@ -89,7 +89,7 @@ function parse(src: string, options?: Partial<ProtoOptions>): FileDescriptorProt
 // VERSION is this package's version. It MUST equal package.json "version":
 // the release orchestrator rewrites both, and test/version.test.ts fails the
 // build if they drift. Mirrors `const VERSION` in go/proto.go.
-const VERSION = '0.6.7'
+const VERSION = '0.6.8'
 
 export { Proto, parse, toDescriptor, preflight, MAX_NESTING_DEPTH, VERSION }
 export type { ProtoVersion }
