@@ -64,6 +64,20 @@ fn nesting_past_the_cap_is_refused() {
     }
 }
 
+/// The refusal carries no code, as every refusal the plugin makes itself
+/// does, and its message is the one the TypeScript and Go ports give:
+/// `test/spec/nesting.tsv` holds all three to it.
+#[test]
+fn the_nesting_refusal_carries_no_code_and_names_the_depth() {
+    let error = parse(&nested(MAX_NESTING_DEPTH + 1), None).expect_err("past the cap");
+    assert_eq!(error.code(), "");
+    assert_eq!(error.position(), None);
+    assert_eq!(
+        error.to_string(),
+        "proto: document nests 101 levels deep, past the 100 this parser accepts"
+    );
+}
+
 /// Deeply nested and never closed: refused rather than aborting. The
 /// brace scan counts opening braces, so an unterminated pile is caught
 /// before the engine sees it.
@@ -282,6 +296,25 @@ fn the_reusable_path_carries_the_same_bound() {
     );
 }
 
+/// The walk's own bound, which is this port's alone: a tree past the cap,
+/// built by a caller who drove the engine and skipped the preflight, is
+/// refused by `to_descriptor`, because a Rust stack that runs out aborts.
+/// TypeScript's `toDescriptor` and Go's `ToDescriptor` walk it
+/// (`ts/test/preflight.test.ts`, `go/preflight_test.go`), as
+/// `DIVERGENCE.md` section 2 records.
+#[test]
+fn the_walk_refuses_a_tree_past_the_cap() {
+    let parser = make();
+    let cst = parser
+        .parse(&nested(MAX_NESTING_DEPTH + 1))
+        .expect("the engine's own parse has no cap");
+    let error = tabnas_proto::to_descriptor(&cst, None).expect_err("the walk refuses it");
+    assert_eq!(
+        error.to_string(),
+        format!("proto: document nests deeper than {MAX_NESTING_DEPTH} levels")
+    );
+}
+
 /// The check on its own, for a caller that wants the CST.
 #[test]
 fn preflight_accepts_at_the_cap_and_refuses_past_it() {
@@ -298,4 +331,144 @@ fn preflight_accepts_at_the_cap_and_refuses_past_it() {
         "{".repeat(10 * MAX_NESTING_DEPTH)
     ))
     .expect("braces inside a string literal do not nest anything");
+}
+
+// The scan skips strings and comments where the lexer finds them, no
+// sooner and no later: a brace it skips that the lexer counts would let a
+// document past the cap reach the engine, and the engine build the tree
+// the cap exists to keep it from building.
+
+/// A document one level past the cap after `head`.
+fn past(head: &str) -> String {
+    format!(
+        "{head}{}{}",
+        "message M {".repeat(MAX_NESTING_DEPTH + 1),
+        "}".repeat(MAX_NESTING_DEPTH + 1)
+    )
+}
+
+fn refused_at(src: &str, depth: usize) {
+    let want = format!("nests {depth} levels deep");
+    let error = preflight(src).expect_err("the check refuses it");
+    assert!(error.to_string().contains(&want), "{src:.60}: {error}");
+    let error = parse(src, None).expect_err("parse refuses it");
+    assert!(error.to_string().contains(&want), "{src:.60}: {error}");
+}
+
+/// The lexer ends a line at a carriage return as well as a line feed, and
+/// a line comment with it, so a document that breaks its lines with
+/// carriage returns alone cannot hide its nesting in a comment.
+#[test]
+fn a_line_comment_ends_at_a_carriage_return() {
+    for comment in ["// c", "# c"] {
+        refused_at(
+            &past(&format!("syntax = \"proto2\";\r{comment}\r")),
+            MAX_NESTING_DEPTH + 1,
+        );
+    }
+}
+
+/// The lexer reads a backtick string as a string, across lines too, and a
+/// backslash escapes a backtick in it, so its braces nest nothing.
+#[test]
+fn braces_in_a_backtick_string_do_not_count() {
+    let noise = "{".repeat(4 * MAX_NESTING_DEPTH);
+    for src in [
+        format!("syntax = \"proto2\";\noption a = `{noise}`;\n"),
+        format!("syntax = \"proto2\";\noption a = `\\`{noise}`;\n"),
+        format!("syntax = \"proto2\";\noption a = `{noise}\n{noise}`;\n"),
+    ] {
+        preflight(&src).unwrap_or_else(|error| panic!("{src:.40}: {error}"));
+        parse(&src, None).unwrap_or_else(|error| panic!("{src:.40}: {error}"));
+    }
+}
+
+/// A quote opens a string only where the lexer starts a token. Inside a
+/// word the lexer reads it as part of the word (`message a"b` names a
+/// message `a"b`), so the braces after it count; straight after a keyword
+/// it opens a string, whose braces close nothing.
+#[test]
+fn a_quote_opens_a_string_only_where_a_token_starts() {
+    for quote in ['"', '\'', '`'] {
+        let head = format!("syntax = \"proto2\";\nmessage a{quote}b {{");
+        refused_at(&format!("{}}}", past(&head)), MAX_NESTING_DEPTH + 2);
+    }
+    refused_at(
+        &format!(
+            "syntax = \"proto2\";\n{}reserved\"{}\";{}{}",
+            "message M {".repeat(90),
+            "}".repeat(90),
+            "message M {".repeat(11),
+            "}".repeat(101)
+        ),
+        101,
+    );
+    let noise = "{".repeat(4 * MAX_NESTING_DEPTH);
+    let file = parse(
+        &format!("syntax = \"proto2\";\nmessage M {{ reserved\"{noise}\"; }}\n"),
+        None,
+    )
+    .expect("a string after a keyword parses");
+    assert_eq!(file.message_type[0].reserved_name, Some(vec![noise]));
+}
+
+/// The scan's keywords and separators are the grammar's: after each
+/// keyword the grammar's match tokens name, and after each fixed token, a
+/// quote opens a string, whose braces close nothing. A keyword the grammar
+/// gains and the scan does not know fails here.
+#[test]
+fn the_scan_knows_the_grammars_tokens() {
+    let grammar: serde_json::Value =
+        serde_json::from_str(include_str!("../proto-grammar.json")).expect("the grammar is JSON");
+    // Sixty levels open, a string of sixty closers, and sixty levels more:
+    // 120 levels when the closers are a string's, under the cap when they
+    // count.
+    let depth = |lead: &str| -> usize {
+        let src = format!(
+            "{}{lead}\"{}\"{}",
+            "{".repeat(60),
+            "}".repeat(60),
+            "{".repeat(60)
+        );
+        match preflight(&src) {
+            Ok(()) => 0,
+            Err(error) => error
+                .to_string()
+                .split("nests ")
+                .nth(1)
+                .and_then(|rest| rest.split(' ').next())
+                .and_then(|depth| depth.parse().ok())
+                .expect("the refusal names a depth"),
+        }
+    };
+    let keywords = grammar["options"]["match"]["token"]
+        .as_object()
+        .expect("the grammar names match tokens");
+    assert!(!keywords.is_empty());
+    for (name, pattern) in keywords {
+        let pattern = pattern.as_str().expect("a pattern");
+        let word = pattern
+            .strip_prefix("@~/^")
+            .and_then(|rest| rest.strip_suffix("\\b/"))
+            .filter(|word| !word.is_empty() && word.bytes().all(|byte| byte.is_ascii_alphabetic()))
+            .unwrap_or_else(|| {
+                panic!("match token {name} is not a keyword the scan can read: {pattern}")
+            });
+        assert_eq!(depth(&format!(" {word}")), 120, "after the keyword {word}");
+        assert_eq!(depth(&format!(" {word}x")), 0, "after the word {word}x");
+    }
+    let fixed = grammar["options"]["fixed"]["token"]
+        .as_object()
+        .expect("the grammar names fixed tokens");
+    for (name, token) in fixed {
+        let token = token.as_str().expect("a token");
+        if "{" == token || "}" == token {
+            continue;
+        }
+        assert_eq!(
+            depth(&format!("a{token}")),
+            120,
+            "after the fixed token {name} ({token})"
+        );
+    }
 }

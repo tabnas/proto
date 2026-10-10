@@ -30,6 +30,13 @@
 //! }
 //! ```
 //!
+//! The same descriptor also comes as a tree, through [`parse_value`],
+//! [`parse_value_with`] or [`to_descriptor_value`]: the plain value the
+//! canonical `parse` returns, with every member named and ordered as its
+//! object has them, for a host that walks the value rather than reading
+//! the struct. [`descriptor_value`] gives a descriptor alone the same
+//! shape, the members a statement places in a documented order.
+//!
 //! TypeScript is canonical: `ts/src` defines behaviour, and the shared
 //! fixtures in `test/spec/*.tsv` are the parity contract across
 //! TypeScript, Go and Rust. Where this port cannot match the canonical
@@ -48,6 +55,8 @@ mod error;
 mod grammar;
 mod jsnum;
 mod node;
+mod order;
+mod tree;
 
 /// The README's Rust examples run as doctests, so a stale one fails the
 /// gate rather than misleading the reader. Its `toml` and `bash` fences
@@ -77,6 +86,7 @@ pub use detect_version::{
 pub use error::ProtoError;
 pub use grammar::GRAMMAR_TEXT;
 pub use node::{child, child_rules, children, gaps, gaps_before, kw, nrule, nsrc};
+pub use tree::descriptor_value;
 
 /// This crate's version. It MUST equal `ts/package.json` "version": the
 /// release orchestrator rewrites both, and `tests/version_test.rs` fails
@@ -254,6 +264,15 @@ pub fn to_descriptor(
     cst: &Value,
     options: Option<&ProtoOptions>,
 ) -> Result<FileDescriptorProto, ProtoError> {
+    to_descriptor_ordered(cst, options).map(|(file, _)| file)
+}
+
+/// [`to_descriptor`], with the walk's record of the source's order
+/// (`order.rs`).
+fn to_descriptor_ordered(
+    cst: &Value,
+    options: Option<&ProtoOptions>,
+) -> Result<(FileDescriptorProto, order::Order), ProtoError> {
     let opts = options.cloned().unwrap_or_default();
     let first = child_rules(cst).into_iter().next();
     let declared = match first {
@@ -261,11 +280,45 @@ pub fn to_descriptor(
         _ => None,
     };
     let version = resolve_version(declared, opts.version, opts.reconcile)?;
-    build_file(cst, version)
+    build_descriptor::build_file_ordered(cst, version)
+}
+
+/// Turn a parsed proto CST into the descriptor as a tree: what
+/// [`parse_value`] gives, as [`to_descriptor`] turns one into a
+/// [`FileDescriptorProto`]. Every member and option is named and ordered
+/// as the canonical object has it, the source's order of the members a
+/// statement places included, which the walk records beside the
+/// descriptor and [`descriptor_value`], handed the descriptor alone,
+/// cannot know.
+///
+/// As for [`to_descriptor`], a caller who parsed the source itself runs
+/// [`preflight`] on that source first; [`parse_value_with`] does both.
+///
+/// ```
+/// fn main() -> Result<(), Box<dyn std::error::Error>> {
+///     let parser = tabnas_proto::make();
+///     let source = "option java_package = \"x\";\npackage p;";
+///     tabnas_proto::preflight(source)?;
+///     let cst = parser.parse(source)?;
+///     let tree = tabnas_proto::to_descriptor_value(&cst, None)?;
+///     assert_eq!(tree, tabnas_proto::parse_value(source, None)?);
+///     Ok(())
+/// }
+/// ```
+pub fn to_descriptor_value(
+    cst: &Value,
+    options: Option<&ProtoOptions>,
+) -> Result<Value, ProtoError> {
+    let (file, order) = to_descriptor_ordered(cst, options)?;
+    Ok(tree::file_value(&file, Some(&order)))
 }
 
 /// Refuse a `.proto` source that nests deeper than
 /// [`MAX_NESTING_DEPTH`], before anything builds a tree that deep.
+///
+/// The TypeScript `preflight` and the Go `Preflight` are the same check,
+/// with the same scan, cap and message, and their `parse` and `Parse`
+/// run it as [`parse`] does here.
 ///
 /// [`parse`] and [`parse_with`] run this themselves. It is public for
 /// the caller who drives the engine directly, through [`make`] or
@@ -276,7 +329,10 @@ pub fn to_descriptor(
 /// the check has to come before the tree exists.
 ///
 /// The depth is counted in braces, skipping the string literals and
-/// comments the lexer skips. Over-counting is safe here and
+/// comments the lexer skips, where it skips them: a line comment ends at
+/// a carriage return as well as a line feed, a backtick string is a
+/// string, and a quote opens one only where a token starts, so a quote
+/// inside a word is part of the word. Over-counting is safe here and
 /// under-counting is not, so an unterminated string or comment counts
 /// every brace inside it; the engine rejects that source anyway.
 ///
@@ -352,6 +408,60 @@ pub fn parse_with(
 /// the engine builds a tree that deep; see that constant.
 pub fn parse(src: &str, options: Option<&ProtoOptions>) -> Result<FileDescriptorProto, ProtoError> {
     parse_with(shared(), src, options)
+}
+
+/// Parse a `.proto` source string to the descriptor as a tree: the value
+/// the canonical `parse` returns, every member named and ordered as its
+/// object has them.
+///
+/// A host that walks the value, as a translation does when it streams a
+/// tree's events, reads this rather than the [`FileDescriptorProto`]
+/// struct, whose serialization holds the same members in the order the
+/// struct declares them. The members a statement places come in the
+/// source's order, which the walk records beside the descriptor; on a
+/// parser the caller holds, [`parse_value_with`] gives the same tree.
+///
+/// ```
+/// fn main() -> Result<(), Box<dyn std::error::Error>> {
+///     let tree = tabnas_proto::parse_value("syntax = \"proto3\";\nmessage M { optional int32 a = 1; }", None)?;
+///     let tabnas::Value::Object(file) = &tree else { panic!("an object") };
+///     let tabnas::Value::Array(messages) = &file["messageType"] else { panic!("a list") };
+///     let tabnas::Value::Object(message) = &messages[0] else { panic!("an object") };
+///     let tabnas::Value::Array(fields) = &message["field"] else { panic!("a list") };
+///     let tabnas::Value::Object(field) = &fields[0] else { panic!("an object") };
+///     let names: Vec<&str> = field.keys().map(String::as_str).collect();
+///     // `proto3Optional` straight after `label`, and the synthesised
+///     // oneof's index last, as the canonical walk assigns them.
+///     assert_eq!(names, ["name", "number", "label", "proto3Optional", "type", "oneofIndex"]);
+///     Ok(())
+/// }
+/// ```
+pub fn parse_value(src: &str, options: Option<&ProtoOptions>) -> Result<Value, ProtoError> {
+    parse_value_with(shared(), src, options)
+}
+
+/// [`parse_value`] on a parser the caller holds, as [`parse_with`] is
+/// [`parse`]: it runs the same [`preflight`], then the engine, then
+/// [`to_descriptor_value`].
+///
+/// ```
+/// fn main() -> Result<(), Box<dyn std::error::Error>> {
+///     let parser = tabnas_proto::make();
+///     for source in ["package p;\noption a = 1;", "option a = 1;\npackage p;"] {
+///         let tree = tabnas_proto::parse_value_with(&parser, source, None)?;
+///         assert_eq!(tree, tabnas_proto::parse_value(source, None)?);
+///     }
+///     Ok(())
+/// }
+/// ```
+pub fn parse_value_with(
+    parser: &Tabnas,
+    src: &str,
+    options: Option<&ProtoOptions>,
+) -> Result<Value, ProtoError> {
+    preflight(src)?;
+    let cst = parser.parse(src)?;
+    to_descriptor_value(&cst, options)
 }
 
 /// One optional alchemy translation source and its explicit entry point.

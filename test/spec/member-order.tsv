@@ -1,0 +1,46 @@
+input	expected	opts
+# Member order: the expected cells are the canonical JSON.stringify output,
+# byte for byte, generated from the TypeScript parse. A JavaScript object
+# lists its members in the order they were first assigned, and most of the
+# descriptor's are assigned in a fixed order, but a statement places a few:
+# a file's package, optionDependency and options, a message's
+# extensionRange, reservedRange and reservedName (after its options, which
+# the walk reads first), and an enum's reservedRange, reservedName and
+# options. An option map lists its names in the order the source first set
+# them. Every runner compares rows after a JSON round trip, which ignores
+# order, so the order these rows pin is checked by the byte-for-byte tests
+# over every descriptor row: ts/test/canonical-json.test.ts holds each cell
+# to the canonical output, and rs/tests/value_test.rs and go/value_test.go
+# hold each port's tree to the cell.
+# file: an option ahead of the package places options first
+syntax = "proto3";\noption java_package = "x";\npackage foo;\n	{"dependency":[],"publicDependency":[],"weakDependency":[],"messageType":[],"enumType":[],"service":[],"extension":[],"syntax":"proto3","options":{"java_package":"x"},"package":"foo"}
+# file: the package ahead of an option, the usual order
+syntax = "proto3";\npackage foo;\noption java_package = "x";\n	{"dependency":[],"publicDependency":[],"weakDependency":[],"messageType":[],"enumType":[],"service":[],"extension":[],"syntax":"proto3","package":"foo","options":{"java_package":"x"}}
+# file: edition, then syntax; then options, optionDependency and package in statement order
+edition = "2024";\noption java_package = "x";\nimport option "custom.proto";\npackage foo;\n	{"dependency":[],"publicDependency":[],"weakDependency":[],"messageType":[],"enumType":[],"service":[],"extension":[],"edition":"EDITION_2024","syntax":"editions","options":{"java_package":"x"},"optionDependency":["custom.proto"],"package":"foo"}
+# file: option names in statement order; a repeated name keeps its first place and takes the last value
+syntax = "proto3";\noption java_package = "x";\noption cc_enable_arenas = true;\noption go_package = "y";\noption java_package = "z";\n	{"dependency":[],"publicDependency":[],"weakDependency":[],"messageType":[],"enumType":[],"service":[],"extension":[],"syntax":"proto3","options":{"java_package":"z","cc_enable_arenas":true,"go_package":"y"}}
+# message: reservedRange, extensionRange, reservedName in statement order
+syntax = "proto2";\nmessage M {\n  reserved 2;\n  extensions 100 to 200;\n  reserved "a";\n}\n	{"dependency":[],"publicDependency":[],"weakDependency":[],"messageType":[{"name":"M","field":[],"nestedType":[],"enumType":[],"oneofDecl":[],"extension":[],"reservedRange":[{"start":2,"end":3}],"extensionRange":[{"start":100,"end":201}],"reservedName":["a"]}],"enumType":[],"service":[],"extension":[],"syntax":"proto2"}
+# message: options first wherever they sit, then names, extensions and ranges in statement order
+syntax = "proto2";\nmessage M {\n  reserved "a";\n  extensions 100 to 200;\n  option deprecated = true;\n  reserved 2;\n}\n	{"dependency":[],"publicDependency":[],"weakDependency":[],"messageType":[{"name":"M","field":[],"nestedType":[],"enumType":[],"oneofDecl":[],"extension":[],"options":{"deprecated":true},"reservedName":["a"],"extensionRange":[{"start":100,"end":201}],"reservedRange":[{"start":2,"end":3}]}],"enumType":[],"service":[],"extension":[],"syntax":"proto2"}
+# message: visibility last
+edition = "2024";\nexport message M {\n  reserved 2;\n  option deprecated = true;\n}\n	{"dependency":[],"publicDependency":[],"weakDependency":[],"messageType":[{"name":"M","field":[],"nestedType":[],"enumType":[],"oneofDecl":[],"extension":[],"options":{"deprecated":true},"reservedRange":[{"start":2,"end":3}],"visibility":"VISIBILITY_EXPORT"}],"enumType":[],"service":[],"extension":[],"edition":"EDITION_2024","syntax":"editions"}
+# enum: reservedRange, options, reservedName in statement order
+syntax = "proto3";\nenum E {\n  reserved 2;\n  option allow_alias = true;\n  A = 0;\n  reserved "B";\n}\n	{"dependency":[],"publicDependency":[],"weakDependency":[],"messageType":[],"enumType":[{"name":"E","value":[{"name":"A","number":0}],"reservedRange":[{"start":2,"end":2}],"options":{"allow_alias":true},"reservedName":["B"]}],"service":[],"extension":[],"syntax":"proto3"}
+# enum: options, reservedName, reservedRange in statement order, visibility last
+edition = "2024";\nlocal enum E {\n  option allow_alias = true;\n  reserved "B";\n  A = 0;\n  reserved 2;\n}\n	{"dependency":[],"publicDependency":[],"weakDependency":[],"messageType":[],"enumType":[{"name":"E","value":[{"name":"A","number":0}],"options":{"allow_alias":true},"reservedName":["B"],"reservedRange":[{"start":2,"end":2}],"visibility":"VISIBILITY_LOCAL"}],"service":[],"extension":[],"edition":"EDITION_2024","syntax":"editions"}
+# field: proto3Optional after label, jsonName before options, oneofIndex last; option names in list order
+syntax = "proto3";\nmessage M {\n  optional int32 a = 1 [json_name = "x", packed = true, deprecated = false];\n}\n	{"dependency":[],"publicDependency":[],"weakDependency":[],"messageType":[{"name":"M","field":[{"name":"a","number":1,"label":"LABEL_OPTIONAL","proto3Optional":true,"type":"TYPE_INT32","jsonName":"x","options":{"packed":true,"deprecated":false},"oneofIndex":0}],"nestedType":[],"enumType":[],"oneofDecl":[{"name":"_a"}],"extension":[]}],"enumType":[],"service":[],"extension":[],"syntax":"proto3"}
+# field: jsonName, then defaultValue, then options, whatever order the list gives
+syntax = "proto2";\nmessage M {\n  optional int32 a = 1 [deprecated = true, default = 5, json_name = "x"];\n}\n	{"dependency":[],"publicDependency":[],"weakDependency":[],"messageType":[{"name":"M","field":[{"name":"a","number":1,"label":"LABEL_OPTIONAL","type":"TYPE_INT32","jsonName":"x","defaultValue":"5","options":{"deprecated":true}}],"nestedType":[],"enumType":[],"oneofDecl":[],"extension":[]}],"enumType":[],"service":[],"extension":[],"syntax":"proto2"}
+# field: extendee after options
+syntax = "proto3";\nextend Foo {\n  optional int32 x = 100 [deprecated = true];\n}\n	{"dependency":[],"publicDependency":[],"weakDependency":[],"messageType":[],"enumType":[],"service":[],"extension":[{"name":"x","number":100,"label":"LABEL_OPTIONAL","proto3Optional":true,"type":"TYPE_INT32","options":{"deprecated":true},"extendee":"Foo"}],"syntax":"proto3"}
+# oneof and member options in statement and list order
+syntax = "proto3";\nmessage M {\n  oneof o {\n    option (b) = 1;\n    option (a) = 2;\n    int32 x = 1 [(z) = 1, (y) = 2];\n  }\n}\n	{"dependency":[],"publicDependency":[],"weakDependency":[],"messageType":[{"name":"M","field":[{"name":"x","number":1,"label":"LABEL_OPTIONAL","type":"TYPE_INT32","options":{"(z)":1,"(y)":2},"oneofIndex":0}],"nestedType":[],"enumType":[],"oneofDecl":[{"name":"o","options":{"(b)":1,"(a)":2}}],"extension":[]}],"enumType":[],"service":[],"extension":[],"syntax":"proto3"}
+# service and method options in statement order, after the streaming flags
+syntax = "proto3";\nservice S {\n  option (z) = 1;\n  option deprecated = true;\n  rpc M (stream A) returns (stream B) {\n    option idempotency_level = NO_SIDE_EFFECTS;\n    option deprecated = true;\n  }\n}\n	{"dependency":[],"publicDependency":[],"weakDependency":[],"messageType":[],"enumType":[],"service":[{"name":"S","method":[{"name":"M","inputType":"A","outputType":"B","clientStreaming":true,"serverStreaming":true,"options":{"idempotency_level":"NO_SIDE_EFFECTS","deprecated":true}}],"options":{"(z)":1,"deprecated":true}}],"extension":[],"syntax":"proto3"}
+# extension range and enum value options in list order
+syntax = "proto2";\nmessage M {\n  extensions 100 to 199 [(z) = 1, (a) = 2];\n}\nenum E {\n  A = 0 [(z) = 1, (a) = 2];\n}\n	{"dependency":[],"publicDependency":[],"weakDependency":[],"messageType":[{"name":"M","field":[],"nestedType":[],"enumType":[],"oneofDecl":[],"extension":[],"extensionRange":[{"start":100,"end":200,"options":{"(z)":1,"(a)":2}}]}],"enumType":[{"name":"E","value":[{"name":"A","number":0,"options":{"(z)":1,"(a)":2}}]}],"service":[],"extension":[],"syntax":"proto2"}
+# map field: options in list order, features copied to key and value in that order
+edition = "2023";\nmessage M {\n  map<string, int32> m = 1 [features.utf8_validation = NONE, deprecated = true, features.legacy_closed_enum = true];\n}\n	{"dependency":[],"publicDependency":[],"weakDependency":[],"messageType":[{"name":"M","field":[{"name":"m","number":1,"label":"LABEL_REPEATED","typeName":"MEntry","options":{"features.utf8_validation":"NONE","deprecated":true,"features.legacy_closed_enum":true}}],"nestedType":[{"name":"MEntry","field":[{"name":"key","number":1,"label":"LABEL_OPTIONAL","type":"TYPE_STRING","options":{"features.utf8_validation":"NONE","features.legacy_closed_enum":true}},{"name":"value","number":2,"label":"LABEL_OPTIONAL","type":"TYPE_INT32","options":{"features.utf8_validation":"NONE","features.legacy_closed_enum":true}}],"nestedType":[],"enumType":[],"oneofDecl":[],"extension":[],"options":{"mapEntry":true}}],"enumType":[],"oneofDecl":[],"extension":[]}],"enumType":[],"service":[],"extension":[],"edition":"EDITION_2023","syntax":"editions"}

@@ -15,7 +15,7 @@ Blank lines are skipped, and so are comment lines — a line starting with
 | Column | Meaning |
 |---|---|
 | `input` | `.proto` source. Escapes `\n` `\r` `\t` `\\` are decoded. |
-| `expected` | The resulting FileDescriptorProto as JSON, or `ERROR` / `ERROR:<substring>` for input that must be rejected. Unlike most of the fleet the text after the colon is a fragment of the MESSAGE, not an error code: the one such row names the plugin's own version check, which is not a parse failure the engine gives a code to. |
+| `expected` | The resulting FileDescriptorProto as JSON, or `ERROR` / `ERROR:<substring>` for input that must be rejected. Unlike most of the fleet the text after the colon is a fragment of the MESSAGE, not an error code: such rows name the plugin's own refusals, the version check and the nesting cap, which are not parse failures the engine gives a code to. |
 | `opts` | Optional JSON `ProtoOptions` — `{"version":"proto3"}`, `{"reconcile":false}` (empty means auto-detect). |
 
 `expected` and `opts` are **not** escape-decoded — they are raw JSON, so
@@ -23,7 +23,12 @@ JSON's own escape rules apply. To put a literal backslash in `input`,
 write `\\`.
 
 Results are compared after a JSON round-trip, so absent fields and field
-order do not affect the comparison.
+order do not affect the comparison. Every descriptor cell is nonetheless
+the canonical output exactly, `JSON.stringify(parse(input, opts))` byte
+for byte, which `ts/test/canonical-json.test.ts` holds; the ports' tree
+tests (`rs/tests/value_test.rs`, `go/value_test.go`) compare their trees'
+JSON text with the cells, member order included. Generate a new cell from
+the TypeScript parse rather than writing it by hand.
 
 ## Who runs what
 
@@ -84,6 +89,19 @@ should be too (`protobuf-suite/tools/oracle-check.py --spec`).
 `descriptor-shape.tsv` is a curated, commented tour of the descriptor
 details protoc pins down (range bounds, groups, pseudo-options, synthetic
 oneofs, visibility, …).
+`member-order.tsv` pins the canonical object's member order where a
+statement decides it (a file's package, optionDependency and options; a
+message's ranges and reserved names; an enum's ranges, reserved names and
+options) and the order of the names in every kind of option map; the
+round-trip runners cannot see it, and the byte-for-byte tests above can.
+`nesting.tsv` pins the nesting cap every runtime carries: a document
+nesting exactly 100 levels parses whole, one past it is refused with the
+plugin's own message, and a brace in a string literal or a comment does
+not count. The scan finds strings and comments where the lexer does: a
+line comment ends at a carriage return as well as a line feed, a
+backtick string is a string, and a quote opens one only where a token
+starts, so one inside a word is part of the word and one straight after
+a keyword opens a string.
 
 `protobuf-suite.tsv` is **generated**: the in-scope `valid` lane of the
 vendored protoc parser corpus (`../protobuf-suite/valid.json`), one row per

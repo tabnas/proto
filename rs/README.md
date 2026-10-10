@@ -80,6 +80,39 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 }
 ```
 
+### The descriptor as a tree
+
+A host that walks the value, as a translation does when it streams a
+tree's events, reads `parse_value` rather than the struct. It gives the
+descriptor as a `tabnas::Value` tree, the plain value the canonical
+`parse` returns. The tree names and orders every member as the canonical
+object does. Serializing the struct gives the same members in the
+order the struct declares them, so `syntax` follows `options` there,
+where the tree, like the canonical object, puts it first:
+
+```rust
+fn main() -> Result<(), Box<dyn std::error::Error>> {
+    let tree = tabnas_proto::parse_value("option java_package = \"x\";\npackage p;", None)?;
+    let tabnas::Value::Object(file) = &tree else { panic!("an object") };
+    let names: Vec<&str> = file.keys().map(String::as_str).collect();
+    assert_eq!(names[7..], ["syntax", "options", "package"]);
+    Ok(())
+}
+```
+
+Most members have a fixed place. A statement places a few, as it does in
+the canonical object: a file's `package`, `optionDependency` and
+`options`, a message's ranges and reserved names, and an enum's ranges,
+reserved names and options come in the order of their first statements.
+The walk records that order beside the descriptor, so the descriptor
+types stay as they were. On a parser the caller holds,
+`parse_value_with(&parser, src, None)?` gives the same tree, and
+`to_descriptor_value(&cst, None)?` gives it from what the engine's own
+`parse` returned. `descriptor_value` takes a descriptor alone, with no
+record, and puts those members in a fixed order. The Go port's `ParseValue` gives the same
+tree too, and every shared fixture row holds each port's tree to the
+canonical JSON, byte for byte.
+
 ### What the walk reproduces
 
 The output is the descriptor protoc's PARSER produces, which is the one
@@ -207,11 +240,13 @@ from outside the system, and every string in a descriptor, `import` paths
 and `type_name`s included, is text an agent must treat as hostile. See
 the repository [`../AGENTS.md`](../AGENTS.md).
 
-One bound is this port's alone. The descriptor walk recurses, and so do
-`tabnas::Value`'s drop and its JSON rendering; a Rust stack that runs out
-aborts the process rather than raising something catchable. A document
-nesting deeper than `MAX_NESTING_DEPTH` is therefore refused, before the
-engine builds a tree that deep:
+Every runtime bounds a document's nesting. A document nesting deeper
+than `MAX_NESTING_DEPTH` is refused before the engine builds a tree that
+deep, with the message the TypeScript and Go ports give, because the
+tree's cost grows with the square of the depth. Here the reason is
+sharper still: the descriptor walk recurses, and so do `tabnas::Value`'s
+drop and its JSON rendering; a Rust stack that runs out aborts the
+process rather than raising something catchable:
 
 ```rust
 fn main() -> Result<(), Box<dyn std::error::Error>> {
@@ -227,19 +262,22 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 }
 ```
 
-Every entry point that takes SOURCE runs that check: `parse` and
-`parse_with`. `preflight` is the check on its own, for a caller that
-holds the engine and wants the CST. The entry points that take a CST,
-`to_descriptor` and `build_file`, refuse a tree past the cap as well,
-but by then the tree exists, and a `tabnas::Value` nesting far enough
-aborts the process as it DROPS. Measured on this port, on the 1 MiB
+Every entry point that takes SOURCE runs that check: `parse`,
+`parse_with` and `parse_value`. `preflight` is the check on its own, for
+a caller that holds the engine and wants the CST. The entry points that
+take a CST, `to_descriptor` and `build_file`, refuse a tree past the cap
+as well, where the other two runtimes walk it whole, but by then the
+tree exists, and a `tabnas::Value` nesting far enough aborts the process
+as it DROPS. Measured on this port, on the 1 MiB
 stack a spawned `std::thread` gets by default: a debug build refuses and
 drops a 900-level document, and aborts on a 1000-level one, having
 already refused to walk it. The refusal is not the protection; parsing
 no such tree is.
 
 The cap counts braces outside string literals and comments, so a document
-that merely mentions braces is not refused for nesting.
+that merely mentions braces is not refused for nesting. It finds them
+where the lexer does: a line comment ends at a carriage return as well
+as a line feed, and a quote inside a word is part of the word.
 
 ## Install
 
@@ -278,8 +316,10 @@ runtimes to the rest.
   the source, so `__proto__` and the eleven function-valued members find
   an inherited value instead of nothing. This crate records the
   `type_name` protoc records. The repair belongs in TypeScript.
-- **Nesting is capped.** The canonical runtime has no limit and needs
-  none. See "Untrusted input" above.
+- **The walk refuses a deep tree.** Every runtime refuses a document
+  nesting past the cap, with the same message, and only this crate's
+  walk also refuses such a tree when a caller hands one to it directly.
+  See "Untrusted input" above.
 - **The descriptor is typed.** `FieldType`, `FieldLabel` and
   `SymbolVisibility` are enums that serialize to the same strings, rather
   than the canonical string unions, and every numeric descriptor field is
@@ -292,12 +332,15 @@ runtimes to the rest.
 - **The exported surface is a superset.** Everything `@tabnas/proto`
   exports has a counterpart here, under the Rust spelling: `Proto` is
   `plugin()` and `proto()`, `toDescriptor` is `to_descriptor`, and the
-  descriptor types, `SCALAR_TYPES` and the three `MAX_` constants carry
-  their own names. The additions exist because a Rust caller cannot
-  reach for a JavaScript object: `engine()` and `make()` build an
-  instance with the rewind history the union grammar needs,
-  `parse_with` and `preflight` carry the nesting bound onto a caller's
-  own instance, `build_file` takes an already-resolved version,
+  descriptor types, `SCALAR_TYPES`, `preflight` and the four `MAX_`
+  constants carry their own names. The additions exist because a Rust
+  caller cannot reach for a JavaScript object: `engine()` and `make()`
+  build an instance with the rewind history the union grammar needs,
+  `parse_with` carries the nesting bound onto a caller's own instance,
+  `parse_value`, `parse_value_with` and `to_descriptor_value` give the
+  descriptor as the plain tree the canonical `parse` returns, and
+  `descriptor_value` gives a descriptor alone that shape,
+  `build_file` takes an already-resolved version,
   `GRAMMAR_TEXT`, `PLUGIN_NAME` and `REWIND_HISTORY` name what the
   canonical plugin sets inline, and `nrule`, `nsrc`, `kw`, `child`,
   `children`, `child_rules`, `gaps` and `gaps_before` are the CST

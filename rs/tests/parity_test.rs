@@ -50,8 +50,8 @@ fn every_fixture_file_is_run() {
         .collect();
     assert_eq!(
         files.len(),
-        10,
-        "test/spec holds {} fixtures, not the 10 this suite was measured against: {files:?}",
+        12,
+        "test/spec holds {} fixtures, not the 12 this suite was measured against: {files:?}",
         files.len()
     );
 }

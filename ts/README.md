@@ -47,6 +47,9 @@ agree (`reconcile: true`, the default) or `parse` throws; set
   grammar so `tn.parse(src)` returns the raw `{rule, src, kids}` CST.
 - `toDescriptor(cst, options?)`. Turn a parsed CST into a
   FileDescriptorProto.
+- `preflight(src)`. Refuse a source nesting deeper than
+  `MAX_NESTING_DEPTH`, which is 100 levels. `parse` runs it first, and a
+  caller who drives the engine runs it before `tn.parse`.
 
 Options: `{ version?: 'proto2'|'proto3'|'2023'|'2024' | null,
 reconcile?: boolean }`.

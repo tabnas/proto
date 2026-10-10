@@ -47,8 +47,8 @@ fn the_register_has_the_rows_it_is_measured_against() {
         .unwrap_or_else(|error| panic!("{}: {}", path.display(), error.0));
     assert_eq!(
         spec.rows.len(),
-        6,
-        "{} holds {} rows, not the 6 recorded in DIVERGENCE.md",
+        9,
+        "{} holds {} rows, not the 9 recorded in DIVERGENCE.md",
         path.display(),
         spec.rows.len()
     );

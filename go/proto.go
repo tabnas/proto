@@ -76,6 +76,12 @@ func Proto(j *tabnas.Tabnas) error {
 // ToDescriptor turns a parsed proto CST into a FileDescriptorProto, resolving
 // the version from the file's declaration and the supplied options.
 func ToDescriptor(cst any, opts *ProtoOptions) (FileDescriptorProto, error) {
+	file, _, err := toDescriptor(cst, opts)
+	return file, err
+}
+
+// toDescriptor is ToDescriptor, with the walk's order record (order.go).
+func toDescriptor(cst any, opts *ProtoOptions) (FileDescriptorProto, *order, error) {
 	version := ProtoVersion("")
 	reconcile := true
 	if opts != nil {
@@ -97,30 +103,43 @@ func ToDescriptor(cst any, opts *ProtoOptions) (FileDescriptorProto, error) {
 	if first != nil && nrule(first) == "syntaxOrEdition" {
 		d, err := DeclaredVersion(first)
 		if err != nil {
-			return FileDescriptorProto{}, err
+			return FileDescriptorProto{}, nil, err
 		}
 		declared = d
 	}
 
 	resolved, err := ResolveVersion(declared, version, reconcile)
 	if err != nil {
-		return FileDescriptorProto{}, err
+		return FileDescriptorProto{}, nil, err
 	}
-	return BuildFile(root, resolved), nil
+	file, rec := buildFile(root, resolved)
+	return file, rec, nil
 }
 
 // Parse parses a .proto source string to a FileDescriptorProto in one call.
 // It builds a fresh engine each time; for repeated parsing reuse an engine:
-// build one with tabnas.Make, install Proto, then call ToDescriptor(j.Parse(src)).
+// build one with tabnas.Make, install Proto, then call ToDescriptor(j.Parse(src)),
+// running Preflight(src) first.
+//
+// A document nesting deeper than MaxNestingDepth is refused before the
+// engine runs: see Preflight.
 func Parse(src string, opts *ProtoOptions) (FileDescriptorProto, error) {
-	rh := 8192
-	j := tabnas.Make(tabnas.Options{Rewind: &tabnas.RewindOptions{History: &rh}})
-	if err := Proto(j); err != nil {
-		return FileDescriptorProto{}, err
-	}
-	cst, err := j.Parse(src)
+	cst, err := parseCST(src)
 	if err != nil {
 		return FileDescriptorProto{}, err
 	}
 	return ToDescriptor(cst, opts)
+}
+
+// parseCST runs Preflight, then a fresh engine with Proto installed.
+func parseCST(src string) (any, error) {
+	if err := Preflight(src); err != nil {
+		return nil, err
+	}
+	rh := 8192
+	j := tabnas.Make(tabnas.Options{Rewind: &tabnas.RewindOptions{History: &rh}})
+	if err := Proto(j); err != nil {
+		return nil, err
+	}
+	return j.Parse(src)
 }
