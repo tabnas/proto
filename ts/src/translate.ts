@@ -93,7 +93,11 @@ const TRANSLATION: TranslationParts = Object.freeze({
 ;   their fields (a proto3 \`optional\` field's synthetic oneof is not one:
 ;   the field is written \`optional\`), then its enums, its extensions (an
 ;   \`extend\` block each), its extension ranges and its reserved ranges and
-;   names, in the order the tree holds them.
+;   names, in the order the tree holds them. A map field's entry is a
+;   nested type the reader would make for the field again: named for it
+;   by protoc's rule and like the reader's entry in every member. Any
+;   other, a message the file declared with the option \`mapEntry\` among
+;   them, is written as a message, and the field as a field of its type.
 ; - A field is its label (none in a oneof; \`optional\` for a proto2 field
 ;   the tree marks optional, and for a proto3 field the tree marks
 ;   \`proto3Optional\`; nothing for the other optional fields), its type (a
@@ -547,18 +551,155 @@ def proto-reserved-ranges [indent text]
 
 ; ---- messages
 
-; A map field's entry, as the reader makes it: the option \`mapEntry\` and
-; the fields \`key\` and \`value\`.
-def proto-map-entry [n]
-  match (get "mapEntry" (proto-record "options" n))
-    case true
-      let [fs (proto-list "field" n)]
-        match (count fs)
-          case 2
-            match [(get "name" (proto-at fs 0)) (get "name" (proto-at fs 1))]
-              case ["key" "value"] true
-              case _ false
+; Whether two strings are the same. alchemy matches a string against a
+; literal and against no other string, but \`split\` cuts a string at every
+; occurrence of a separator that is not empty, so a string cut by itself,
+; and by nothing else, is two empty strings.
+def proto-same-text [a b]
+  match a
+    case ""
+      match b
+        case "" true
+        case _ false
+    case _
+      match (split a b)
+        case ["" ""] true
+        case _ false
+
+; Whether v is a string and the string s.
+def proto-is-text [s v]
+  match (kind v)
+    case :string (proto-same-text s v)
+    case _ false
+
+; Whether the string p begins with the string c, which is not empty, and p
+; without that first c.
+def proto-begins [c p]
+  let [parts (split c p)]
+    match (proto-at parts 0)
+      case "" (proto-less 1 (count parts))
+      case _ false
+
+def proto-after [c p]
+  let [parts (split c p)]
+    string-join c (map (fn [i] (proto-at parts i)) (filter (fn [i] (proto-less 0 i)) (indices parts)))
+
+; The letters protoc puts in upper case in an entry's name.
+def proto-letters [["a" "A"] ["b" "B"] ["c" "C"] ["d" "D"] ["e" "E"] ["f" "F"] ["g" "G"] ["h" "H"] ["i" "I"] ["j" "J"] ["k" "K"] ["l" "L"] ["m" "M"] ["n" "N"] ["o" "O"] ["p" "P"] ["q" "Q"] ["r" "R"] ["s" "S"] ["t" "T"] ["u" "U"] ["v" "V"] ["w" "W"] ["x" "X"] ["y" "Y"] ["z" "Z"]]
+
+; A part of a name, its first letter in upper case where it is one from a
+; to z.
+def proto-capital [p]
+  let [hits (filter (fn [l] (proto-begins (proto-at l 0) p)) proto-letters)]
+    match (count hits)
+      case 0 p
+      case _ (string-join "" [(proto-at (proto-at hits 0) 1) (proto-after (proto-at (proto-at hits 0) 0) p)])
+
+; The name protoc gives a map field's entry, which the reader gives the
+; entry it makes: the field's name with each \`_\` dropped and the letter
+; after it, and the first, in upper case, then \`Entry\` (\`map_field\` is
+; \`MapFieldEntry\`).
+def proto-entry-name [name]
+  string-join "" [(string-join "" (map proto-capital (split "_" name))) "Entry"]
+
+; Whether every key of the object o is one of the keys allowed.
+def proto-only [allowed o]
+  match (count (filter (fn [k] (proto-less (count (filter (fn [a] (proto-same-text a k)) allowed)) 1)) (keys o)))
+    case 0 true
+    case _ false
+
+def proto-empty [k o]
+  match (kind (get k o))
+    case :vector
+      match (count (as-vector (get k o)))
+        case 0 true
+        case _ false
+    case _ false
+
+; The options the reader copies from a map field to its entry's key and
+; value: \`features\`, and those whose name begins \`features.\`.
+def proto-feature-key [k]
+  match k
+    case "features" true
+    case _ (proto-begins "features." k)
+
+; Whether two options' values are the same: of one kind, and alike.
+def proto-same-value [a b]
+  match [(kind a) (kind b)]
+    case [:string :string] (proto-same-text a b)
+    case [:number :number] (proto-same-number a b)
+    case [:boolean :boolean]
+      match [a b]
+        case [true true] true
+        case [false false] true
+        case _ false
+    case [:record :record] (proto-same-text (scalar-text csv-options a) (scalar-text csv-options b))
+    case _ false
+
+; Whether a field of an entry has the options the reader gives it: the
+; features of the map field fo, by name, \`feats\`, and none where it has
+; none.
+def proto-entry-options [fo feats g]
+  match [(count feats) (proto-has "options" g)]
+    case [0 false] true
+    case [0 true] false
+    case [_ false] false
+    case _
+      let [o (get "options" g)]
+        match (kind o)
+          case :record
+            match (proto-same-number (count (keys o)) (count feats))
+              case true (proto-same-number (count (filter (fn [k] (proto-same-value (get k o) (get k fo))) feats)) (count feats))
+              case false false
           case _ false
+
+def proto-entry-field-keys ["name" "$name" "number" "label" "type" "typeName" "options"]
+
+; Whether g is a field of an entry as the reader makes it, \`key\` 1 or
+; \`value\` 2: optional, of a type or a type name, and with no option but
+; the features the map field passes down.
+def proto-entry-field [name number fo feats g]
+  match (kind g)
+    case :record
+      match [(proto-is-text name (get "name" g)) (get "label" g) (kind (get "number" g)) (proto-has "type" g) (proto-has "typeName" g) (proto-only proto-entry-field-keys g)]
+        case [true "LABEL_OPTIONAL" :number true false true]
+          match (proto-same-number (get "number" g) number)
+            case true (proto-entry-options fo feats g)
+            case false false
+        case [true "LABEL_OPTIONAL" :number false true true]
+          match (proto-same-number (get "number" g) number)
+            case true (proto-entry-options fo feats g)
+            case false false
+        case _ false
+    case _ false
+
+def proto-entry-keys ["name" "$name" "field" "nestedType" "enumType" "oneofDecl" "extension" "options"]
+
+; Whether the nested type n is the entry the reader makes for the map
+; field f, so that f written as a map reads back with n as it is: n named
+; for f by protoc's rule, with no member but its fields, its empty lists
+; and the option \`mapEntry\` alone, and its fields \`key\` and \`value\` as the
+; reader makes them. A message the file declares, the option \`mapEntry\`
+; in it, is any other one, and is written as a message.
+def proto-map-entry [f n]
+  match [(kind (get "name" f)) (kind (get "name" n))]
+    case [:string :string]
+      match [(proto-same-text (proto-entry-name (get "name" f)) (get "name" n)) (proto-only proto-entry-keys n)]
+        case [true true]
+          let [o (proto-record "options" n)]
+            match [(proto-empty "nestedType" n) (proto-empty "enumType" n) (proto-empty "oneofDecl" n) (proto-empty "extension" n) (count (keys o)) (get "mapEntry" o)]
+              case [true true true true 1 true]
+                let [kv (proto-list "field" n)]
+                  match (count kv)
+                    case 2
+                      let [fo (proto-record "options" f)]
+                        let [feats (filter proto-feature-key (keys fo))]
+                          match [(proto-entry-field "key" 1 fo feats (proto-at kv 0)) (proto-entry-field "value" 2 fo feats (proto-at kv 1))]
+                            case [true true] true
+                            case _ false
+                    case _ false
+              case _ false
+        case _ false
     case _ false
 
 def proto-first [v]
@@ -571,14 +712,15 @@ def proto-last [v]
     case 0 -1
     case _ (top v)
 
-def proto-entry-named [name n]
-  match (proto-named name n)
-    case true (proto-map-entry n)
+def proto-entry-named [f n]
+  match (proto-named (get "typeName" f) n)
+    case true (proto-map-entry f n)
     case false false
 
 ; The nested type a field is written with, its index, or -1: a group's
-; message, and a map field's entry. A map field is a repeated field of a
-; type named for an entry among the nested types.
+; message, and a map field's entry. A map field is a repeated field whose
+; type is named for a nested type that is the entry the reader would make
+; for it (\`proto-map-entry\`).
 def proto-attached [ns f]
   match (get "type" f)
     case "TYPE_GROUP" (proto-first (filter (fn [t] (proto-named (get "typeName" f) (proto-at ns t))) (indices ns)))
@@ -586,7 +728,7 @@ def proto-attached [ns f]
       match (get "label" f)
         case "LABEL_REPEATED"
           match [(proto-has "type" f) (proto-has "typeName" f) (proto-has "oneofIndex" f) (proto-has "extendee" f)]
-            case [false true false false] (proto-first (filter (fn [t] (proto-entry-named (get "typeName" f) (proto-at ns t))) (indices ns)))
+            case [false true false false] (proto-first (filter (fn [t] (proto-entry-named f (proto-at ns t))) (indices ns)))
             case _ -1
         case _ -1
 
