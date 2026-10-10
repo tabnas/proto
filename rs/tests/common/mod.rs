@@ -57,19 +57,23 @@ pub fn to_failure(error: ProtoError) -> Failure {
     }
 }
 
+/// A row's `opts` column as the plugin's options; an empty cell means the
+/// defaults.
+pub fn row_options(row: &Row) -> Option<ProtoOptions> {
+    let raw = row.named("opts");
+    if raw.trim().is_empty() {
+        return None;
+    }
+    Some(
+        serde_json::from_str::<ProtoOptions>(raw)
+            .unwrap_or_else(|error| panic!("{}: bad opts cell {raw:?}: {error}", row.location())),
+    )
+}
+
 /// Parse one row's input through the crate's shared instance, reading the
 /// row's `opts` column, as the Go and TypeScript fixture runners do.
 pub fn parse_row(input: &str, row: &Row) -> Result<Value, Failure> {
-    let raw = row.named("opts");
-    let options = if raw.trim().is_empty() {
-        None
-    } else {
-        Some(
-            serde_json::from_str::<ProtoOptions>(raw).unwrap_or_else(|error| {
-                panic!("{}: bad opts cell {raw:?}: {error}", row.location())
-            }),
-        )
-    };
+    let options = row_options(row);
     tabnas_proto::parse(input, options.as_ref())
         .map(|file| to_value(&file))
         .map_err(to_failure)

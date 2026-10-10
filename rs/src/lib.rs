@@ -30,6 +30,11 @@
 //! }
 //! ```
 //!
+//! The same descriptor also comes as a tree, through [`parse_value`] or
+//! [`descriptor_value`]: the plain value the canonical `parse` returns,
+//! with every member named and ordered as its object has them, for a
+//! host that walks the value rather than reading the struct.
+//!
 //! TypeScript is canonical: `ts/src` defines behaviour, and the shared
 //! fixtures in `test/spec/*.tsv` are the parity contract across
 //! TypeScript, Go and Rust. Where this port cannot match the canonical
@@ -48,6 +53,7 @@ mod error;
 mod grammar;
 mod jsnum;
 mod node;
+mod tree;
 
 /// The README's Rust examples run as doctests, so a stale one fails the
 /// gate rather than misleading the reader. Its `toml` and `bash` fences
@@ -67,9 +73,9 @@ use tabnas::{
 pub use build_descriptor::{build_file, MAX_NESTING_DEPTH};
 pub use descriptor::{
     scalar_type, DescriptorProto, DescriptorRange, EnumDescriptorProto, EnumValueDescriptorProto,
-    FieldDescriptorProto, FieldLabel, FieldType, FileDescriptorProto, MethodDescriptorProto,
-    OneofDescriptorProto, OptionValue, Options, ServiceDescriptorProto, SymbolVisibility,
-    MAX_ENUM_NUMBER, MAX_FIELD_NUMBER_END, MAX_MESSAGE_SET_END, SCALAR_TYPES,
+    FieldDescriptorProto, FieldLabel, FieldType, FileDescriptorProto, MemberOrder,
+    MethodDescriptorProto, OneofDescriptorProto, OptionValue, Options, ServiceDescriptorProto,
+    SymbolVisibility, MAX_ENUM_NUMBER, MAX_FIELD_NUMBER_END, MAX_MESSAGE_SET_END, SCALAR_TYPES,
 };
 pub use detect_version::{
     declared_version, declared_version_src, edition_enum, is_edition, resolve_version, ProtoVersion,
@@ -77,6 +83,7 @@ pub use detect_version::{
 pub use error::ProtoError;
 pub use grammar::GRAMMAR_TEXT;
 pub use node::{child, child_rules, children, gaps, gaps_before, kw, nrule, nsrc};
+pub use tree::descriptor_value;
 
 /// This crate's version. It MUST equal `ts/package.json` "version": the
 /// release orchestrator rewrites both, and `tests/version_test.rs` fails
@@ -267,6 +274,10 @@ pub fn to_descriptor(
 /// Refuse a `.proto` source that nests deeper than
 /// [`MAX_NESTING_DEPTH`], before anything builds a tree that deep.
 ///
+/// The TypeScript `preflight` and the Go `Preflight` are the same check,
+/// with the same scan, cap and message, and their `parse` and `Parse`
+/// run it as [`parse`] does here.
+///
 /// [`parse`] and [`parse_with`] run this themselves. It is public for
 /// the caller who drives the engine directly, through [`make`] or
 /// [`proto`] on an instance of their own: the engine's `parse` builds a
@@ -352,6 +363,36 @@ pub fn parse_with(
 /// the engine builds a tree that deep; see that constant.
 pub fn parse(src: &str, options: Option<&ProtoOptions>) -> Result<FileDescriptorProto, ProtoError> {
     parse_with(shared(), src, options)
+}
+
+/// Parse a `.proto` source string to the descriptor as a tree: the value
+/// the canonical `parse` returns, every member named and ordered as its
+/// object has them.
+///
+/// [`parse`] then [`descriptor_value`]. A host that walks the value, as a
+/// translation does when it streams a tree's events, reads this rather
+/// than the [`FileDescriptorProto`] struct, whose serialization holds the
+/// same members in the order the struct declares them. On a parser the
+/// caller holds, the same is `descriptor_value(&parse_with(&parser, src,
+/// options)?)`.
+///
+/// ```
+/// fn main() -> Result<(), Box<dyn std::error::Error>> {
+///     let tree = tabnas_proto::parse_value("syntax = \"proto3\";\nmessage M { optional int32 a = 1; }", None)?;
+///     let tabnas::Value::Object(file) = &tree else { panic!("an object") };
+///     let tabnas::Value::Array(messages) = &file["messageType"] else { panic!("a list") };
+///     let tabnas::Value::Object(message) = &messages[0] else { panic!("an object") };
+///     let tabnas::Value::Array(fields) = &message["field"] else { panic!("a list") };
+///     let tabnas::Value::Object(field) = &fields[0] else { panic!("an object") };
+///     let names: Vec<&str> = field.keys().map(String::as_str).collect();
+///     // `proto3Optional` straight after `label`, and the synthesised
+///     // oneof's index last, as the canonical walk assigns them.
+///     assert_eq!(names, ["name", "number", "label", "proto3Optional", "type", "oneofIndex"]);
+///     Ok(())
+/// }
+/// ```
+pub fn parse_value(src: &str, options: Option<&ProtoOptions>) -> Result<Value, ProtoError> {
+    parse(src, options).map(|file| descriptor_value(&file))
 }
 
 /// One optional alchemy translation source and its explicit entry point.

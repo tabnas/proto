@@ -64,6 +64,20 @@ fn nesting_past_the_cap_is_refused() {
     }
 }
 
+/// The refusal carries no code, as every refusal the plugin makes itself
+/// does, and its message is the one the TypeScript and Go ports give:
+/// `test/spec/nesting.tsv` holds all three to it.
+#[test]
+fn the_nesting_refusal_carries_no_code_and_names_the_depth() {
+    let error = parse(&nested(MAX_NESTING_DEPTH + 1), None).expect_err("past the cap");
+    assert_eq!(error.code(), "");
+    assert_eq!(error.position(), None);
+    assert_eq!(
+        error.to_string(),
+        "proto: document nests 101 levels deep, past the 100 this parser accepts"
+    );
+}
+
 /// Deeply nested and never closed: refused rather than aborting. The
 /// brace scan counts opening braces, so an unterminated pile is caught
 /// before the engine sees it.
@@ -279,6 +293,25 @@ fn the_reusable_path_carries_the_same_bound() {
     assert_eq!(
         parse_with(&parser, &deep, None).unwrap_err().to_string(),
         parse(&deep, None).unwrap_err().to_string(),
+    );
+}
+
+/// The walk's own bound, which is this port's alone: a tree past the cap,
+/// built by a caller who drove the engine and skipped the preflight, is
+/// refused by `to_descriptor`, because a Rust stack that runs out aborts.
+/// TypeScript's `toDescriptor` and Go's `ToDescriptor` walk it
+/// (`ts/test/preflight.test.ts`, `go/preflight_test.go`), as
+/// `DIVERGENCE.md` section 2 records.
+#[test]
+fn the_walk_refuses_a_tree_past_the_cap() {
+    let parser = make();
+    let cst = parser
+        .parse(&nested(MAX_NESTING_DEPTH + 1))
+        .expect("the engine's own parse has no cap");
+    let error = tabnas_proto::to_descriptor(&cst, None).expect_err("the walk refuses it");
+    assert_eq!(
+        error.to_string(),
+        format!("proto: document nests deeper than {MAX_NESTING_DEPTH} levels")
     );
 }
 

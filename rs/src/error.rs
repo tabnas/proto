@@ -3,10 +3,10 @@
 //! What this crate refuses, and why.
 //!
 //! The package declares no error CODES of its own: input the grammar
-//! cannot recognise fails under the engine's base codes, and the one
-//! rejection the plugin makes itself, the syntax against edition version
-//! check, is told apart by its message. See the repository `AGENTS.md`,
-//! "Error codes".
+//! cannot recognise fails under the engine's base codes, and the two
+//! rejections the plugin makes itself, the syntax against edition version
+//! check and the nesting cap, are told apart by their messages. See the
+//! repository `AGENTS.md`, "Error codes".
 
 use std::fmt;
 
@@ -27,9 +27,10 @@ pub enum ProtoError {
     Version(String),
     /// The document nests deeper than [`crate::MAX_NESTING_DEPTH`].
     ///
-    /// The canonical runtime has no such limit, and does not need one: a
-    /// JavaScript stack overflow is a catchable exception, where a Rust
-    /// one aborts the process. See `DIVERGENCE.md`.
+    /// Every runtime refuses such a document before the engine runs, with
+    /// the same message and no code; only this port's walk also refuses a
+    /// tree that deep handed to it directly, because a Rust stack that
+    /// runs out aborts the process. See `DIVERGENCE.md`, section 2.
     TooDeep(String),
 }
 

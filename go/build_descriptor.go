@@ -292,6 +292,7 @@ func optionNameOf(stmt, value map[string]any) string {
 // out: protoc lifts those two out of the option set into descriptor fields.
 type pseudoOptions struct {
 	options      map[string]OptionValue
+	order        []string // the names in options, in list order
 	jsonName     string
 	defaultValue string
 	hasJSONName  bool
@@ -305,6 +306,7 @@ func readFieldOptions(opts map[string]any) pseudoOptions {
 		return out
 	}
 	m := map[string]OptionValue{}
+	var order []string
 	for _, fo := range childRules(opts) {
 		cst := child(fo, "constant")
 		name := optionNameOf(fo, cst)
@@ -317,37 +319,47 @@ func readFieldOptions(opts map[string]any) pseudoOptions {
 		case "default":
 			out.defaultValue, out.hasDefault = unquote(nsrc(cst)), true
 		default:
+			// A repeated name keeps its first place and takes the later
+			// value, as the canonical `map[name] = value` does.
+			if _, seen := m[name]; !seen {
+				order = append(order, name)
+			}
 			m[name] = constantValue(cst)
 		}
 	}
 	if len(m) > 0 {
 		out.options = m
+		out.order = order
 	}
 	return out
 }
 
-// plainOptions is the option map for the places that cannot carry
-// json_name / default — extension ranges, enum values.
-func plainOptions(opts map[string]any) map[string]OptionValue {
-	return readFieldOptions(opts).options
+// plainOptions is the option map, and its names in order, for the places
+// that cannot carry json_name / default — extension ranges, enum values.
+func plainOptions(opts map[string]any) (map[string]OptionValue, []string) {
+	po := readFieldOptions(opts)
+	return po.options, po.order
 }
 
 // features is the subset of an option map whose names are rooted at
-// `features`; those govern a map entry's key/value fields too.
-func features(opts map[string]OptionValue) map[string]OptionValue {
+// `features`, with those names in order; they govern a map entry's
+// key/value fields too.
+func features(opts map[string]OptionValue, order []string) (map[string]OptionValue, []string) {
 	if opts == nil {
-		return nil
+		return nil, nil
 	}
 	out := map[string]OptionValue{}
-	for k, v := range opts {
+	var outOrder []string
+	for _, k := range optionNames(opts, order) {
 		if k == "features" || strings.HasPrefix(k, "features.") {
-			out[k] = v
+			out[k] = opts[k]
+			outOrder = append(outOrder, k)
 		}
 	}
 	if len(out) == 0 {
-		return nil
+		return nil, nil
 	}
-	return out
+	return out, outOrder
 }
 
 // ---- fields ---------------------------------------------------------------
@@ -413,6 +425,7 @@ func applyFieldOptions(f *FieldDescriptorProto, opts map[string]any) {
 	}
 	if po.options != nil {
 		f.Options = po.options
+		f.optionOrder = po.order
 	}
 }
 
@@ -513,7 +526,8 @@ func buildMapField(n map[string]any, version ProtoVersion, into *DescriptorProto
 		},
 		NestedType: []DescriptorProto{}, EnumType: []EnumDescriptorProto{},
 		OneofDecl: []OneofDescriptorProto{}, Extension: []FieldDescriptorProto{},
-		Options: map[string]OptionValue{"mapEntry": true},
+		Options:     map[string]OptionValue{"mapEntry": true},
+		optionOrder: []string{"mapEntry"},
 	}
 
 	f := FieldDescriptorProto{
@@ -526,9 +540,9 @@ func buildMapField(n map[string]any, version ProtoVersion, into *DescriptorProto
 
 	// `features` on a map field govern the synthesised entry's key and value
 	// fields too, so protoc copies them down. Nothing else is propagated.
-	if feat := features(f.Options); feat != nil {
-		entry.Field[0].Options = feat
-		entry.Field[1].Options = feat
+	if feat, order := features(f.Options, f.optionOrder); feat != nil {
+		entry.Field[0].Options, entry.Field[0].optionOrder = feat, order
+		entry.Field[1].Options, entry.Field[1].optionOrder = feat, order
 	}
 	into.NestedType = append(into.NestedType, entry)
 	return f
@@ -556,16 +570,14 @@ func buildEnum(n map[string]any) EnumDescriptorProto {
 		switch nrule(first) {
 		case "ranges", "fieldNames":
 			// Enum reserved ranges are INCLUSIVE and span the whole int32 space.
-			addReserved(el, &e.ReservedRange, &e.ReservedName,
+			addReserved(el, &e.ReservedRange, &e.ReservedName, &e.memberOrder,
 				rangeOpts{exclusive: false, max: MaxEnumNumber})
 			continue
 		case "optionName":
-			if e.Options == nil {
-				e.Options = map[string]OptionValue{}
-			}
-			for kk, vv := range optionFrom(el) {
-				e.Options[kk] = vv
-			}
+			// The first option statement places `options` among the
+			// statement-ordered members, as `e.options = { ... }` does.
+			recordMember(&e.memberOrder, "options")
+			mergeOption(&e.Options, &e.optionOrder, el)
 			continue
 		case "fieldNumber":
 		default:
@@ -588,8 +600,9 @@ func buildEnum(n map[string]any) EnumDescriptorProto {
 			if strings.HasSuffix(gap, "-") {
 				num = -num
 			}
+			opts, order := plainOptions(child(el, "fieldOptions"))
 			e.Value = append(e.Value, EnumValueDescriptorProto{
-				Name: name, Number: num, Options: plainOptions(child(el, "fieldOptions")),
+				Name: name, Number: num, Options: opts, optionOrder: order,
 			})
 		}
 	}
@@ -658,12 +671,21 @@ func reservedNames(n map[string]any) []string {
 	return out
 }
 
-func addReserved(n map[string]any, rr *[]Range, rnames *[]string, ro rangeOpts) {
+// addReserved adds a `reserved` statement's ranges or names to the
+// container's lists. The canonical walk places `reservedRange` at any
+// statement with ranges and `reservedName` at one that yields a name;
+// order records each where it does.
+func addReserved(n map[string]any, rr *[]Range, rnames *[]string, order *[]string, ro rangeOpts) {
 	if rn := child(n, "ranges"); rn != nil {
+		recordMember(order, "reservedRange")
 		*rr = append(*rr, ranges(rn, ro)...)
 		return
 	}
-	*rnames = append(*rnames, reservedNames(n)...)
+	names := reservedNames(n)
+	if len(names) > 0 {
+		recordMember(order, "reservedName")
+	}
+	*rnames = append(*rnames, names...)
 }
 
 // ---- messages -------------------------------------------------------------
@@ -692,12 +714,7 @@ func messageFromBody(name string, body map[string]any, version ProtoVersion) Des
 	// extension/reserved range, and protoc applies it wherever the option sits.
 	for _, el := range elements {
 		if isOptionStmt(el) {
-			if msg.Options == nil {
-				msg.Options = map[string]OptionValue{}
-			}
-			for kk, vv := range optionFrom(el) {
-				msg.Options[kk] = vv
-			}
+			mergeOption(&msg.Options, &msg.optionOrder, el)
 		}
 	}
 	ro := rangeOpts{exclusive: true, max: MaxFieldNumberEnd}
@@ -776,17 +793,18 @@ func addMessageElement(el map[string]any, version ProtoVersion, msg *DescriptorP
 		msg.EnumType = append(msg.EnumType, buildEnum(el))
 		return
 	case strings.HasPrefix(k, "reserved"):
-		addReserved(el, &msg.ReservedRange, &msg.ReservedName, ro)
+		addReserved(el, &msg.ReservedRange, &msg.ReservedName, &msg.memberOrder, ro)
 		return
 	case strings.HasPrefix(k, "extensions"):
 		rs := ranges(child(el, "ranges"), ro)
 		// A compound `extensions 2, 9 to 11 [(i) = 5];` puts the options on
 		// every range, as protoc does.
-		if opts := plainOptions(child(el, "fieldOptions")); opts != nil {
+		if opts, order := plainOptions(child(el, "fieldOptions")); opts != nil {
 			for i := range rs {
-				rs[i].Options = opts
+				rs[i].Options, rs[i].optionOrder = opts, order
 			}
 		}
+		recordMember(&msg.memberOrder, "extensionRange")
 		msg.ExtensionRange = append(msg.ExtensionRange, rs...)
 		return
 	case strings.HasPrefix(k, "extend"):
@@ -832,17 +850,13 @@ func addOneof(el map[string]any, version ProtoVersion, msg *DescriptorProto) {
 	// loop below builds group members, which append to the message, and a
 	// re-allocated slice would leave that pointer addressing the old array.
 	var declOptions map[string]OptionValue
+	var declOrder []string
 	for _, of := range childRules(el) {
 		if nrule(of) != "oneofElement" {
 			continue
 		}
 		if strings.HasPrefix(kw(of), "option") {
-			if declOptions == nil {
-				declOptions = map[string]OptionValue{}
-			}
-			for kk, vv := range optionFrom(of) {
-				declOptions[kk] = vv
-			}
+			mergeOption(&declOptions, &declOrder, of)
 			continue
 		}
 		if nsrc(of) == ";" {
@@ -860,6 +874,7 @@ func addOneof(el map[string]any, version ProtoVersion, msg *DescriptorProto) {
 		msg.Field = append(msg.Field, f)
 	}
 	msg.OneofDecl[index].Options = declOptions
+	msg.OneofDecl[index].optionOrder = declOrder
 }
 
 func addExtend(el map[string]any, version ProtoVersion, into *[]FieldDescriptorProto) {
@@ -876,17 +891,48 @@ func addExtend(el map[string]any, version ProtoVersion, into *[]FieldDescriptorP
 
 // ---- options --------------------------------------------------------------
 
-// optionFrom reads `"option" optionName "=" constant ";"`.
-func optionFrom(el map[string]any) map[string]OptionValue {
+// optionOf reads `"option" optionName "=" constant ";"`, reporting false
+// when the statement has no constant or no name.
+func optionOf(el map[string]any) (string, OptionValue, bool) {
 	cst := child(el, "constant")
 	if cst == nil {
-		return map[string]OptionValue{}
+		return "", nil, false
 	}
 	name := optionNameOf(el, cst)
 	if name == "" {
-		return map[string]OptionValue{}
+		return "", nil, false
 	}
-	return map[string]OptionValue{name: constantValue(cst)}
+	return name, constantValue(cst), true
+}
+
+// mergeOption merges one `option` statement into an option set, as the
+// canonical `{ ...(target || {}), ...optionFrom(el) }` does: the set exists
+// from the first statement on, whatever that statement holds, and a
+// repeated name keeps its first place in order and takes the later value.
+func mergeOption(opts *map[string]OptionValue, order *[]string, el map[string]any) {
+	if *opts == nil {
+		*opts = map[string]OptionValue{}
+	}
+	name, value, ok := optionOf(el)
+	if !ok {
+		return
+	}
+	if _, seen := (*opts)[name]; !seen {
+		*order = append(*order, name)
+	}
+	(*opts)[name] = value
+}
+
+// recordMember notes a statement-ordered member as set. One already noted
+// keeps the place its first statement gave it, as a JavaScript object
+// member does.
+func recordMember(order *[]string, name string) {
+	for _, m := range *order {
+		if m == name {
+			return
+		}
+	}
+	*order = append(*order, name)
 }
 
 // ---- services -------------------------------------------------------------
@@ -900,12 +946,7 @@ func buildService(n map[string]any) ServiceDescriptorProto {
 		if strings.HasPrefix(kw(el), "rpc") {
 			svc.Method = append(svc.Method, buildRpc(el))
 		} else if isOptionStmt(el) {
-			if svc.Options == nil {
-				svc.Options = map[string]OptionValue{}
-			}
-			for kk, vv := range optionFrom(el) {
-				svc.Options[kk] = vv
-			}
+			mergeOption(&svc.Options, &svc.optionOrder, el)
 		}
 	}
 	return svc
@@ -971,12 +1012,7 @@ func buildRpc(el map[string]any) MethodDescriptorProto {
 		if nrule(o) != "optionStmt" {
 			continue
 		}
-		if m.Options == nil {
-			m.Options = map[string]OptionValue{}
-		}
-		for kk, vv := range optionFrom(o) {
-			m.Options[kk] = vv
-		}
+		mergeOption(&m.Options, &m.optionOrder, o)
 	}
 	return m
 }
@@ -1007,6 +1043,10 @@ func BuildFile(proto map[string]any, version ProtoVersion) FileDescriptorProto {
 		k := kw(def)
 		switch {
 		case strings.HasPrefix(k, "package"):
+			// The canonical walk assigns `file.package` at every package
+			// statement, so the first one places the member, whatever it
+			// holds.
+			recordMember(&file.memberOrder, "package")
 			if fi := child(def, "fullIdent"); fi != nil {
 				file.Package = nsrc(fi)
 			}
@@ -1014,6 +1054,7 @@ func BuildFile(proto map[string]any, version ProtoVersion) FileDescriptorProto {
 			if s := child(def, "strLit"); s != nil {
 				// `import option "x";` (edition 2024) is a separate list.
 				if strings.Contains(k, "option") {
+					recordMember(&file.memberOrder, "optionDependency")
 					file.OptionDependency = append(file.OptionDependency, unquote(nsrc(s)))
 					break
 				}
@@ -1027,12 +1068,8 @@ func BuildFile(proto map[string]any, version ProtoVersion) FileDescriptorProto {
 				}
 			}
 		case isOptionStmt(def):
-			if file.Options == nil {
-				file.Options = map[string]OptionValue{}
-			}
-			for kk, vv := range optionFrom(def) {
-				file.Options[kk] = vv
-			}
+			recordMember(&file.memberOrder, "options")
+			mergeOption(&file.Options, &file.optionOrder, def)
 		case strings.HasPrefix(k, "export"), strings.HasPrefix(k, "local"):
 			addVisible(def, k, version, &file.MessageType, &file.EnumType)
 		case strings.HasPrefix(k, "message"):

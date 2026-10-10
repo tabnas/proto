@@ -15,23 +15,26 @@ use tabnas::Value;
 
 use crate::descriptor::{
     scalar_type, DescriptorProto, DescriptorRange, EnumDescriptorProto, EnumValueDescriptorProto,
-    FieldDescriptorProto, FieldLabel, FieldType, FileDescriptorProto, MethodDescriptorProto,
-    OneofDescriptorProto, OptionValue, Options, ServiceDescriptorProto, SymbolVisibility,
-    MAX_ENUM_NUMBER, MAX_FIELD_NUMBER_END, MAX_MESSAGE_SET_END,
+    FieldDescriptorProto, FieldLabel, FieldType, FileDescriptorProto, MemberOrder,
+    MethodDescriptorProto, OneofDescriptorProto, OptionValue, Options, ServiceDescriptorProto,
+    SymbolVisibility, MAX_ENUM_NUMBER, MAX_FIELD_NUMBER_END, MAX_MESSAGE_SET_END,
 };
 use crate::detect_version::{edition_enum, is_edition, ProtoVersion};
 use crate::error::ProtoError;
 use crate::jsnum::{is_js_whitespace, js_number};
 use crate::node::{child, child_rules, children, gaps_before, kw, nrule, nsrc, src_or};
 
-/// How deep a document may nest before the walk refuses it.
+/// How deep a document may nest before it is refused.
 ///
 /// Messages, groups and oneofs nest, and so does the walk that reads
-/// them. JavaScript answers a runaway nesting with a catchable
-/// `RangeError`; Rust answers it by running out of stack, which ABORTS
-/// the process and cannot be caught. `parse` therefore refuses a document
-/// past this depth before the engine builds a tree that deep, and the
-/// walk refuses one it is handed directly.
+/// them. Rust answers a runaway nesting by running out of stack, which
+/// ABORTS the process and cannot be caught. `parse` therefore refuses a
+/// document past this depth before the engine builds a tree that deep,
+/// and the walk refuses one it is handed directly. The TypeScript and Go
+/// ports refuse the same documents at the same depth with the same
+/// message (`MAX_NESTING_DEPTH` and `MaxNestingDepth` there), for the
+/// cost the tree has in them; the walk's own refusal is this port's
+/// alone. `DIVERGENCE.md` section 2 has the measurements.
 ///
 /// The number is measured, not inherited. On the smallest stack a caller
 /// is likely to have, the 1 MiB a spawned `std::thread` gets by default,
@@ -46,6 +49,7 @@ use crate::node::{child, child_rules, children, gaps_before, kw, nrule, nsrc, sr
 ///
 /// `rs/tests/untrusted_test.rs` parses AT the cap and one level under it
 /// as well as past it: a cap nobody tests at is a number, not a bound.
+/// `test/spec/nesting.tsv` holds all three runtimes to the same refusals.
 pub const MAX_NESTING_DEPTH: usize = 100;
 
 /// The walk's own state: how deep it is, and whether it gave up.
@@ -521,6 +525,7 @@ fn build_enum(node: &Value) -> EnumDescriptorProto {
                     element,
                     &mut out.reserved_range,
                     &mut out.reserved_name,
+                    &mut out.member_order,
                     RangeOpts {
                         exclusive: false,
                         max: MAX_ENUM_NUMBER,
@@ -529,6 +534,10 @@ fn build_enum(node: &Value) -> EnumDescriptorProto {
                 continue;
             }
             "optionName" => {
+                // `e.options = { ...(e.options || {}), ... }`, so the
+                // first option statement places `options` among the
+                // statement-ordered members.
+                out.member_order.record("options");
                 merge_option(&mut out.options, element);
                 continue;
             }
@@ -751,13 +760,20 @@ fn scan_identifier(body: &str, at: usize) -> Option<(&str, usize)> {
     Some((&body[at..cursor], cursor))
 }
 
+/// A `reserved` statement's ranges or names, added to the container's
+/// lists. The canonical walk creates `reservedRange` for any statement
+/// with ranges, even one whose ranges all fail to read, and
+/// `reservedName` only for a statement that yields a name; `order`
+/// records each where it does.
 fn add_reserved(
     node: &Value,
     reserved_range: &mut Option<Vec<DescriptorRange>>,
     reserved_name: &mut Option<Vec<String>>,
+    order: &mut MemberOrder,
     opts: RangeOpts,
 ) {
     if let Some(node_ranges) = child(node, "ranges") {
+        order.record("reservedRange");
         reserved_range
             .get_or_insert_with(Vec::new)
             .extend(ranges(Some(node_ranges), opts));
@@ -765,6 +781,7 @@ fn add_reserved(
     }
     let names = reserved_names(node);
     if !names.is_empty() {
+        order.record("reservedName");
         reserved_name.get_or_insert_with(Vec::new).extend(names);
     }
 }
@@ -909,6 +926,7 @@ fn add_message_element(
             element,
             &mut message.reserved_range,
             &mut message.reserved_name,
+            &mut message.member_order,
             opts,
         );
         return;
@@ -923,6 +941,7 @@ fn add_message_element(
                 range.options = Some(extension_options.clone());
             }
         }
+        message.member_order.record("extensionRange");
         message
             .extension_range
             .get_or_insert_with(Vec::new)
@@ -1132,6 +1151,10 @@ pub fn build_file(proto: &Value, version: ProtoVersion) -> Result<FileDescriptor
     for def in children(proto, "topLevelDef") {
         let keyword = kw(def);
         if keyword.starts_with("package") {
+            // The canonical walk assigns `file.package` at every package
+            // statement, so the first one places the member, whatever it
+            // holds.
+            file.member_order.record("package");
             if let Some(node) = child(def, "fullIdent") {
                 file.package = Some(nsrc(node).to_string());
             }
@@ -1141,6 +1164,7 @@ pub fn build_file(proto: &Value, version: ProtoVersion) -> Result<FileDescriptor
                 // `import option "x";` (edition 2024) is a separate
                 // dependency list.
                 if keyword.contains("option") {
+                    file.member_order.record("optionDependency");
                     file.option_dependency
                         .get_or_insert_with(Vec::new)
                         .push(target);
@@ -1156,6 +1180,7 @@ pub fn build_file(proto: &Value, version: ProtoVersion) -> Result<FileDescriptor
                 }
             }
         } else if is_option_stmt(def) {
+            file.member_order.record("options");
             merge_option(&mut file.options, def);
         } else if keyword.starts_with("export") || keyword.starts_with("local") {
             let (messages, enums) = (&mut file.message_type, &mut file.enum_type);

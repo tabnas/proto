@@ -111,8 +111,15 @@ func ToDescriptor(cst any, opts *ProtoOptions) (FileDescriptorProto, error) {
 
 // Parse parses a .proto source string to a FileDescriptorProto in one call.
 // It builds a fresh engine each time; for repeated parsing reuse an engine:
-// build one with tabnas.Make, install Proto, then call ToDescriptor(j.Parse(src)).
+// build one with tabnas.Make, install Proto, then call ToDescriptor(j.Parse(src)),
+// running Preflight(src) first.
+//
+// A document nesting deeper than MaxNestingDepth is refused before the
+// engine runs: see Preflight.
 func Parse(src string, opts *ProtoOptions) (FileDescriptorProto, error) {
+	if err := Preflight(src); err != nil {
+		return FileDescriptorProto{}, err
+	}
 	rh := 8192
 	j := tabnas.Make(tabnas.Options{Rewind: &tabnas.RewindOptions{History: &rh}})
 	if err := Proto(j); err != nil {

@@ -15,6 +15,25 @@ package tabnasproto
 // modelled as `any` (the TS union OptionValue).
 type OptionValue = any
 
+// The order records. The canonical descriptor is a JavaScript object, and
+// an object lists its members in the order they were first assigned. Go
+// keeps an option set in a map, which has no order, so every type with
+// Options also keeps optionOrder: the option names in the order the source
+// first set them. And three members of each of the file, a message and an
+// enum are assigned by the statement that first needs them, so their order
+// is the source's; memberOrder records those by their descriptor JSON name:
+//
+//	FileDescriptorProto  package, optionDependency, options
+//	DescriptorProto      extensionRange, reservedRange, reservedName
+//	EnumDescriptorProto  reservedRange, reservedName, options
+//
+// The walk fills both, and DescriptorValue reads them to give every member
+// and option in the canonical order. They are unexported, so a struct
+// literal never names them: a descriptor built by hand carries none, and
+// DescriptorValue then gives the statement-ordered members in the order
+// listed above and the option names sorted. encoding/json does not see
+// them, so a descriptor marshals as it always has.
+
 // FieldDescriptorProto describes a single field, extension, or map entry leaf.
 type FieldDescriptorProto struct {
 	Name   string `json:"name"`
@@ -37,6 +56,8 @@ type FieldDescriptorProto struct {
 	// message's OneofDecl. A pointer so index 0 is distinguishable from unset.
 	OneofIndex *int                   `json:"oneofIndex,omitempty"`
 	Options    map[string]OptionValue `json:"options,omitempty"`
+
+	optionOrder []string // see "The order records"
 }
 
 // EnumValueDescriptorProto is one `NAME = number` entry in an enum.
@@ -44,6 +65,8 @@ type EnumValueDescriptorProto struct {
 	Name    string                 `json:"name"`
 	Number  int                    `json:"number"`
 	Options map[string]OptionValue `json:"options,omitempty"`
+
+	optionOrder []string // see "The order records"
 }
 
 // Range is a numeric reserved/extension range. End is EXCLUSIVE for message
@@ -53,6 +76,8 @@ type Range struct {
 	Start   int                    `json:"start"`
 	End     int                    `json:"end"`
 	Options map[string]OptionValue `json:"options,omitempty"`
+
+	optionOrder []string // see "The order records"
 }
 
 // Symbol visibility, an edition-2024 feature (`export` / `local`).
@@ -78,12 +103,17 @@ type EnumDescriptorProto struct {
 	ReservedName  []string                   `json:"reservedName,omitempty"`
 	Visibility    string                     `json:"visibility,omitempty"`
 	Options       map[string]OptionValue     `json:"options,omitempty"`
+
+	optionOrder []string // see "The order records"
+	memberOrder []string
 }
 
 // OneofDescriptorProto describes a oneof declaration.
 type OneofDescriptorProto struct {
 	Name    string                 `json:"name"`
 	Options map[string]OptionValue `json:"options,omitempty"`
+
+	optionOrder []string // see "The order records"
 }
 
 // DescriptorProto describes a message type.
@@ -99,6 +129,9 @@ type DescriptorProto struct {
 	ReservedName   []string               `json:"reservedName,omitempty"`
 	Visibility     string                 `json:"visibility,omitempty"`
 	Options        map[string]OptionValue `json:"options,omitempty"`
+
+	optionOrder []string // see "The order records"
+	memberOrder []string
 }
 
 // MethodDescriptorProto describes one rpc in a service.
@@ -109,6 +142,8 @@ type MethodDescriptorProto struct {
 	ClientStreaming bool                   `json:"clientStreaming,omitempty"`
 	ServerStreaming bool                   `json:"serverStreaming,omitempty"`
 	Options         map[string]OptionValue `json:"options,omitempty"`
+
+	optionOrder []string // see "The order records"
 }
 
 // ServiceDescriptorProto describes a service definition.
@@ -116,19 +151,21 @@ type ServiceDescriptorProto struct {
 	Name    string                  `json:"name"`
 	Method  []MethodDescriptorProto `json:"method"`
 	Options map[string]OptionValue  `json:"options,omitempty"`
+
+	optionOrder []string // see "The order records"
 }
 
 // FileDescriptorProto is the root descriptor for one parsed .proto file.
 type FileDescriptorProto struct {
 	// Name is not present in source; callers may set it.
-	Name             string                   `json:"name,omitempty"`
-	Package          string                   `json:"package,omitempty"`
-	Dependency       []string                 `json:"dependency"`
-	PublicDependency []int                    `json:"publicDependency"`
-	WeakDependency   []int                    `json:"weakDependency"`
+	Name             string   `json:"name,omitempty"`
+	Package          string   `json:"package,omitempty"`
+	Dependency       []string `json:"dependency"`
+	PublicDependency []int    `json:"publicDependency"`
+	WeakDependency   []int    `json:"weakDependency"`
 	// OptionDependency holds `import option "..."` targets (edition 2024).
-	OptionDependency []string          `json:"optionDependency,omitempty"`
-	MessageType      []DescriptorProto `json:"messageType"`
+	OptionDependency []string                 `json:"optionDependency,omitempty"`
+	MessageType      []DescriptorProto        `json:"messageType"`
 	EnumType         []EnumDescriptorProto    `json:"enumType"`
 	Service          []ServiceDescriptorProto `json:"service"`
 	Extension        []FieldDescriptorProto   `json:"extension"`
@@ -137,6 +174,9 @@ type FileDescriptorProto struct {
 	Syntax string `json:"syntax,omitempty"`
 	// Edition is 'EDITION_2023' | 'EDITION_2024' for edition files.
 	Edition string `json:"edition,omitempty"`
+
+	optionOrder []string // see "The order records"
+	memberOrder []string
 }
 
 // ScalarTypes maps a bare protobuf scalar type to its FieldDescriptorProto

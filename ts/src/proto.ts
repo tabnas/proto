@@ -13,6 +13,7 @@ import type { GrammarSpec } from '@tabnas/parser'
 import compiledGrammar from './proto-grammar.json'
 import { buildFile } from './build-descriptor'
 import { recordAggregate } from './aggregate'
+import { MAX_NESTING_DEPTH, preflight } from './preflight'
 import {
   ProtoVersion, declaredVersion, resolveVersion,
 } from './detect-version'
@@ -74,8 +75,12 @@ function toDescriptor(cst: any, options?: Partial<ProtoOptions>): FileDescriptor
 // Convenience: parse a `.proto` source string to a FileDescriptorProto in
 // one call. Builds a fresh engine each time; for repeated parsing reuse an
 // engine via `const j = new Tabnas().use(Proto)` and call
-// `toDescriptor(j.parse(src), opts)`.
+// `toDescriptor(j.parse(src), opts)`, running `preflight(src)` first.
+//
+// A document nesting deeper than MAX_NESTING_DEPTH is refused before the
+// engine runs: see ./preflight.ts.
 function parse(src: string, options?: Partial<ProtoOptions>): FileDescriptorProto {
+  preflight(src)
   const tn = new Tabnas({ rewind: { history: 8192 } })
   Proto(tn, options)
   return toDescriptor(tn.parse(src), options)
@@ -86,7 +91,7 @@ function parse(src: string, options?: Partial<ProtoOptions>): FileDescriptorProt
 // build if they drift. Mirrors `const VERSION` in go/proto.go.
 const VERSION = '0.6.7'
 
-export { Proto, parse, toDescriptor, VERSION }
+export { Proto, parse, toDescriptor, preflight, MAX_NESTING_DEPTH, VERSION }
 export type { ProtoVersion }
 export * from './descriptor'
 export { translate } from './translate'
