@@ -115,14 +115,15 @@ go/
   grammar_spec_test.go # it is current; no shipped package imports the compiler
   aggregate.go         # port of ts/src/aggregate.ts
   build_descriptor.go  # port of ts/src/build-descriptor.ts
-  descriptor.go        # port of ts/src/descriptor.ts, plus the order records
-                       #   DescriptorValue reads (unexported)
-  value.go             # DescriptorValue() / ParseValue(): the descriptor as the
-                       #   canonical tree, in its member order
+  descriptor.go        # port of ts/src/descriptor.ts
+  order.go             # the order records the walk keeps beside the
+                       #   descriptor, out of its equality
+  value.go             # ParseValue() / ToDescriptorValue() / DescriptorValue():
+                       #   the descriptor as the canonical tree
   preflight.go         # port of ts/src/preflight.ts: Preflight(), MaxNestingDepth
   detect_version.go    # port of ts/src/detect-version.ts
   parity_test.go       # runs the same test/spec/*.tsv fixtures
-  value_test.go        # DescriptorValue's JSON is every descriptor cell, byte
+  value_test.go        # ParseValue's JSON is every descriptor cell, byte
                        #   for byte
   preflight_test.go    # the nesting cap
   divergent_test.go    # the divergence register's `go` column
@@ -188,12 +189,16 @@ The tree a host reads is the descriptor as the plain value the canonical
 `parse` returns, and a host walking it streams its members in order, so
 every runtime gives the same tree in the same member order: TypeScript's
 `parse` returns it, Rust's `parse_value` and `descriptor_value` and Go's
-`ParseValue` and `DescriptorValue` build it from the typed descriptor.
+`ParseValue` and `ToDescriptorValue` build it from the typed descriptor.
 Most members have a fixed place, but a statement places a few (a file's
 `package`, `optionDependency` and `options`, a message's ranges and
 reserved names, an enum's ranges, reserved names and options) and an
 option map lists its names in source order, so the Rust and Go walks
-record that order beside the descriptor. `ts/test/canonical-json.test.ts`
+record that order: Rust in each container's `MemberOrder`, which
+equality ignores, and Go in a record beside the descriptor
+(`go/order.go`), since `reflect.DeepEqual` and go-cmp see every field.
+Go's `DescriptorValue`, given a descriptor alone, has no record and
+gives the documented order instead. `ts/test/canonical-json.test.ts`
 holds every descriptor cell of `test/spec` to the canonical
 `JSON.stringify` output, and `rs/tests/value_test.rs` and
 `go/value_test.go` hold each port's tree to the same cells, byte for
@@ -763,15 +768,16 @@ every string in it as hostile text.
   below); quoting them for SQL, HTML, a shell — or validating identifiers
   before code generation — remains the caller's job.
 
-A document's nesting is bounded in every runtime. `parse` (`Parse` in Go)
-counts the source's braces outside string literals and comments and
-refuses past 100 levels before the engine builds a tree, because the
-tree's cost grows with the square of the depth: unchecked, Go's parse
-grows past any memory a machine has and TypeScript's ends in a
-`RangeError` after seconds, and a Rust stack that runs out aborts the
-process. `preflight` (`Preflight` in Go) is the check alone, for a caller
-that drives the engine. `DIVERGENCE.md` section 2 has the measurements,
-and `test/spec/nesting.tsv` holds the three runtimes to the same refusals.
+A document's nesting is bounded in every runtime. `parse` (`Parse` in
+Go) counts the source's braces outside string literals and comments,
+found where the lexer finds them, and refuses past 100 levels before the
+engine builds a tree, because the tree's cost grows with the square of
+the depth: unchecked, Go's parse grows past any memory a machine has and
+TypeScript's ends in a `RangeError` after seconds, and a Rust stack that
+runs out aborts the process. `preflight` (`Preflight` in Go) is the
+check alone, for a caller that drives the engine. `DIVERGENCE.md`
+section 2 has the measurements, and `test/spec/nesting.tsv` holds the
+three runtimes to the same refusals.
 
 ## Output shape
 

@@ -41,6 +41,29 @@ test('every descriptor row is the canonical JSON.stringify output, byte for byte
   assert.deepEqual(failures, [], `${failures.length} of ${checked} rows differ`)
   // Ratcheted at what is on disk today, so a loader that finds fewer rows
   // cannot pass by measuring less.
-  assert.equal(checked, 232,
-    `test/spec holds ${checked} descriptor rows, not the 232 this test was measured against`)
+  assert.equal(checked, 235,
+    `test/spec holds ${checked} descriptor rows, not the 235 this test was measured against`)
+})
+
+
+// A statement that places a member keeps it present when it yields
+// nothing: `extensions 1_0;` reads no range (`Number('1_0')` is NaN) and
+// still assigns `extensionRange`, so the canonical JSON holds an empty
+// list. The Go and Rust trees are held to these same bytes
+// (go/value_test.go, rs/tests/value_test.rs); a struct whose empty list
+// reads as absent cannot hold them, which is why they are tests there and
+// not fixture rows.
+test('a statement keeps its member when it yields nothing', () => {
+  for (const [src, want] of [
+    ['syntax = "proto2";\nmessage M { extensions 1_0; }\n',
+      '{"dependency":[],"publicDependency":[],"weakDependency":[],"messageType":[{"name":"M","field":[],"nestedType":[],"enumType":[],"oneofDecl":[],"extension":[],"extensionRange":[]}],"enumType":[],"service":[],"extension":[],"syntax":"proto2"}'],
+    ['syntax = "proto2";\nmessage M { reserved 1_0; option deprecated = true; extensions 1_0; reserved "a"; }\n',
+      '{"dependency":[],"publicDependency":[],"weakDependency":[],"messageType":[{"name":"M","field":[],"nestedType":[],"enumType":[],"oneofDecl":[],"extension":[],"options":{"deprecated":true},"reservedRange":[],"extensionRange":[],"reservedName":["a"]}],"enumType":[],"service":[],"extension":[],"syntax":"proto2"}'],
+    ['syntax = "proto2";\nenum E { A = 0; reserved 1_0; option allow_alias = true; }\n',
+      '{"dependency":[],"publicDependency":[],"weakDependency":[],"messageType":[],"enumType":[{"name":"E","value":[{"name":"A","number":0}],"reservedRange":[],"options":{"allow_alias":true}}],"service":[],"extension":[],"syntax":"proto2"}'],
+    ['syntax = "proto2";\nmessage M { reserved 0x10; }\n',
+      '{"dependency":[],"publicDependency":[],"weakDependency":[],"messageType":[{"name":"M","field":[],"nestedType":[],"enumType":[],"oneofDecl":[],"extension":[],"reservedRange":[]}],"enumType":[],"service":[],"extension":[],"syntax":"proto2"}'],
+  ]) {
+    assert.equal(JSON.stringify(parse(src)), want, src)
+  }
 })

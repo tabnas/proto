@@ -10,6 +10,8 @@
 
 import { describe, it } from 'node:test'
 import assert from 'node:assert'
+import Fs from 'node:fs'
+import Path from 'node:path'
 
 const { parse, preflight, toDescriptor, Proto, MAX_NESTING_DEPTH } = require('..')
 const { Tabnas } = require('@tabnas/parser')
@@ -95,5 +97,79 @@ describe('nesting cap', () => {
     // one, which DIVERGENCE.md section 2 records.
     const deep = nested(MAX_NESTING_DEPTH + 1)
     assert.equal(levels(toDescriptor(tn.parse(deep))), MAX_NESTING_DEPTH + 1)
+  })
+})
+
+
+// The scan skips strings and comments where the lexer finds them, no
+// sooner and no later: a brace it skips that the lexer counts would let a
+// document past the cap reach the engine.
+describe('nesting cap, where the lexer finds strings and comments', () => {
+  // A document one level past the cap after `head`.
+  const past = (head: string) =>
+    head + 'message M {'.repeat(MAX_NESTING_DEPTH + 1) + '}'.repeat(MAX_NESTING_DEPTH + 1)
+
+  const refusedAt = (src: string, depth: number) => {
+    const message = new RegExp(`nests ${depth} levels deep`)
+    assert.throws(() => preflight(src), message, src.slice(0, 60))
+    assert.throws(() => parse(src), message, src.slice(0, 60))
+  }
+
+  it('ends a line comment at a carriage return, as the lexer ends a line', () => {
+    for (const comment of ['// c', '# c']) {
+      refusedAt(past('syntax = "proto2";\r' + comment + '\r'), MAX_NESTING_DEPTH + 1)
+    }
+  })
+
+  it('does not count a brace in a backtick string, across lines too', () => {
+    const noise = '{'.repeat(4 * MAX_NESTING_DEPTH)
+    for (const src of [
+      'syntax = "proto2";\noption a = `' + noise + '`;\n',
+      'syntax = "proto2";\noption a = `\\`' + noise + '`;\n',
+      'syntax = "proto2";\noption a = `' + noise + '\n' + noise + '`;\n',
+    ]) {
+      assert.doesNotThrow(() => preflight(src), src.slice(0, 40))
+      assert.doesNotThrow(() => parse(src), src.slice(0, 40))
+    }
+  })
+
+  it('opens a string only where a token starts', () => {
+    // Inside a word the lexer reads a quote as part of the word, so
+    // `message a"b` names a message `a"b` and the braces after it count.
+    for (const quote of ['"', "'", '`']) {
+      refusedAt(past('syntax = "proto2";\nmessage a' + quote + 'b {') + '}', MAX_NESTING_DEPTH + 2)
+    }
+    // Straight after a keyword it opens a string, whose braces close
+    // nothing.
+    refusedAt('syntax = "proto2";\n' + 'message M {'.repeat(90) + 'reserved"' + '}'.repeat(90) +
+      '";' + 'message M {'.repeat(11) + '}'.repeat(101), 101)
+    const noise = '{'.repeat(4 * MAX_NESTING_DEPTH)
+    const fdp = parse('syntax = "proto2";\nmessage M { reserved"' + noise + '"; }\n')
+    assert.deepEqual(fdp.messageType[0].reservedName, [noise])
+  })
+
+  it('knows the grammar\'s keywords and fixed tokens', () => {
+    // After each, a quote opens a string. Sixty levels open, a string of
+    // sixty closers, and sixty levels more: 120 levels when the closers
+    // are a string's, 60 when they count.
+    const grammar = JSON.parse(Fs.readFileSync(
+      Path.join(__dirname, '..', 'src', 'proto-grammar.json'), 'utf8'))
+    const depth = (lead: string) => {
+      const src = '{'.repeat(60) + lead + '"' + '}'.repeat(60) + '"' + '{'.repeat(60)
+      try { preflight(src) } catch (e: any) { return Number(/nests (\d+)/.exec(e.message)![1]) }
+      return 0
+    }
+    const keywords = Object.entries(grammar.options.match.token as Record<string, string>)
+    assert.ok(0 < keywords.length)
+    for (const [name, re] of keywords) {
+      const word = /^@~\/\^([A-Za-z]+)\(\?!\[A-Za-z0-9_\]\)\/$/.exec(re)
+      assert.ok(word, `match token ${name} is not a keyword the scan can read: ${re}`)
+      assert.equal(depth(' ' + word![1]), 120, `after the keyword ${word![1]}`)
+      assert.equal(depth(' ' + word![1] + 'x'), 0, `after the word ${word![1]}x`)
+    }
+    for (const [name, token] of Object.entries(grammar.options.fixed.token as Record<string, string>)) {
+      if ('{' === token || '}' === token) continue
+      assert.equal(depth('a' + token), 120, `after the fixed token ${name} (${token})`)
+    }
   })
 })

@@ -97,7 +97,11 @@ round-trip runners cannot see it, and the byte-for-byte tests above can.
 `nesting.tsv` pins the nesting cap every runtime carries: a document
 nesting exactly 100 levels parses whole, one past it is refused with the
 plugin's own message, and a brace in a string literal or a comment does
-not count.
+not count. The scan finds strings and comments where the lexer does: a
+line comment ends at a carriage return as well as a line feed, a
+backtick string is a string, and a quote opens one only where a token
+starts, so one inside a word is part of the word and one straight after
+a keyword opens a string.
 
 `protobuf-suite.tsv` is **generated**: the in-scope `valid` lane of the
 vendored protoc parser corpus (`../protobuf-suite/valid.json`), one row per

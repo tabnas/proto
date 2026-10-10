@@ -1205,8 +1205,62 @@ pub fn build_file(proto: &Value, version: ProtoVersion) -> Result<FileDescriptor
     Ok(file)
 }
 
+/// The grammar's keywords: its match tokens, each a word the lexer takes
+/// whole when no word character follows it. A token starts after one, so
+/// a quote straight after a keyword opens a string (`reserved"x";`
+/// reserves `x`). `rs/tests/untrusted_test.rs` holds this list to
+/// `proto-grammar.json`.
+const KEYWORDS: [&str; 26] = [
+    "edition",
+    "enum",
+    "export",
+    "extend",
+    "extensions",
+    "group",
+    "import",
+    "local",
+    "map",
+    "max",
+    "message",
+    "oneof",
+    "option",
+    "optional",
+    "package",
+    "public",
+    "repeated",
+    "required",
+    "reserved",
+    "returns",
+    "rpc",
+    "service",
+    "stream",
+    "syntax",
+    "to",
+    "weak",
+];
+
+/// Where a token ends and the next starts: a space, a line break, or one
+/// of the grammar's fixed tokens other than the braces, which the scan
+/// counts on their own. The test holds these to `proto-grammar.json` too.
+const SEPARATORS: &[u8] = b" \t\r\n[]:,;=()<>-.+";
+
+/// A word character, as the keywords' `(?![A-Za-z0-9_])` reads one.
+fn is_word(byte: u8) -> bool {
+    byte.is_ascii_alphanumeric() || b'_' == byte
+}
+
 /// The nesting depth of a `.proto` source, counted in braces, skipping
-/// the string literals and the comments the tabnas lexer skips.
+/// the string literals and the comments the tabnas lexer skips, where it
+/// skips them:
+///
+/// - A line comment, `//` or `#`, runs to the next line break, and the
+///   lexer breaks a line at a carriage return as well as a line feed.
+/// - A string is double, single or backtick quoted, a backslash escaping
+///   the character after it, and a backtick string runs across lines.
+/// - A quote opens a string only where the lexer starts a token: at the
+///   start, and after a space, a line break, a fixed token, a string, a
+///   comment or a keyword. Inside a word, `a"b`, the lexer reads the
+///   quote as part of the word, and the braces after it count.
 ///
 /// `parse` uses it to refuse a runaway document BEFORE the engine builds
 /// a tree that deep, because a `tabnas::Value` drops recursively and a
@@ -1220,35 +1274,32 @@ pub(crate) fn brace_depth(src: &str) -> usize {
     let mut at = 0;
     let mut depth: usize = 0;
     let mut deepest: usize = 0;
+    // Whether a token starts at `at`.
+    let mut start = true;
     while at < bytes.len() {
         match bytes[at] {
             b'{' => {
                 depth += 1;
                 deepest = deepest.max(depth);
                 at += 1;
+                start = true;
             }
             b'}' => {
                 depth = depth.saturating_sub(1);
                 at += 1;
+                start = true;
             }
-            quote @ (b'"' | b'\'') => {
+            byte if SEPARATORS.contains(&byte) => {
                 at += 1;
-                while at < bytes.len() && bytes[at] != quote {
-                    at += if b'\\' == bytes[at] { 2 } else { 1 };
-                }
-                at += 1;
+                start = true;
             }
-            b'#' => {
+            byte @ (b'#' | b'/') if b'#' == byte || Some(&b'/') == bytes.get(at + 1) => {
                 // The shared tabnas lexer reads `#` as a line comment;
                 // `.proto` does not, which the leniency corpus records.
-                while at < bytes.len() && b'\n' != bytes[at] {
+                while at < bytes.len() && b'\n' != bytes[at] && b'\r' != bytes[at] {
                     at += 1;
                 }
-            }
-            b'/' if Some(&b'/') == bytes.get(at + 1) => {
-                while at < bytes.len() && b'\n' != bytes[at] {
-                    at += 1;
-                }
+                start = true;
             }
             b'/' if Some(&b'*') == bytes.get(at + 1) => {
                 at += 2;
@@ -1256,8 +1307,27 @@ pub(crate) fn brace_depth(src: &str) -> usize {
                     at += 1;
                 }
                 at += 2;
+                start = true;
             }
-            _ => at += 1,
+            quote @ (b'"' | b'\'' | b'`') if start => {
+                at += 1;
+                while at < bytes.len() && bytes[at] != quote {
+                    at += if b'\\' == bytes[at] { 2 } else { 1 };
+                }
+                at += 1;
+                start = true;
+            }
+            byte if start && is_word(byte) => {
+                let from = at;
+                while at < bytes.len() && is_word(bytes[at]) {
+                    at += 1;
+                }
+                start = KEYWORDS.contains(&&src[from..at]);
+            }
+            _ => {
+                at += 1;
+                start = false;
+            }
         }
     }
     deepest
@@ -1299,5 +1369,16 @@ mod tests {
         assert_eq!(brace_depth("/* {{{{ */ message M {}"), 1);
         assert_eq!(brace_depth("# {{{{\nmessage M {}"), 1);
         assert_eq!(brace_depth("}}}}"), 0);
+        // A line break is a carriage return too.
+        assert_eq!(brace_depth("// x\rmessage M {}"), 1);
+        assert_eq!(brace_depth("# x\rmessage M {}"), 1);
+        // A backtick string, across lines too.
+        assert_eq!(brace_depth("option a = `{{\n{{`;"), 0);
+        assert_eq!(brace_depth("option a = `\\`{{`;"), 0);
+        // A quote inside a word is part of it; after a keyword it opens a
+        // string.
+        assert_eq!(brace_depth("message a\"b { }"), 1);
+        assert_eq!(brace_depth("message M { reserved\"}\"; message N { } }"), 2);
+        assert_eq!(brace_depth("message M { reserve\"}\"; message N { } }"), 1);
     }
 }

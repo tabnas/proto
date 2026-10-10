@@ -31,7 +31,10 @@ Turn a CST (from `tn.parse`) into a FileDescriptorProto.
 
 Refuse a source that nests deeper than `MAX_NESTING_DEPTH`, which is 100.
 The depth is a count of braces outside string literals and the comments
-the lexer skips. `preflight` throws an `Error` that names it. Like every
+the lexer skips, found where the lexer finds them: a line comment ends at
+a carriage return as well as a line feed, a backtick string is a string,
+and a quote inside a word is part of the word, so the braces after it
+count. `preflight` throws an `Error` that names it. Like every
 refusal the plugin makes itself, the error carries no code. `parse` runs
 the check first. A caller who drives the engine directly runs it on the
 source before `tn.parse`, since the engine's own parse builds the whole
@@ -81,8 +84,8 @@ an edition file; an edition file carries both `syntax` and `edition`, as
 ### Member order
 
 The object lists its members in the order the walk first sets them. The
-Go and Rust ports give the same order in the trees their `DescriptorValue`
-and `descriptor_value` build, which a host walking the value relies on.
+Go and Rust ports give the same order in the trees their `ParseValue`
+and `parse_value` build, which a host walking the value relies on.
 Most members have a fixed place. The file's lists come first, then
 `edition` and `syntax`. A field reads `name`, `number`, `label`,
 `proto3Optional`, then `type` and `typeName`, then `jsonName`,

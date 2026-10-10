@@ -108,8 +108,8 @@ fn every_descriptor_row_is_the_canonical_json_byte_for_byte() {
     // Ratcheted at what is on disk today, so a loader that finds fewer
     // rows cannot pass by measuring less.
     assert_eq!(
-        checked, 232,
-        "test/spec holds {checked} descriptor rows, not the 232 this suite was measured against"
+        checked, 235,
+        "test/spec holds {checked} descriptor rows, not the 235 this suite was measured against"
     );
 }
 
@@ -132,6 +132,37 @@ fn a_statement_places_its_member_where_the_canonical_object_has_it() {
         canonical(&descriptor_value(&a)),
         canonical(&descriptor_value(&b))
     );
+}
+
+/// A statement that places a member keeps it present when it yields
+/// nothing, as the canonical walk's `(msg.extensionRange ||= []).push()`
+/// does: `extensions 1_0;` reads no range (`Number("1_0")` is NaN) and
+/// still assigns the list. The expected bytes are the TypeScript parse's,
+/// which `ts/test/canonical-json.test.ts` pins, and `go/value_test.go`
+/// holds Go to the same.
+#[test]
+fn a_statement_keeps_its_member_when_it_yields_nothing() {
+    for (src, want) in [
+        (
+            "syntax = \"proto2\";\nmessage M { extensions 1_0; }\n",
+            r#"{"dependency":[],"publicDependency":[],"weakDependency":[],"messageType":[{"name":"M","field":[],"nestedType":[],"enumType":[],"oneofDecl":[],"extension":[],"extensionRange":[]}],"enumType":[],"service":[],"extension":[],"syntax":"proto2"}"#,
+        ),
+        (
+            "syntax = \"proto2\";\nmessage M { reserved 1_0; option deprecated = true; extensions 1_0; reserved \"a\"; }\n",
+            r#"{"dependency":[],"publicDependency":[],"weakDependency":[],"messageType":[{"name":"M","field":[],"nestedType":[],"enumType":[],"oneofDecl":[],"extension":[],"options":{"deprecated":true},"reservedRange":[],"extensionRange":[],"reservedName":["a"]}],"enumType":[],"service":[],"extension":[],"syntax":"proto2"}"#,
+        ),
+        (
+            "syntax = \"proto2\";\nenum E { A = 0; reserved 1_0; option allow_alias = true; }\n",
+            r#"{"dependency":[],"publicDependency":[],"weakDependency":[],"messageType":[],"enumType":[{"name":"E","value":[{"name":"A","number":0}],"reservedRange":[],"options":{"allow_alias":true}}],"service":[],"extension":[],"syntax":"proto2"}"#,
+        ),
+        (
+            "syntax = \"proto2\";\nmessage M { reserved 0x10; }\n",
+            r#"{"dependency":[],"publicDependency":[],"weakDependency":[],"messageType":[{"name":"M","field":[],"nestedType":[],"enumType":[],"oneofDecl":[],"extension":[],"reservedRange":[]}],"enumType":[],"service":[],"extension":[],"syntax":"proto2"}"#,
+        ),
+    ] {
+        let tree = parse_value(src, None).expect("parses");
+        assert_eq!(canonical(&tree), want, "{src}");
+    }
 }
 
 #[test]

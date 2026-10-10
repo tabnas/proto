@@ -287,7 +287,10 @@ pub fn to_descriptor(
 /// the check has to come before the tree exists.
 ///
 /// The depth is counted in braces, skipping the string literals and
-/// comments the lexer skips. Over-counting is safe here and
+/// comments the lexer skips, where it skips them: a line comment ends at
+/// a carriage return as well as a line feed, a backtick string is a
+/// string, and a quote opens one only where a token starts, so a quote
+/// inside a word is part of the word. Over-counting is safe here and
 /// under-counting is not, so an unterminated string or comment counts
 /// every brace inside it; the engine rejects that source anyway.
 ///

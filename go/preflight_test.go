@@ -10,8 +10,10 @@ package tabnasproto
 // test/spec/nesting.tsv holds all three to the same documents.
 
 import (
+	"encoding/json"
 	"errors"
 	"fmt"
+	"regexp"
 	"strings"
 	"testing"
 	"time"
@@ -157,5 +159,123 @@ func TestPreflightOnItsOwn(t *testing.T) {
 	}
 	if fdp, err = ToDescriptor(cst, nil); err != nil || levels(fdp) != MaxNestingDepth+1 {
 		t.Errorf("a tree past the cap: %d levels, %v", levels(fdp), err)
+	}
+}
+
+// past is a document nesting one level past the cap after head.
+func past(head string) string {
+	return head + strings.Repeat("message M {", MaxNestingDepth+1) + strings.Repeat("}", MaxNestingDepth+1)
+}
+
+func refusedAt(t *testing.T, src string, depth int) {
+	t.Helper()
+	want := fmt.Sprintf("nests %d levels deep", depth)
+	if err := Preflight(src); err == nil || !strings.Contains(err.Error(), want) {
+		t.Errorf("%.60q: got %v, want %q", src, err, want)
+	}
+	if _, err := Parse(src, nil); err == nil || !strings.Contains(err.Error(), want) {
+		t.Errorf("%.60q: Parse got %v, want %q", src, err, want)
+	}
+}
+
+// The lexer ends a line at a carriage return as well as a line feed, and a
+// line comment with it, so the braces after one count: a document that
+// breaks its lines with carriage returns alone cannot hide its nesting in
+// a comment.
+func TestALineCommentEndsAtACarriageReturn(t *testing.T) {
+	for _, comment := range []string{"// c", "# c"} {
+		refusedAt(t, past("syntax = \"proto2\";\r"+comment+"\r"), MaxNestingDepth+1)
+	}
+}
+
+// The lexer reads a backtick string as a string, across lines too, and a
+// backslash escapes a backtick in it, so its braces nest nothing.
+func TestBracesInABacktickStringDoNotCount(t *testing.T) {
+	noise := strings.Repeat("{", 4*MaxNestingDepth)
+	for _, src := range []string{
+		"syntax = \"proto2\";\noption a = `" + noise + "`;\n",
+		"syntax = \"proto2\";\noption a = `\\`" + noise + "`;\n",
+		"syntax = \"proto2\";\noption a = `" + noise + "\n" + noise + "`;\n",
+	} {
+		if err := Preflight(src); err != nil {
+			t.Errorf("%.40q: %v", src, err)
+		}
+		if _, err := Parse(src, nil); err != nil {
+			t.Errorf("%.40q: %v", src, err)
+		}
+	}
+}
+
+// A quote opens a string only where the lexer starts a token. Inside a
+// word the lexer reads it as part of the word (`message a"b` names a
+// message a"b), so the braces after it count; straight after a keyword it
+// opens a string, whose braces close nothing.
+func TestAQuoteOpensAStringOnlyWhereATokenStarts(t *testing.T) {
+	for _, quote := range []string{`"`, `'`, "`"} {
+		refusedAt(t, past("syntax = \"proto2\";\nmessage a"+quote+"b {")+"}", MaxNestingDepth+2)
+	}
+	closers := "syntax = \"proto2\";\n" + strings.Repeat("message M {", 90) +
+		"reserved\"" + strings.Repeat("}", 90) + "\";" +
+		strings.Repeat("message M {", 11) + strings.Repeat("}", 101)
+	refusedAt(t, closers, 101)
+
+	noise := strings.Repeat("{", 4*MaxNestingDepth)
+	fdp, err := Parse("syntax = \"proto2\";\nmessage M { reserved\""+noise+"\"; }\n", nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if names := fdp.MessageType[0].ReservedName; len(names) != 1 || names[0] != noise {
+		t.Errorf("reserved names: %.40q", names)
+	}
+}
+
+// The scan's keywords and separators are the grammar's: after each keyword
+// the grammar's match tokens name, and after each fixed token, a quote
+// opens a string, whose braces close nothing. A keyword the grammar gains
+// and the scan does not know fails here.
+func TestTheScanKnowsTheGrammarsTokens(t *testing.T) {
+	var spec struct {
+		Options struct {
+			Fixed struct {
+				Token map[string]string `json:"token"`
+			} `json:"fixed"`
+			Match struct {
+				Token map[string]string `json:"token"`
+			} `json:"match"`
+		} `json:"options"`
+	}
+	if err := json.Unmarshal(grammarSpec, &spec); err != nil {
+		t.Fatal(err)
+	}
+	// Sixty levels open, then a string of sixty closers after the token,
+	// then sixty levels more: 120 levels when the string is one, 60 when
+	// its closers count.
+	probe := func(lead string) string {
+		return strings.Repeat("{", 60) + lead + "\"" + strings.Repeat("}", 60) + "\"" + strings.Repeat("{", 60)
+	}
+	shape := regexp.MustCompile(`^@~/\^([A-Za-z]+)\\b/$`)
+	if len(spec.Options.Match.Token) == 0 {
+		t.Fatal("the grammar names no match tokens")
+	}
+	for name, re := range spec.Options.Match.Token {
+		m := shape.FindStringSubmatch(re)
+		if m == nil {
+			t.Errorf("match token %s is not a keyword the scan can read: %s", name, re)
+			continue
+		}
+		if got := braceDepth(probe(" " + m[1])); got != 120 {
+			t.Errorf("after the keyword %s the scan counts %d levels, not 120", m[1], got)
+		}
+		if got := braceDepth(probe(" " + m[1] + "x")); got != 60 {
+			t.Errorf("after the word %sx the scan counts %d levels, not 60", m[1], got)
+		}
+	}
+	for name, token := range spec.Options.Fixed.Token {
+		if token == "{" || token == "}" {
+			continue
+		}
+		if got := braceDepth(probe("a" + token)); got != 120 {
+			t.Errorf("after the fixed token %s (%q) the scan counts %d levels, not 120", name, token, got)
+		}
 	}
 }

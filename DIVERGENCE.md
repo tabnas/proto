@@ -76,8 +76,8 @@ engine runs, with the same message. Rust alone also refuses such a tree
 when a caller hands one to its walk directly.**
 
 Each runtime counts the document's braces, skipping string literals and
-the comments the lexer skips, and refuses past `MAX_NESTING_DEPTH`
-(`MaxNestingDepth` in Go):
+the comments the lexer skips, where the lexer finds them, and refuses
+past `MAX_NESTING_DEPTH` (`MaxNestingDepth` in Go):
 
 ```
 proto: document nests 101 levels deep, past the 100 this parser accepts
@@ -89,6 +89,21 @@ code. `parse` runs the check in every runtime (`Parse` in Go, and Rust's
 and Rust and `Preflight` in Go, for a caller that drives the engine and
 wants the CST. The scan is the same in all three: `ts/src/preflight.ts`
 and `go/preflight.go` port `brace_depth` from `rs/src/build_descriptor.rs`.
+
+The scan has to find strings and comments exactly where the lexer does,
+because a brace it skips and the lexer counts lets a document past the
+cap reach the engine. Until 2026-10-10 it ended a line comment at a line
+feed alone, where the lexer also ends one at a carriage return, and it
+took any quote for the start of a string, where the lexer reads a quote
+inside a word as part of the word (`message a"b` names a message `a"b`).
+Either let a document nesting past the cap through, in Rust too. It also
+counted the braces in a backtick string, which the lexer reads as a
+string, so it refused a document the engine accepts. Now a line comment
+ends at either line break, a backtick string is a string, and a quote
+opens one only where a token starts: at the start, and after a space, a
+line break, a fixed token, a string, a comment or one of the grammar's
+keywords, which each runtime's test holds to that runtime's compiled
+grammar.
 
 Until 2026-10-10 the cap was Rust's alone, and TypeScript and Go parsed
 any depth. Every runtime needs it, each for its own reason. A CST node's
@@ -135,12 +150,14 @@ the language's stack discipline, not a defect to repair.
 
 **Executed:** `test/spec/nesting.tsv`, in every runtime: the cap itself,
 one level past it, an unclosed pile of messages, braces in an aggregate
-option value, which count, and the braces a string literal or a comment
-holds, which do not. `rs/tests/untrusted_test.rs`,
-`ts/test/preflight.test.ts` and `go/preflight_test.go` add the depth
-under the cap, the missing code, and the walk: each runtime's test hands
-its walk a tree one level past the cap, which Rust refuses and the other
-two walk.
+option value, which count, the braces a string literal or a comment
+holds, which do not, and the places the scan must agree with the lexer:
+a line comment ended by a carriage return, a backtick string, a quote
+inside a word and a string straight after a keyword.
+`rs/tests/untrusted_test.rs`, `ts/test/preflight.test.ts` and
+`go/preflight_test.go` add the depth under the cap, the missing code,
+and the walk: each runtime's test hands its walk a tree one level past
+the cap, which Rust refuses and the other two walk.
 
 ## 3. Divergences this repository records that are NOT Rust's
 
@@ -206,8 +223,10 @@ Why each one is what it is:
 
 These three were found while building the descriptor tree, by probing
 for members Go's descriptor cannot hold; no shared fixture row reaches
-them. `DescriptorValue` gives the members Go's descriptor has, so the tree
-carries them too.
+them. Go's tree gives the members Go's descriptor has, so it carries the
+first two too. It does not carry the third: the walk records the
+statement that placed `reservedRange`, and `ParseValue` keeps a member a
+statement placed even when it is empty, as the canonical object does.
 
 **Owner: Go**, for all seven.
 
@@ -224,12 +243,19 @@ reader should not have to measure it again.
   `optionDependency` and `options`, a message's `extensionRange`,
   `reservedRange` and `reservedName`, an enum's `reservedRange`,
   `reservedName` and `options`, and the names in every option map. Rust's
-  `descriptor_value` and Go's `DescriptorValue` give the same members in
-  the same order, from an order the walk records, and
-  `rs/tests/value_test.rs` and `go/value_test.go` hold each to the
-  canonical JSON byte for byte over every shared fixture row that has a
-  descriptor (232), with `test/spec/member-order.tsv` covering every
-  statement-ordered member. The structs' own serializations still follow
+  `parse_value` and `descriptor_value` and Go's `ParseValue` and
+  `ToDescriptorValue` give the same members in the same order, from an
+  order the walk records, and `rs/tests/value_test.rs` and
+  `go/value_test.go` hold each to the canonical JSON byte for byte over
+  every shared fixture row that has a descriptor (235), with
+  `test/spec/member-order.tsv` covering every statement-ordered member.
+  Rust keeps the record in the descriptor, where equality ignores it, and
+  Go beside it, since `reflect.DeepEqual` and go-cmp compare every field;
+  so Go's `DescriptorValue`, handed a descriptor alone, gives the
+  documented order and sorted option names, where Rust's
+  `descriptor_value` of a parsed descriptor gives the source's. That is a
+  difference in what the two typed descriptors carry, not in any value a
+  parse returns. The structs' own serializations still follow
   their field declarations, and Go's sorts option names; the shared
   runner compares after a JSON round trip, which ignores order, so that
   is no parity claim.

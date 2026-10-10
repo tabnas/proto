@@ -107,9 +107,9 @@ reserved names and options come in the order of their first statements.
 The walk records that order in each container's `member_order`, a
 `MemberOrder`, which `descriptor_value` reads and equality ignores. On
 a parser the caller holds, `descriptor_value(&parse_with(&parser, src,
-None)?)` gives the same tree. The Go port's `ParseValue` and
-`DescriptorValue` give it too, and every shared fixture row holds each
-port's tree to the canonical JSON, byte for byte.
+None)?)` gives the same tree. The Go port's `ParseValue` gives it too,
+and every shared fixture row holds each port's tree to the canonical
+JSON, byte for byte.
 
 ### What the walk reproduces
 
@@ -273,7 +273,9 @@ already refused to walk it. The refusal is not the protection; parsing
 no such tree is.
 
 The cap counts braces outside string literals and comments, so a document
-that merely mentions braces is not refused for nesting.
+that merely mentions braces is not refused for nesting. It finds them
+where the lexer does: a line comment ends at a carriage return as well
+as a line feed, and a quote inside a word is part of the word.
 
 ## Install
 

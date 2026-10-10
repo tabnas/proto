@@ -16,7 +16,10 @@
 
 package tabnasproto
 
-import "fmt"
+import (
+	"fmt"
+	"strings"
+)
 
 // MaxNestingDepth is how deep a document may nest, in braces. Parse
 // refuses a deeper one. It sits more than an order of magnitude past
@@ -38,8 +41,41 @@ func Preflight(src string) error {
 	return nil
 }
 
+// keywords are the grammar's: its match tokens, each a word the lexer takes
+// whole when no word character follows it. A token starts after one, so a
+// quote straight after a keyword opens a string (`reserved"x";` reserves
+// x). preflight_test.go holds this list to proto-grammar.json.
+var keywords = map[string]bool{
+	"edition": true, "enum": true, "export": true, "extend": true,
+	"extensions": true, "group": true, "import": true, "local": true,
+	"map": true, "max": true, "message": true, "oneof": true, "option": true,
+	"optional": true, "package": true, "public": true, "repeated": true,
+	"required": true, "reserved": true, "returns": true, "rpc": true,
+	"service": true, "stream": true, "syntax": true, "to": true, "weak": true,
+}
+
+// separators end a token and start the next: a space, a line break, or one
+// of the grammar's fixed tokens other than the braces, which the scan
+// counts on their own. The test holds these to proto-grammar.json too.
+const separators = " \t\r\n[]:,;=()<>-.+"
+
+// isWord is a word character, as the keywords' (?![A-Za-z0-9_]) reads one.
+func isWord(c byte) bool {
+	return ('0' <= c && c <= '9') || ('A' <= c && c <= 'Z') || ('a' <= c && c <= 'z') || c == '_'
+}
+
 // braceDepth is the nesting depth of a .proto source, counted in braces,
-// skipping the string literals and the comments the tabnas lexer skips.
+// skipping the string literals and the comments the tabnas lexer skips,
+// where it skips them:
+//
+//   - A line comment, // or #, runs to the next line break, and the lexer
+//     breaks a line at a carriage return as well as a line feed.
+//   - A string is double, single or backtick quoted, a backslash escaping
+//     the character after it, and a backtick string runs across lines.
+//   - A quote opens a string only where the lexer starts a token: at the
+//     start, and after a space, a line break, a fixed token, a string, a
+//     comment or a keyword. Inside a word, a"b, the lexer reads the quote
+//     as part of the word, and the braces after it count.
 //
 // Over-counting is safe and under-counting is not, so an unterminated
 // string or comment counts every brace inside it: the engine rejects that
@@ -48,6 +84,8 @@ func Preflight(src string) error {
 // scan counts.
 func braceDepth(src string) int {
 	at, depth, deepest := 0, 0, 0
+	// start says whether a token starts at at.
+	start := true
 	for at < len(src) {
 		switch c := src[at]; {
 		case c == '{':
@@ -56,12 +94,31 @@ func braceDepth(src string) int {
 				deepest = depth
 			}
 			at++
+			start = true
 		case c == '}':
 			if depth > 0 {
 				depth--
 			}
 			at++
-		case c == '"' || c == '\'':
+			start = true
+		case strings.IndexByte(separators, c) >= 0:
+			at++
+			start = true
+		case c == '#' || (c == '/' && at+1 < len(src) && src[at+1] == '/'):
+			// The shared tabnas lexer reads `#` as a line comment; .proto
+			// does not, which the leniency corpus records.
+			for at < len(src) && src[at] != '\n' && src[at] != '\r' {
+				at++
+			}
+			start = true
+		case c == '/' && at+1 < len(src) && src[at+1] == '*':
+			at += 2
+			for at < len(src) && !(src[at] == '*' && at+1 < len(src) && src[at+1] == '/') {
+				at++
+			}
+			at += 2
+			start = true
+		case start && (c == '"' || c == '\'' || c == '`'):
 			at++
 			for at < len(src) && src[at] != c {
 				if src[at] == '\\' {
@@ -71,24 +128,16 @@ func braceDepth(src string) int {
 				}
 			}
 			at++
-		case c == '#':
-			// The shared tabnas lexer reads `#` as a line comment; .proto
-			// does not, which the leniency corpus records.
-			for at < len(src) && src[at] != '\n' {
+			start = true
+		case start && isWord(c):
+			from := at
+			for at < len(src) && isWord(src[at]) {
 				at++
 			}
-		case c == '/' && at+1 < len(src) && src[at+1] == '/':
-			for at < len(src) && src[at] != '\n' {
-				at++
-			}
-		case c == '/' && at+1 < len(src) && src[at+1] == '*':
-			at += 2
-			for at < len(src) && !(src[at] == '*' && at+1 < len(src) && src[at+1] == '/') {
-				at++
-			}
-			at += 2
+			start = keywords[src[from:at]]
 		default:
 			at++
+			start = false
 		}
 	}
 	return deepest
