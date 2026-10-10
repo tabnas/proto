@@ -15,20 +15,22 @@
 //!
 //! Every member's place is the one the canonical walk gives it. Most are
 //! fixed by the walk's own code; the statement-ordered ones are read from
-//! each container's [`MemberOrder`].
+//! the record the walk keeps beside the descriptor (`order.rs`).
 
 use indexmap::IndexMap;
 use tabnas::Value;
 
 use crate::descriptor::{
     DescriptorProto, DescriptorRange, EnumDescriptorProto, EnumValueDescriptorProto,
-    FieldDescriptorProto, FileDescriptorProto, MemberOrder, MethodDescriptorProto,
-    OneofDescriptorProto, OptionValue, Options, ServiceDescriptorProto,
+    FieldDescriptorProto, FileDescriptorProto, MethodDescriptorProto, OneofDescriptorProto,
+    OptionValue, Options, ServiceDescriptorProto,
 };
+use crate::order::Order;
 
-/// The descriptor as the tree the canonical `parse` returns: an object
-/// for each message, an array for each list, and every member named and
-/// ordered as the canonical object has it.
+/// A descriptor as a tree in the canonical shape: an object for each
+/// message, an array for each list, and every member named as the
+/// canonical object names it, with the fixed members in the canonical
+/// order.
 ///
 /// This is what a host that walks the value reads, rather than
 /// [`FileDescriptorProto`]'s own serialization, which holds the same
@@ -37,28 +39,37 @@ use crate::descriptor::{
 /// read stays `NaN`, as it does in the canonical object; a JSON writer
 /// spells it `null`.
 ///
-/// The members a statement places, such as a file's `package` and
-/// `options`, follow each container's [`MemberOrder`], which the walk
-/// records. A descriptor built by hand carries no record, and those
-/// members then come in the order [`MemberOrder`] documents.
+/// A descriptor does not say in what order its source set the members a
+/// statement places, such as a file's `package` and `options`: the walk
+/// records that beside it, and [`crate::parse_value`],
+/// [`crate::parse_value_with`] and [`crate::to_descriptor_value`] read the
+/// record. Given a descriptor alone, this function gives those members in
+/// the order the canonical walk's code lists them: a file's `package`,
+/// `optionDependency` and `options`; a message's `extensionRange`,
+/// `reservedRange` and `reservedName`; an enum's `reservedRange`,
+/// `reservedName` and `options`. Option names keep the order of their map.
 ///
 /// ```
 /// fn main() -> Result<(), Box<dyn std::error::Error>> {
-///     let file = tabnas_proto::parse("option java_package = \"x\";\npackage p;", None)?;
-///     let tree = tabnas_proto::descriptor_value(&file);
-///     let tabnas::Value::Object(members) = tree else { panic!("an object") };
-///     let names: Vec<&str> = members.keys().map(String::as_str).collect();
-///     assert_eq!(
-///         names,
-///         [
-///             "dependency", "publicDependency", "weakDependency", "messageType", "enumType",
-///             "service", "extension", "syntax", "options", "package",
-///         ]
-///     );
+///     let source = "option java_package = \"x\";\npackage p;";
+///     let tail = |tree: tabnas::Value| -> Vec<String> {
+///         let tabnas::Value::Object(members) = tree else { panic!("an object") };
+///         members.keys().skip(7).cloned().collect()
+///     };
+///     // The source's order, from the walk's record.
+///     assert_eq!(tail(tabnas_proto::parse_value(source, None)?), ["syntax", "options", "package"]);
+///     // A descriptor alone: the listed order.
+///     let file = tabnas_proto::parse(source, None)?;
+///     assert_eq!(tail(tabnas_proto::descriptor_value(&file)), ["syntax", "package", "options"]);
 ///     Ok(())
 /// }
 /// ```
 pub fn descriptor_value(file: &FileDescriptorProto) -> Value {
+    file_value(file, None)
+}
+
+/// [`descriptor_value`], ordered by the walk's record where there is one.
+pub(crate) fn file_value(file: &FileDescriptorProto, order: Option<&Order>) -> Value {
     let mut out = Members::new();
     out.put("dependency", list(&file.dependency, |name| string(name)));
     out.put(
@@ -69,8 +80,18 @@ pub fn descriptor_value(file: &FileDescriptorProto) -> Value {
         "weakDependency",
         list(&file.weak_dependency, |at| index(*at)),
     );
-    out.put("messageType", list(&file.message_type, message_value));
-    out.put("enumType", list(&file.enum_type, enum_value));
+    out.put(
+        "messageType",
+        indexed(&file.message_type, |at, message| {
+            message_value(message, kid(order, "messageType", at))
+        }),
+    );
+    out.put(
+        "enumType",
+        indexed(&file.enum_type, |at, enumeration| {
+            enum_value(enumeration, kid(order, "enumType", at))
+        }),
+    );
     out.put("service", list(&file.service, service_value));
     out.put("extension", list(&file.extension, field_value));
     // An edition file assigns `edition` and then `syntax`, a syntax file
@@ -78,7 +99,7 @@ pub fn descriptor_value(file: &FileDescriptorProto) -> Value {
     out.put_some("edition", file.edition.as_deref().map(string));
     out.put_some("syntax", file.syntax.as_deref().map(string));
     out.put_ordered(
-        &file.member_order,
+        order,
         [
             ("package", file.package.as_deref().map(string)),
             (
@@ -114,15 +135,15 @@ impl Members {
         }
     }
 
-    /// The statement-ordered members: those `order` recorded, in its
+    /// The statement-ordered members: those the record holds, in its
     /// order, then the rest in the order given.
     fn put_ordered<const N: usize>(
         &mut self,
-        order: &MemberOrder,
+        order: Option<&Order>,
         members: [(&'static str, Option<Value>); N],
     ) {
         let mut pending: Vec<(&'static str, Option<Value>)> = members.into_iter().collect();
-        for name in order.members() {
+        for name in order.map_or(&[][..], Order::members) {
             if let Some(at) = pending.iter().position(|(member, _)| member == name) {
                 let (member, value) = pending.remove(at);
                 self.put_some(member, value);
@@ -150,6 +171,21 @@ fn list<T>(items: &[T], each: impl Fn(&T) -> Value) -> Value {
     Value::array(items.iter().map(each).collect())
 }
 
+fn indexed<T>(items: &[T], each: impl Fn(usize, &T) -> Value) -> Value {
+    Value::array(
+        items
+            .iter()
+            .enumerate()
+            .map(|(at, item)| each(at, item))
+            .collect(),
+    )
+}
+
+/// The record of the `at`-th container in a list, where the walk filed one.
+fn kid<'a>(order: Option<&'a Order>, list: &'static str, at: usize) -> Option<&'a Order> {
+    order.and_then(|order| order.kid(list, at))
+}
+
 fn options_value(options: &Options) -> Value {
     Value::object(
         options
@@ -171,17 +207,27 @@ fn option_value(value: &OptionValue) -> Value {
 /// `options`, which the walk reads in a pass of its own before the other
 /// statements, then the statement-ordered ranges and names, then the
 /// `visibility` an edition-2024 `export` or `local` adds last.
-fn message_value(message: &DescriptorProto) -> Value {
+fn message_value(message: &DescriptorProto, order: Option<&Order>) -> Value {
     let mut out = Members::new();
     out.put("name", string(&message.name));
     out.put("field", list(&message.field, field_value));
-    out.put("nestedType", list(&message.nested_type, message_value));
-    out.put("enumType", list(&message.enum_type, enum_value));
+    out.put(
+        "nestedType",
+        indexed(&message.nested_type, |at, nested| {
+            message_value(nested, kid(order, "nestedType", at))
+        }),
+    );
+    out.put(
+        "enumType",
+        indexed(&message.enum_type, |at, enumeration| {
+            enum_value(enumeration, kid(order, "enumType", at))
+        }),
+    );
     out.put("oneofDecl", list(&message.oneof_decl, oneof_value));
     out.put("extension", list(&message.extension, field_value));
     out.put_some("options", message.options.as_ref().map(options_value));
     out.put_ordered(
-        &message.member_order,
+        order,
         [
             (
                 "extensionRange",
@@ -217,12 +263,12 @@ fn message_value(message: &DescriptorProto) -> Value {
 
 /// `{ name, value }`, then the statement-ordered ranges, names and
 /// options, then `visibility`.
-fn enum_value(enumeration: &EnumDescriptorProto) -> Value {
+fn enum_value(enumeration: &EnumDescriptorProto, order: Option<&Order>) -> Value {
     let mut out = Members::new();
     out.put("name", string(&enumeration.name));
     out.put("value", list(&enumeration.value, enum_member_value));
     out.put_ordered(
-        &enumeration.member_order,
+        order,
         [
             (
                 "reservedRange",

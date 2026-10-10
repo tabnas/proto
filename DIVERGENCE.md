@@ -243,19 +243,17 @@ reader should not have to measure it again.
   `optionDependency` and `options`, a message's `extensionRange`,
   `reservedRange` and `reservedName`, an enum's `reservedRange`,
   `reservedName` and `options`, and the names in every option map. Rust's
-  `parse_value` and `descriptor_value` and Go's `ParseValue` and
-  `ToDescriptorValue` give the same members in the same order, from an
-  order the walk records, and `rs/tests/value_test.rs` and
-  `go/value_test.go` hold each to the canonical JSON byte for byte over
-  every shared fixture row that has a descriptor (235), with
-  `test/spec/member-order.tsv` covering every statement-ordered member.
-  Rust keeps the record in the descriptor, where equality ignores it, and
-  Go beside it, since `reflect.DeepEqual` and go-cmp compare every field;
-  so Go's `DescriptorValue`, handed a descriptor alone, gives the
-  documented order and sorted option names, where Rust's
-  `descriptor_value` of a parsed descriptor gives the source's. That is a
-  difference in what the two typed descriptors carry, not in any value a
-  parse returns. The structs' own serializations still follow
+  `parse_value`, `parse_value_with` and `to_descriptor_value` and Go's
+  `ParseValue` and `ToDescriptorValue` give the same members in the same
+  order, from an order the walk records beside the descriptor, and
+  `rs/tests/value_test.rs` and `go/value_test.go` hold each to the
+  canonical JSON byte for byte over every shared fixture row that has a
+  descriptor (235), with `test/spec/member-order.tsv` covering every
+  statement-ordered member. Both ports keep the record out of the
+  descriptor's types, so Rust's `descriptor_value` and Go's
+  `DescriptorValue`, handed a descriptor alone, both give the documented
+  order. Go also sorts the option names there, having no other order for
+  a map, where a Rust option map keeps its own order. The structs' own serializations still follow
   their field declarations, and Go's sorts option names; the shared
   runner compares after a JSON round trip, which ignores order, so that
   is no parity claim.

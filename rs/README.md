@@ -104,12 +104,14 @@ Most members have a fixed place. A statement places a few, as it does in
 the canonical object: a file's `package`, `optionDependency` and
 `options`, a message's ranges and reserved names, and an enum's ranges,
 reserved names and options come in the order of their first statements.
-The walk records that order in each container's `member_order`, a
-`MemberOrder`, which `descriptor_value` reads and equality ignores. On
-a parser the caller holds, `descriptor_value(&parse_with(&parser, src,
-None)?)` gives the same tree. The Go port's `ParseValue` gives it too,
-and every shared fixture row holds each port's tree to the canonical
-JSON, byte for byte.
+The walk records that order beside the descriptor, so the descriptor
+types stay as they were. On a parser the caller holds,
+`parse_value_with(&parser, src, None)?` gives the same tree, and
+`to_descriptor_value(&cst, None)?` gives it from what the engine's own
+`parse` returned. `descriptor_value` takes a descriptor alone, with no
+record, and puts those members in a fixed order. The Go port's `ParseValue` gives the same
+tree too, and every shared fixture row holds each port's tree to the
+canonical JSON, byte for byte.
 
 ### What the walk reproduces
 
@@ -335,9 +337,10 @@ runtimes to the rest.
   caller cannot reach for a JavaScript object: `engine()` and `make()`
   build an instance with the rewind history the union grammar needs,
   `parse_with` carries the nesting bound onto a caller's own instance,
-  `parse_value` and `descriptor_value` give the descriptor as the plain
-  tree the canonical `parse` returns, in the order a `MemberOrder`
-  records, `build_file` takes an already-resolved version,
+  `parse_value`, `parse_value_with` and `to_descriptor_value` give the
+  descriptor as the plain tree the canonical `parse` returns, and
+  `descriptor_value` gives a descriptor alone that shape,
+  `build_file` takes an already-resolved version,
   `GRAMMAR_TEXT`, `PLUGIN_NAME` and `REWIND_HISTORY` name what the
   canonical plugin sets inline, and `nrule`, `nsrc`, `kw`, `child`,
   `children`, `child_rules`, `gaps` and `gaps_before` are the CST

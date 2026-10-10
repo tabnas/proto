@@ -138,9 +138,13 @@ rs/
   proto-grammar.json   # GENERATED compiled grammar (Rust compiler), include_str!
   src/aggregate.rs     # port of ts/src/aggregate.ts
   src/build_descriptor.rs  # port of ts/src/build-descriptor.ts
-  src/descriptor.rs    # port of ts/src/descriptor.ts, plus MemberOrder
+  src/descriptor.rs    # port of ts/src/descriptor.ts
+  src/order.rs         # the order record the walk keeps beside the
+                       #   descriptor, out of its types
   src/tree.rs          # descriptor_value(): the descriptor as the canonical
-                       #   tree, in its member order (parse_value() in lib.rs)
+                       #   tree, in its member order (parse_value(),
+                       #   parse_value_with() and to_descriptor_value() in
+                       #   lib.rs)
   src/detect_version.rs    # port of ts/src/detect-version.ts
   src/jsnum.rs         # Number(string) and Number::toString, ECMA-262
   translate/           # GENERATED copies for include_str! — do not edit;
@@ -188,17 +192,19 @@ says how each part is written and why.
 The tree a host reads is the descriptor as the plain value the canonical
 `parse` returns, and a host walking it streams its members in order, so
 every runtime gives the same tree in the same member order: TypeScript's
-`parse` returns it, Rust's `parse_value` and `descriptor_value` and Go's
-`ParseValue` and `ToDescriptorValue` build it from the typed descriptor.
-Most members have a fixed place, but a statement places a few (a file's
-`package`, `optionDependency` and `options`, a message's ranges and
-reserved names, an enum's ranges, reserved names and options) and an
-option map lists its names in source order, so the Rust and Go walks
-record that order: Rust in each container's `MemberOrder`, which
-equality ignores, and Go in a record beside the descriptor
-(`go/order.go`), since `reflect.DeepEqual` and go-cmp see every field.
-Go's `DescriptorValue`, given a descriptor alone, has no record and
-gives the documented order instead. `ts/test/canonical-json.test.ts`
+`parse` returns it, Rust's `parse_value`, `parse_value_with` and
+`to_descriptor_value` and Go's `ParseValue` and `ToDescriptorValue`
+build it from the typed descriptor. Most members have a fixed place, but
+a statement places a few (a file's `package`, `optionDependency` and
+`options`, a message's ranges and reserved names, an enum's ranges,
+reserved names and options) and an option map lists its names in source
+order, so the Rust and Go walks record that order in a record beside the
+descriptor (`rs/src/order.rs`, `go/order.go`). The descriptor types are
+untouched by it: a Rust struct literal still names every field, and
+Go's `reflect.DeepEqual` and go-cmp see what they saw before. Rust's
+`descriptor_value` and Go's `DescriptorValue`, given a descriptor alone,
+have no record and give the documented order instead.
+`ts/test/canonical-json.test.ts`
 holds every descriptor cell of `test/spec` to the canonical
 `JSON.stringify` output, and `rs/tests/value_test.rs` and
 `go/value_test.go` hold each port's tree to the same cells, byte for

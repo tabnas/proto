@@ -16,7 +16,8 @@ mod common;
 use serde::{Serialize, Serializer};
 use tabnas::Value;
 use tabnas_proto::{
-    descriptor_value, parse, parse_value, DescriptorProto, DescriptorRange, EnumDescriptorProto,
+    descriptor_value, make, parse, parse_value, parse_value_with, preflight, to_descriptor_value,
+    DescriptorProto, DescriptorRange, EnumDescriptorProto, EnumValueDescriptorProto,
     FileDescriptorProto, OptionValue, Options,
 };
 use tabnas_support::{is_error_expect, load_spec_dir, SpecOptions};
@@ -124,14 +125,90 @@ fn a_statement_places_its_member_where_the_canonical_object_has_it() {
     assert_eq!(tail(&package_first), ["syntax", "package", "options"]);
 
     // The two descriptors hold the same values, so they are equal: the
-    // record of the order never decides equality.
+    // record of the order lives beside the descriptor, not in it, and a
+    // descriptor alone gives the documented order whichever came first.
     let a = parse("option java_package = \"x\";\npackage p;", None).expect("parses");
     let b = parse("package p;\noption java_package = \"x\";", None).expect("parses");
     assert_eq!(a, b);
-    assert_ne!(
+    assert_eq!(
         canonical(&descriptor_value(&a)),
         canonical(&descriptor_value(&b))
     );
+    assert_eq!(
+        names(&descriptor_value(&a))[7..],
+        ["syntax", "package", "options"]
+    );
+}
+
+/// The descriptor types are what they are on main: a struct literal
+/// naming every field compiles, so the tree added none, which for a type
+/// whose fields are all public would be a breaking change. The tree's
+/// order lives beside the descriptor (`src/order.rs`).
+#[test]
+fn the_descriptor_types_take_a_literal_naming_every_field() {
+    let enumeration = EnumDescriptorProto {
+        name: "E".to_string(),
+        value: vec![EnumValueDescriptorProto {
+            name: "A".to_string(),
+            number: 0.0,
+            options: None,
+        }],
+        reserved_range: None,
+        reserved_name: None,
+        visibility: None,
+        options: None,
+    };
+    let message = DescriptorProto {
+        name: "M".to_string(),
+        field: Vec::new(),
+        nested_type: Vec::new(),
+        enum_type: vec![enumeration],
+        oneof_decl: Vec::new(),
+        extension: Vec::new(),
+        extension_range: None,
+        reserved_range: None,
+        reserved_name: None,
+        visibility: None,
+        options: None,
+    };
+    let file = FileDescriptorProto {
+        name: None,
+        package: Some("p".to_string()),
+        dependency: Vec::new(),
+        public_dependency: Vec::new(),
+        weak_dependency: Vec::new(),
+        option_dependency: None,
+        message_type: vec![message],
+        enum_type: Vec::new(),
+        service: Vec::new(),
+        extension: Vec::new(),
+        options: None,
+        syntax: Some("proto3".to_string()),
+        edition: None,
+    };
+    let source = "syntax = \"proto3\";\npackage p;\nmessage M { enum E { A = 0; } }";
+    assert_eq!(parse(source, None).expect("parses"), file);
+}
+
+/// The tree on a parser the caller holds, from the source or from a CST
+/// the caller parsed, is the tree `parse_value` gives: the walk's record
+/// rides along on every path from a source.
+#[test]
+fn every_path_from_a_source_gives_the_same_tree() {
+    let parser = make();
+    for source in [
+        "option java_package = \"x\";\npackage p;",
+        "syntax = \"proto2\";\nmessage M { reserved 1; extensions 2; option (b) = 1; option (a) = 2; }",
+        "syntax = \"proto2\";\nenum E { option allow_alias = true; reserved 3; A = 0; }",
+    ] {
+        let fresh = canonical(&parse_value(source, None).expect("parses"));
+        let reused = parse_value_with(&parser, source, None).expect("parses");
+        assert_eq!(canonical(&reused), fresh, "{source}");
+        preflight(source).expect("under the cap");
+        let cst = parser.parse(source).expect("parses");
+        let from_cst = to_descriptor_value(&cst, None).expect("walks");
+        assert_eq!(canonical(&from_cst), fresh, "{source}");
+    }
 }
 
 /// A statement that places a member keeps it present when it yields
@@ -175,9 +252,12 @@ fn a_number_the_canonical_reads_as_nan_stays_nan_in_the_tree() {
     assert!(canonical(field).contains("\"number\":null"));
 }
 
+/// A descriptor alone, parsed or not, holds no record of its source's
+/// order, so `descriptor_value` gives the documented order, and a member
+/// set after the parse takes its place in it.
 #[test]
-fn a_member_set_after_the_parse_follows_the_ones_the_parse_placed() {
-    let mut file = parse("package p;", None).expect("parses");
+fn a_descriptor_alone_takes_the_documented_order() {
+    let mut file = parse("option go_package = \"y\";\npackage p;", None).expect("parses");
     let mut options = Options::new();
     options.insert(
         "java_package".to_string(),

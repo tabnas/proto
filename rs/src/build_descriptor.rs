@@ -15,14 +15,15 @@ use tabnas::Value;
 
 use crate::descriptor::{
     scalar_type, DescriptorProto, DescriptorRange, EnumDescriptorProto, EnumValueDescriptorProto,
-    FieldDescriptorProto, FieldLabel, FieldType, FileDescriptorProto, MemberOrder,
-    MethodDescriptorProto, OneofDescriptorProto, OptionValue, Options, ServiceDescriptorProto,
-    SymbolVisibility, MAX_ENUM_NUMBER, MAX_FIELD_NUMBER_END, MAX_MESSAGE_SET_END,
+    FieldDescriptorProto, FieldLabel, FieldType, FileDescriptorProto, MethodDescriptorProto,
+    OneofDescriptorProto, OptionValue, Options, ServiceDescriptorProto, SymbolVisibility,
+    MAX_ENUM_NUMBER, MAX_FIELD_NUMBER_END, MAX_MESSAGE_SET_END,
 };
 use crate::detect_version::{edition_enum, is_edition, ProtoVersion};
 use crate::error::ProtoError;
 use crate::jsnum::{is_js_whitespace, js_number};
 use crate::node::{child, child_rules, children, gaps_before, kw, nrule, nsrc, src_or};
+use crate::order::Order;
 
 /// How deep a document may nest before it is refused.
 ///
@@ -391,15 +392,17 @@ fn build_group(
     node: &Value,
     version: ProtoVersion,
     into: &mut DescriptorProto,
+    into_order: &mut Order,
     walk: &mut Walk,
 ) -> FieldDescriptorProto {
     let group_name = src_or(child(node, "ident")).to_string();
-    let nested = message_from_body(
+    let (nested, nested_order) = message_from_body(
         group_name.clone(),
         child(node, "messageBody"),
         version,
         walk,
     );
+    into_order.put("nestedType", into.nested_type.len(), nested_order);
     into.nested_type.push(nested);
 
     let (label, proto3_optional) = field_label(child(node, "label"), version);
@@ -503,8 +506,10 @@ fn build_map_field(node: &Value, into: &mut DescriptorProto) -> FieldDescriptorP
 
 // ---- enums ----------------------------------------------------------------
 
-fn build_enum(node: &Value) -> EnumDescriptorProto {
+/// An enum, and the record of its statement-ordered members.
+fn build_enum(node: &Value) -> (EnumDescriptorProto, Order) {
     let mut out = EnumDescriptorProto::new(src_or(child(node, "ident")));
+    let mut order = Order::default();
     for element in children(node, "enumElement") {
         // An enum body is the one place where the statement kind CANNOT
         // come from the leading keyword: `enumField` inlines its name, so
@@ -525,7 +530,7 @@ fn build_enum(node: &Value) -> EnumDescriptorProto {
                     element,
                     &mut out.reserved_range,
                     &mut out.reserved_name,
-                    &mut out.member_order,
+                    &mut order,
                     RangeOpts {
                         exclusive: false,
                         max: MAX_ENUM_NUMBER,
@@ -537,7 +542,7 @@ fn build_enum(node: &Value) -> EnumDescriptorProto {
                 // `e.options = { ...(e.options || {}), ... }`, so the
                 // first option statement places `options` among the
                 // statement-ordered members.
-                out.member_order.record("options");
+                order.record("options");
                 merge_option(&mut out.options, element);
                 continue;
             }
@@ -563,7 +568,7 @@ fn build_enum(node: &Value) -> EnumDescriptorProto {
             options: plain_options(child(element, "fieldOptions")),
         });
     }
-    out
+    (out, order)
 }
 
 /// The canonical `k.replace(/=.*$/, '')`, which is subtler than it looks:
@@ -769,7 +774,7 @@ fn add_reserved(
     node: &Value,
     reserved_range: &mut Option<Vec<DescriptorRange>>,
     reserved_name: &mut Option<Vec<String>>,
-    order: &mut MemberOrder,
+    order: &mut Order,
     opts: RangeOpts,
 ) {
     if let Some(node_ranges) = child(node, "ranges") {
@@ -788,7 +793,9 @@ fn add_reserved(
 
 // ---- messages -------------------------------------------------------------
 
-fn build_message(node: &Value, version: ProtoVersion, walk: &mut Walk) -> DescriptorProto {
+/// A message, and the record of its statement-ordered members and of the
+/// messages and enums inside it.
+fn build_message(node: &Value, version: ProtoVersion, walk: &mut Walk) -> (DescriptorProto, Order) {
     // `node` is a dispatch node whose `message` alt was inlined: kids are
     // [ident, messageBody-children...] or [ident] then messageBody.
     message_from_body(
@@ -804,10 +811,11 @@ fn message_from_body(
     body: Option<&Value>,
     version: ProtoVersion,
     walk: &mut Walk,
-) -> DescriptorProto {
+) -> (DescriptorProto, Order) {
     let mut message = DescriptorProto::new(name);
+    let mut order = Order::default();
     if !walk.enter() {
-        return message;
+        return (message, order);
     }
     let elements = body.map_or_else(Vec::new, |body| children(body, "messageElement"));
 
@@ -830,12 +838,12 @@ fn message_from_body(
 
     for element in &elements {
         if !is_option_stmt(element) {
-            add_message_element(element, version, &mut message, opts, walk);
+            add_message_element(element, version, &mut message, &mut order, opts, walk);
         }
     }
     generate_synthetic_oneofs(&mut message);
     walk.leave();
-    message
+    (message, order)
 }
 
 fn is_message_set(message: &DescriptorProto) -> bool {
@@ -882,10 +890,13 @@ fn generate_synthetic_oneofs(message: &mut DescriptorProto) {
     }
 }
 
+/// Add one statement to a message, and the records of what it builds to
+/// the message's record.
 fn add_message_element(
     element: &Value,
     version: ProtoVersion,
     message: &mut DescriptorProto,
+    order: &mut Order,
     opts: RangeOpts,
     walk: &mut Walk,
 ) {
@@ -897,28 +908,37 @@ fn add_message_element(
         return;
     }
     if keyword.starts_with("oneof") {
-        add_oneof(element, version, message, walk);
+        add_oneof(element, version, message, order, walk);
         return;
     }
     if keyword.starts_with("export") || keyword.starts_with("local") {
         // edition 2024 symbol visibility wraps the message or enum as a
         // child node.
         let (messages, enums) = (&mut message.nested_type, &mut message.enum_type);
-        add_visible(element, keyword, version, messages, enums, walk);
+        let lists = Lists {
+            messages,
+            enums,
+            order,
+            message_list: "nestedType",
+        };
+        add_visible(element, keyword, version, lists, walk);
         return;
     }
     if is_group(element) {
-        let field = build_group(element, version, message, walk);
+        let field = build_group(element, version, message, order, walk);
         message.field.push(field);
         return;
     }
     if keyword.starts_with("message") {
-        let nested = build_message(element, version, walk);
+        let (nested, nested_order) = build_message(element, version, walk);
+        order.put("nestedType", message.nested_type.len(), nested_order);
         message.nested_type.push(nested);
         return;
     }
     if keyword.starts_with("enum") {
-        message.enum_type.push(build_enum(element));
+        let (built, built_order) = build_enum(element);
+        order.put("enumType", message.enum_type.len(), built_order);
+        message.enum_type.push(built);
         return;
     }
     if keyword.starts_with("reserved") {
@@ -926,7 +946,7 @@ fn add_message_element(
             element,
             &mut message.reserved_range,
             &mut message.reserved_name,
-            &mut message.member_order,
+            order,
             opts,
         );
         return;
@@ -941,7 +961,7 @@ fn add_message_element(
                 range.options = Some(extension_options.clone());
             }
         }
-        message.member_order.record("extensionRange");
+        order.record("extensionRange");
         message
             .extension_range
             .get_or_insert_with(Vec::new)
@@ -963,14 +983,23 @@ fn add_message_element(
     }
 }
 
+/// The lists a declaration lands in: a container's messages and enums,
+/// and its record, which names its message list (`messageType` in a
+/// file, `nestedType` in a message).
+struct Lists<'a> {
+    messages: &'a mut Vec<DescriptorProto>,
+    enums: &'a mut Vec<EnumDescriptorProto>,
+    order: &'a mut Order,
+    message_list: &'static str,
+}
+
 /// edition 2024 `export` or `local` on a message or enum declaration. The
 /// wrapped `message` or `enumDef` stays a child node instead of inlining.
 fn add_visible(
     element: &Value,
     keyword: &str,
     version: ProtoVersion,
-    messages: &mut Vec<DescriptorProto>,
-    enums: &mut Vec<EnumDescriptorProto>,
+    lists: Lists<'_>,
     walk: &mut Walk,
 ) {
     let visibility = if keyword.starts_with("export") {
@@ -979,13 +1008,17 @@ fn add_visible(
         SymbolVisibility::Local
     };
     if let Some(node) = child(element, "message") {
-        let mut built = build_message(node, version, walk);
+        let (mut built, built_order) = build_message(node, version, walk);
         built.visibility = Some(visibility);
-        messages.push(built);
+        lists
+            .order
+            .put(lists.message_list, lists.messages.len(), built_order);
+        lists.messages.push(built);
     } else if let Some(node) = child(element, "enumDef") {
-        let mut built = build_enum(node);
+        let (mut built, built_order) = build_enum(node);
         built.visibility = Some(visibility);
-        enums.push(built);
+        lists.order.put("enumType", lists.enums.len(), built_order);
+        lists.enums.push(built);
     }
 }
 
@@ -993,6 +1026,7 @@ fn add_oneof(
     element: &Value,
     version: ProtoVersion,
     message: &mut DescriptorProto,
+    order: &mut Order,
     walk: &mut Walk,
 ) {
     let name = src_or(child(element, "ident")).to_string();
@@ -1016,7 +1050,7 @@ fn add_oneof(
             continue;
         }
         let mut field = if is_group(member) {
-            build_group(member, version, message, walk)
+            build_group(member, version, message, order, walk)
         } else {
             build_field(member, version)
         };
@@ -1139,8 +1173,18 @@ fn build_rpc(element: &Value) -> MethodDescriptorProto {
 /// see that constant for why a Rust port needs a bound the canonical
 /// runtime does not.
 pub fn build_file(proto: &Value, version: ProtoVersion) -> Result<FileDescriptorProto, ProtoError> {
+    build_file_ordered(proto, version).map(|(file, _)| file)
+}
+
+/// [`build_file`], with the record of what the canonical descriptor
+/// orders by statement (`order.rs`), which the tree reads.
+pub(crate) fn build_file_ordered(
+    proto: &Value,
+    version: ProtoVersion,
+) -> Result<(FileDescriptorProto, Order), ProtoError> {
     let mut walk = Walk::new();
     let mut file = FileDescriptorProto::default();
+    let mut order = Order::default();
     if is_edition(version) {
         file.edition = Some(edition_enum(version));
         file.syntax = Some("editions".to_string());
@@ -1154,7 +1198,7 @@ pub fn build_file(proto: &Value, version: ProtoVersion) -> Result<FileDescriptor
             // The canonical walk assigns `file.package` at every package
             // statement, so the first one places the member, whatever it
             // holds.
-            file.member_order.record("package");
+            order.record("package");
             if let Some(node) = child(def, "fullIdent") {
                 file.package = Some(nsrc(node).to_string());
             }
@@ -1164,7 +1208,7 @@ pub fn build_file(proto: &Value, version: ProtoVersion) -> Result<FileDescriptor
                 // `import option "x";` (edition 2024) is a separate
                 // dependency list.
                 if keyword.contains("option") {
-                    file.member_order.record("optionDependency");
+                    order.record("optionDependency");
                     file.option_dependency
                         .get_or_insert_with(Vec::new)
                         .push(target);
@@ -1180,16 +1224,25 @@ pub fn build_file(proto: &Value, version: ProtoVersion) -> Result<FileDescriptor
                 }
             }
         } else if is_option_stmt(def) {
-            file.member_order.record("options");
+            order.record("options");
             merge_option(&mut file.options, def);
         } else if keyword.starts_with("export") || keyword.starts_with("local") {
             let (messages, enums) = (&mut file.message_type, &mut file.enum_type);
-            add_visible(def, keyword, version, messages, enums, &mut walk);
+            let lists = Lists {
+                messages,
+                enums,
+                order: &mut order,
+                message_list: "messageType",
+            };
+            add_visible(def, keyword, version, lists, &mut walk);
         } else if keyword.starts_with("message") {
-            let built = build_message(def, version, &mut walk);
+            let (built, built_order) = build_message(def, version, &mut walk);
+            order.put("messageType", file.message_type.len(), built_order);
             file.message_type.push(built);
         } else if keyword.starts_with("enum") {
-            file.enum_type.push(build_enum(def));
+            let (built, built_order) = build_enum(def);
+            order.put("enumType", file.enum_type.len(), built_order);
+            file.enum_type.push(built);
         } else if keyword.starts_with("service") {
             file.service.push(build_service(def));
         } else if keyword.starts_with("extend") {
@@ -1202,7 +1255,7 @@ pub fn build_file(proto: &Value, version: ProtoVersion) -> Result<FileDescriptor
             "proto: document nests deeper than {MAX_NESTING_DEPTH} levels"
         )));
     }
-    Ok(file)
+    Ok((file, order))
 }
 
 /// The grammar's keywords: its match tokens, each a word the lexer takes

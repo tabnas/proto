@@ -171,60 +171,6 @@ pub(crate) fn json_number<S: Serializer>(value: &f64, serializer: S) -> Result<S
     raw.serialize(serializer)
 }
 
-/// The order a container's statement-ordered members were first set in.
-///
-/// The canonical descriptor is a JavaScript object, and an object lists
-/// its members in the order they were first assigned. The walk assigns
-/// most of them in a fixed order, but three in each of the file, a
-/// message and an enum are assigned by the statement that first needs
-/// them, so their order is the source's:
-///
-/// | container | statement-ordered members |
-/// |---|---|
-/// | [`FileDescriptorProto`] | `package`, `optionDependency`, `options` |
-/// | [`DescriptorProto`] | `extensionRange`, `reservedRange`, `reservedName` |
-/// | [`EnumDescriptorProto`] | `reservedRange`, `reservedName`, `options` |
-///
-/// The walk records each by its descriptor JSON name as the canonical
-/// walk first assigns it, and [`crate::descriptor_value`] reads the
-/// record to give the members in the canonical order. A member set by
-/// hand and never recorded follows the recorded ones, in the order the
-/// table gives.
-///
-/// The record never decides equality: two descriptors holding the same
-/// values are equal whatever order their statements came in, so a
-/// descriptor built by hand compares equal to a parsed one.
-#[derive(Debug, Clone, Default)]
-pub struct MemberOrder(Vec<&'static str>);
-
-impl MemberOrder {
-    /// An empty record.
-    pub fn new() -> Self {
-        MemberOrder(Vec::new())
-    }
-
-    /// Record `member` as set. A member already recorded keeps the place
-    /// its first statement gave it, as a JavaScript object member does.
-    pub fn record(&mut self, member: &'static str) {
-        if !self.0.contains(&member) {
-            self.0.push(member);
-        }
-    }
-
-    /// The members recorded, in the order they were first set.
-    pub fn members(&self) -> &[&'static str] {
-        &self.0
-    }
-}
-
-impl PartialEq for MemberOrder {
-    /// Always true: the record says how the canonical object orders its
-    /// members, not what the descriptor holds.
-    fn eq(&self, _other: &Self) -> bool {
-        true
-    }
-}
-
 /// A numeric range. `end` is EXCLUSIVE for message extension and reserved
 /// ranges and INCLUSIVE for enum reserved ranges, the same asymmetry
 /// protoc has.
@@ -312,10 +258,6 @@ pub struct EnumDescriptorProto {
     pub visibility: Option<SymbolVisibility>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub options: Option<Options>,
-    /// The order `reservedRange`, `reservedName` and `options` were first
-    /// set in; see [`MemberOrder`]. Not serialized.
-    #[serde(skip)]
-    pub member_order: MemberOrder,
 }
 
 impl EnumDescriptorProto {
@@ -328,7 +270,6 @@ impl EnumDescriptorProto {
             reserved_name: None,
             visibility: None,
             options: None,
-            member_order: MemberOrder::new(),
         }
     }
 }
@@ -361,10 +302,6 @@ pub struct DescriptorProto {
     pub visibility: Option<SymbolVisibility>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub options: Option<Options>,
-    /// The order `extensionRange`, `reservedRange` and `reservedName` were
-    /// first set in; see [`MemberOrder`]. Not serialized.
-    #[serde(skip)]
-    pub member_order: MemberOrder,
 }
 
 impl DescriptorProto {
@@ -382,7 +319,6 @@ impl DescriptorProto {
             reserved_name: None,
             visibility: None,
             options: None,
-            member_order: MemberOrder::new(),
         }
     }
 }
@@ -440,10 +376,6 @@ pub struct FileDescriptorProto {
     /// otherwise.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub edition: Option<String>,
-    /// The order `package`, `optionDependency` and `options` were first
-    /// set in; see [`MemberOrder`]. Not serialized.
-    #[serde(skip)]
-    pub member_order: MemberOrder,
 }
 
 /// protoc's sentinel for `to max` in a message range. Field numbers stop
