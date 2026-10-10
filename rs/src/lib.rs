@@ -92,7 +92,7 @@ pub use tree::descriptor_value;
 /// release orchestrator rewrites both, and `tests/version_test.rs` fails
 /// the build if they drift. Mirrors `VERSION` in `ts/src/proto.ts` and
 /// `const VERSION` in `go/proto.go`.
-pub const VERSION: &str = "0.6.7";
+pub const VERSION: &str = "0.6.8";
 
 /// The plugin's name on an instance, and the key its option bag hangs
 /// under.
