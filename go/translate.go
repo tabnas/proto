@@ -33,4 +33,21 @@ var translationParts = TranslationParts{
 // and the render that writes a FileDescriptorProto, the reader's tree, back
 // as a .proto file. There is no lift and no embed: the tree is the
 // descriptor's own shape, the schema proto-descriptor.
-func Translate() *TranslationParts { return &translationParts }
+// Each call returns a copy of its own, so that what one caller changes
+// is not what another reads.
+func Translate() *TranslationParts {
+	parts := translationParts
+	parts.Lift = copyPart(parts.Lift)
+	parts.Embed = copyPart(parts.Embed)
+	parts.Render = copyPart(parts.Render)
+	return &parts
+}
+
+// copyPart is a part of its own, so that no caller reaches another's.
+func copyPart(part *TranslationPart) *TranslationPart {
+	if part == nil {
+		return nil
+	}
+	copied := *part
+	return &copied
+}
