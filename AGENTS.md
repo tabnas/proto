@@ -185,9 +185,9 @@ not how it was spelled, so the render chooses a spelling for each part
 that reads back the same, and the manifest's `loss` list says, a sentence
 each, what a written file does not keep: comments and layout, the order of
 statements of different kinds, labels the descriptor does not record, how
-a number or an option's value was written (an identifier, a literal and
-an aggregate are one string to the descriptor). The file's header comment
-says how each part is written and why.
+a number or an option's value was written (an identifier, a literal, a
+backtick string and an aggregate are one string to the descriptor). The
+file's header comment says how each part is written and why.
 
 The tree a host reads is the descriptor as the plain value the canonical
 `parse` returns, and a host walking it streams its members in order, so

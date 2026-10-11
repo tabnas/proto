@@ -56,8 +56,8 @@ const TRANSLATION: TranslationParts = Object.freeze({
       "A label the descriptor does not keep is not written as the file spelled it: an optional field of a proto2 file is written optional whether or not the file said so, and an optional field of a proto3 file that the descriptor does not mark proto3Optional, or of an edition file, is written with no label.",
       "A map field is written as map<K, V> from the entry message the reader made for it, a group as a group block from its nested message, and a proto3 optional field's synthetic oneof is not written, since the reader makes each of them again.",
       "A number is written as the descriptor holds it: a hexadecimal or octal field number, enum value or range bound is written in decimal, an exclusive range end as its last number or max, and a number the reader read as NaN (a digit separator, 1_0, which the lexer takes and JavaScript's Number refuses) as 0_0, which reads back as NaN.",
-      "A string literal is written between double quotes, or single quotes where its text holds a double quote and no single quote, its escapes as written, since the descriptor keeps a literal's text between its quotes; a text that holds both quotes is written between double quotes, and reads back as written only where each double quote in it is escaped.",
-      "An option's value is one string to the descriptor whether the file wrote it as an identifier, a string literal or an aggregate in braces, so it is written as a string literal, as an aggregate only where no literal can hold its text (a line break, or both quotes), and as an identifier for the options descriptor.proto types as enums (optimize_for, ctype, jstype, retention, targets, idempotency_level and the features) when its text is made of identifier characters; protoc reads an enum-valued or message-valued option written as a literal as a string, and a quoted value of such an option that begins with a digit, which protoc refuses, does not read back.",
+      "A string literal is written between double quotes, or single quotes where its text holds a double quote and no single quote, its escapes as written, since the descriptor keeps a literal's text between its quotes; a text that holds both quotes is written between the quotes whose every occurrence in it is escaped; a backtick string holding a line break, which the descriptor keeps with its backticks and no quotes hold, is written as itself, but for a reserved name, which the reader takes only from a quoted literal or an identifier; and a text that nothing holds where it goes is refused: a control character that no literal or backtick string holds (a tab, a line break outside a backtick string, the other C0 controls), both quotes unescaped, or a backslash at its end that would escape the closing quote.",
+      "An option's value is one string to the descriptor whether the file wrote it as an identifier, a string literal or an aggregate in braces, so it is written as a string literal, as the backtick string it is where it is one, as an aggregate only where neither can hold its text (a line break, or both quotes unescaped), and as an identifier for the options descriptor.proto types as enums (optimize_for, ctype, jstype, retention, targets, idempotency_level and the features) when its text is made of identifier characters; protoc reads an enum-valued or message-valued option written as a literal as a string, and a quoted value of such an option that begins with a digit, which protoc refuses, does not read back; a value no literal or backtick string holds that is no aggregate's body, which no file's descriptor holds, is written in braces too and does not read back; and a value holding a control character that no literal, backtick string or aggregate holds is refused.",
       "A default is written bare for a field that is not a string or bytes when its text is made of a constant's characters, and as a string literal otherwise; a quoted default of such a field whose text is made of those characters but spells no one constant, which protoc refuses, does not read back.",
       "Reserved names are written as string literals in a proto2 or proto3 file and as identifiers in an edition file, a message's or an enum's reserved ranges in one reserved statement and its names in another, each extension range in an extensions statement of its own with its options, and each extension in an extend block of its own."
     ]
@@ -109,22 +109,30 @@ const TRANSLATION: TranslationParts = Object.freeze({
 ;   enum's inclusive end as it is, \`max\` for 2147483647.
 ; - A string from a string literal is kept as its text between the quotes,
 ;   escapes as written, so it is written between double quotes, or single
-;   quotes where it holds a double quote and no single quote. An option's
-;   value the reader read as an identifier, a quoted literal or an
-;   aggregate in braces is one string to the tree: it is written quoted,
-;   as an aggregate (\`{...}\`) where no literal can hold it (a line break, or
-;   both quotes), and as an identifier for the options descriptor.proto
+;   quotes where it holds a double quote and no single quote, and where it
+;   holds both, between the quotes it escapes (an escaped backslash, \`\\\\\`,
+;   escapes no quote after it). A backtick string, which the lexer reads
+;   across lines too, is kept as written, backticks and all, so one
+;   holding a line break, which no quotes hold, is written as itself. A
+;   reserved name is not: the reader takes one from a quoted literal or an
+;   identifier, and the words of a backtick string as names of their own.
+;   An option's value the reader read as an identifier, a quoted literal,
+;   a backtick string or an aggregate in braces is one string to the tree:
+;   it is written quoted, as the backtick string it is, as an aggregate
+;   (\`{...}\`) where neither can hold it (a line break, or both quotes
+;   unescaped), and as an identifier for the options descriptor.proto
 ;   types as enums (\`optimize_for\`, \`ctype\`, \`jstype\`, \`retention\`,
 ;   \`targets\`, \`idempotency_level\` and the features) where it is made of
-;   identifier characters. A default is written bare for a field that is
-;   not a string or bytes, where it is made of the characters a constant
-;   is, and as a literal otherwise. alchemy cannot read a string a
-;   character at a time, so three texts a file can hold, each refused by
-;   protoc but one, do not read back: a literal's text holding both
-;   quotes with a double quote unescaped, a quoted value of an enum-typed
-;   option that begins with a digit, and a quoted default of a field that
-;   is not a string whose text is a constant's characters spelling no one
-;   constant.
+;   identifier characters; a value a program made that no literal or
+;   backtick string holds and that is no aggregate's body is written in
+;   braces too, and the reader refuses it, since alchemy cannot parse an
+;   aggregate. A default is written bare for a field that is not a string
+;   or bytes, where it is made of the characters a constant is, and as a
+;   literal otherwise. alchemy cannot read a string a character at a time,
+;   so two texts a file can hold, each refused by protoc, do not read back:
+;   a quoted value of an enum-typed option that begins with a digit, and a
+;   quoted default of a field that is not a string whose text is a
+;   constant's characters spelling no one constant.
 ; - A field or enum number the reader could not read (JavaScript's Number
 ;   of \`1_0\`, the lexer's digit separator) is NaN, null in JSON, and is
 ;   written \`0_0\`, which reads back the same; an option's number that is
@@ -134,7 +142,12 @@ const TRANSLATION: TranslationParts = Object.freeze({
 ; met: a root that is not an object, a syntax or an edition a \`.proto\`
 ; file cannot declare, a member a descriptor holds as a string that is not
 ; one, a field type that is no scalar's, an option's value that is not a
-; string, a number or a boolean.
+; string, a number or a boolean, and a string that nothing a \`.proto\` file
+; writes holds where the string goes: a control character (no literal
+; holds one, a backtick string only a line break, and an option's
+; aggregate only the tab and line breaks between its tokens), and outside
+; an option's value, both quotes unescaped or a backslash at the end,
+; which would escape the closing quote.
 ;
 ; The tree is materialized whole before a line is written, since the
 ; syntax comes first in the file and last in the tree, and a field's place
@@ -268,23 +281,123 @@ def proto-ident-chars [[48 57] [65 90] [95 95] [97 122]]
 ; The characters of a bare constant: a number, a signed one, an identifier.
 def proto-bare-chars [[43 43] [45 46] [48 57] [65 90] [95 95] [97 122]]
 
-; A string literal whose text between its quotes is s, as written.
-def proto-literal [s]
-  match (chars-within proto-no-dq s)
-    case true (string-join "" ["\\"" s "\\""])
-    case false
-      match (chars-within proto-no-sq s)
-        case true (string-join "" ["'" s "'"])
-        case false (string-join "" ["\\"" s "\\""])
+; The characters a backtick string holds, as the lexer reads one: the
+; line feed and the carriage return that carry it across lines, and none
+; of the other controls.
+def proto-in-backtick [[10 10] [13 13] [32 1114111]]
 
-; An option's string: a literal, or an aggregate where no literal holds it.
+; The characters an aggregate holds: its tokens, and the tab, the line
+; feed and the carriage return as the whitespace between them.
+def proto-in-aggregate [[9 10] [13 13] [32 1114111]]
+
+; Whether s is a backtick string's text as the reader keeps it, the
+; backticks and all: the lexer reads a backtick string across lines too,
+; a backslash escaping the character after it, and the reader keeps a
+; constant that is not quoted as it was written. So s has a backtick at
+; each end and none unescaped between them, no backslash before the last
+; that would escape it, and no control but a line break.
+def proto-backtick [s]
+  let [parts (split "\`" s)]
+    match (proto-less 2 (count parts))
+      case false false
+      case true
+        match (match (proto-at parts 0) (case "" (match (top parts) (case "" true) (case _ false))) (case _ false))
+          case false false
+          case true
+            match (chars-within proto-in-backtick s)
+              case false false
+              case true (proto-escaped-inside "\`" (proto-after "\`" (string-join "\`" (pop parts))))
+
+; Whether text could stand between quotes q as the lexer reads them: every
+; q in it escaped, and no backslash at its end to escape the closing one.
+def proto-escaped-inside [q text]
+  match (proto-quotes-escaped q text)
+    case false false
+    case true
+      match (proto-open-escape text)
+        case true false
+        case false true
+
+; Whether every quote q in s is escaped, as in the text of a literal
+; between those quotes. The lexer reads an escape as a backslash and the
+; character after it, so an escaped backslash (\`\\\\\`) escapes nothing
+; after it: s is read in the runs between its escaped backslashes, found
+; from the front as the lexer finds them, and in a run a quote is escaped
+; where a backslash comes right before it.
+def proto-quotes-escaped [q s]
+  match (count (filter (fn [run] (proto-bare-quote q run)) (split "\\\\\\\\" s)))
+    case 0 true
+    case _ false
+
+; Whether a run of a literal's text that holds no escaped backslash holds
+; the quote q with no backslash right before it.
+def proto-bare-quote [q run]
+  match (count (filter (fn [piece] (proto-less 1 (count (split q piece)))) (split (string-join "" ["\\\\" q]) run)))
+    case 0 false
+    case _ true
+
+; Whether s ends with a backslash that escapes nothing in it, which would
+; escape the quote written after it: its last run between escaped
+; backslashes ends with one.
+def proto-open-escape [s]
+  let [pieces (split "\\\\" (top (split "\\\\\\\\" s)))]
+    match (count pieces)
+      case 1 false
+      case _
+        match (top pieces)
+          case "" true
+          case _ false
+
+; A literal's text between quotes that hold it, or "" where none do:
+; double quotes where it holds no double quote, single quotes where it
+; holds no single quote, and where it holds both, the quotes it escapes.
+; No quotes hold a control character, both quotes unescaped, or a
+; backslash at the end that would escape the closing quote.
+def proto-quoted [s]
+  match (chars-within [[32 1114111]] s)
+    case false ""
+    case true
+      match (proto-open-escape s)
+        case true ""
+        case false
+          match (chars-within proto-no-dq s)
+            case true (string-join "" ["\\"" s "\\""])
+            case false
+              match (chars-within proto-no-sq s)
+                case true (string-join "" ["'" s "'"])
+                case false
+                  match (proto-quotes-escaped "\\"" s)
+                    case true (string-join "" ["\\"" s "\\""])
+                    case false
+                      match (proto-quotes-escaped "'" s)
+                        case true (string-join "" ["'" s "'"])
+                        case false ""
+
+; A string literal whose text is s, as written: between quotes, or as the
+; backtick string it is, which holds a line break no quotes hold. A text
+; neither holds fails.
+def proto-literal [s]
+  match (proto-quoted s)
+    case ""
+      match (proto-backtick s)
+        case true s
+        case false (fail :unrepresentable "a string holds what no literal or backtick string holds: a control character, both quotes unescaped, or a backslash that would escape the closing quote")
+    case q q
+
+; An option's string: a literal, the backtick string it is, or the
+; aggregate it is, whose braces hold what no literal holds (a line break,
+; or both quotes unescaped). A control that no literal, backtick string
+; or aggregate holds fails.
 def proto-option-string [s]
-  match (chars-within proto-no-dq s)
-    case true (string-join "" ["\\"" s "\\""])
-    case false
-      match (chars-within proto-no-sq s)
-        case true (string-join "" ["'" s "'"])
-        case false (string-join "" ["{" s "}"])
+  match (proto-quoted s)
+    case ""
+      match (proto-backtick s)
+        case true s
+        case false
+          match (chars-within proto-in-aggregate s)
+            case true (string-join "" ["{" s "}"])
+            case false (fail :unrepresentable "an option's value holds a control character that no literal, backtick string or aggregate holds")
+    case q q
 
 ; The options descriptor.proto types as enums, whose values are identifiers.
 def proto-enum-option [k]
@@ -536,8 +649,16 @@ def proto-reserved-name [syntax n]
     case "editions"
       match (proto-identifier n)
         case true n
-        case false (proto-literal n)
-    case _ (proto-literal n)
+        case false (proto-name-literal n)
+    case _ (proto-name-literal n)
+
+; A reserved name between quotes. The reader takes a reserved name from a
+; quoted literal or an identifier, and reads the words of a backtick
+; string as names of their own, so a name no quotes hold fails.
+def proto-name-literal [n]
+  match (proto-quoted n)
+    case "" (fail :unrepresentable "a reserved name holds what no quotes hold: a control character, both quotes unescaped, or a backslash that would escape the closing quote")
+    case q q
 
 def proto-reserved-names [syntax indent names]
   match (count names)
