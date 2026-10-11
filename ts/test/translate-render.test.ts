@@ -31,6 +31,11 @@ const skip = ALCHEMY ? false : 'TABNAS_ALCHEMY does not name the alchemy command
 const BEAT_MS = 10000
 const LIMIT_MS = 120000
 
+// The most a run may write to either stream: 1 MiB, the default maxBuffer
+// spawnSync had. A command that floods its output fails its case rather
+// than filling the runner's heap.
+const MAX_OUTPUT = 1024 * 1024
+
 let dir: string | null = null
 let runs = 0
 let current: { n: number, what: string, start: number } | null = null
@@ -70,12 +75,32 @@ function render(what: string, tree: unknown): Promise<Out> {
   current = { n: ++runs, what, start: Date.now() }
   const run = spawn(ALCHEMY as string, ['run', path.join(dir, 'render.alc'), input],
     { stdio: ['ignore', 'pipe', 'pipe'] })
-  let stdout = ''
-  let stderr = ''
-  run.stdout.setEncoding('utf8').on('data', (d: string) => { stdout += d })
-  run.stderr.setEncoding('utf8').on('data', (d: string) => { stderr += d })
+  // A run is stopped by killing the command and closing its output, as
+  // spawnSync stopped one at its timeout and its maxBuffer: a command that
+  // started others would leave them holding the output open.
+  const kill = () => {
+    run.kill('SIGKILL')
+    run.stdout.destroy()
+    run.stderr.destroy()
+  }
+  let flooded = false
+  const collect = (stream: typeof run.stdout) => {
+    const chunks: Buffer[] = []
+    let bytes = 0
+    stream.on('data', (d: Buffer) => {
+      chunks.push(d)
+      bytes += d.length
+      if (MAX_OUTPUT < bytes && !flooded) {
+        flooded = true
+        kill()
+      }
+    })
+    return () => Buffer.concat(chunks).toString('utf8')
+  }
+  const stdout = collect(run.stdout)
+  const stderr = collect(run.stderr)
   let stopped = false
-  const stop = setTimeout(() => { stopped = true; run.kill('SIGKILL') }, LIMIT_MS)
+  const stop = setTimeout(() => { stopped = true; kill() }, LIMIT_MS)
   return new Promise((resolve) => {
     const done = (out: Out) => {
       clearTimeout(stop)
@@ -84,14 +109,18 @@ function render(what: string, tree: unknown): Promise<Out> {
     }
     run.on('error', (e) => done({ code: 'NOT_RUN', message: String(e) }))
     run.on('close', (status, signal) => {
-      if (0 === status) return done({ text: stdout })
+      if (flooded) {
+        return done({ code: 'OUTPUT_LIMIT',
+          message: `${what}: wrote more than ${MAX_OUTPUT / (1024 * 1024)} MiB` })
+      }
+      if (0 === status) return done({ text: stdout() })
       if (stopped) {
         return done({ code: 'STOPPED', message: `${what}: stopped after ${LIMIT_MS / 1000}s` })
       }
       try {
-        done(JSON.parse(stderr))
+        done(JSON.parse(stderr()))
       } catch (e) {
-        done({ code: 'NOT_JSON', message: `${stderr} ${signal ?? ''}` })
+        done({ code: 'NOT_JSON', message: `${stderr()} ${signal ?? ''}` })
       }
     })
   })
