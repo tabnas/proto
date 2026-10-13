@@ -3,7 +3,7 @@ module github.com/tabnas/proto/go
 go 1.24.7
 
 require (
-	github.com/tabnas/abnf/go v0.4.23
+	github.com/tabnas/abnf/go v0.4.24
 	github.com/tabnas/parser/go v0.12.11
 	github.com/tabnas/support/go v0.3.9
 )
