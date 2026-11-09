@@ -41,8 +41,8 @@ test('every descriptor row is the canonical JSON.stringify output, byte for byte
   assert.deepEqual(failures, [], `${failures.length} of ${checked} rows differ`)
   // Ratcheted at what is on disk today, so a loader that finds fewer rows
   // cannot pass by measuring less.
-  assert.equal(checked, 235,
-    `test/spec holds ${checked} descriptor rows, not the 235 this test was measured against`)
+  assert.equal(checked, 236,
+    `test/spec holds ${checked} descriptor rows, not the 236 this test was measured against`)
 })
 
 

@@ -13,6 +13,7 @@ type TranslationParts = Readonly<{
   lift?: TranslationPart
   embed?: TranslationPart
   render?: TranslationPart
+  transduce?: TranslationPart
 }>
 
 const TRANSLATION: TranslationParts = Object.freeze({
@@ -47,1129 +48,988 @@ const TRANSLATION: TranslationParts = Object.freeze({
     "reads": "tree",
     "writes": "tree",
     "root": "object",
-    "schema": "proto-descriptor",
+    "schema": "proto-ast",
     "render": "alchemy/render.alc",
+    "transduce": "alchemy/transduce.alc",
     "loss": [
-      "The file is written anew from its descriptor: comments, blank lines and white space are not kept, and each statement is written on lines of its own, indented two spaces a level.",
-      "Statements are written in the order the descriptor's lists keep them, so statements of different kinds that the file interleaved are regrouped: the syntax or edition first, then the package, the imports and the file's options, then the messages, the enums, the services and the extensions, and in a message its options, its fields with each nested message where it keeps its place among them, its enums, its extensions and its ranges.",
-      "A file that declares no syntax is written with syntax = \\"proto2\\", the version the reader gives it, and a descriptor's name, which the reader never sets, is not written.",
-      "A label the descriptor does not keep is not written as the file spelled it: an optional field of a proto2 file is written optional whether or not the file said so, and an optional field of a proto3 file that the descriptor does not mark proto3Optional, or of an edition file, is written with no label.",
-      "A map field is written as map<K, V> from the entry message the reader made for it, a group as a group block from its nested message, and a proto3 optional field's synthetic oneof is not written, since the reader makes each of them again.",
-      "A number is written as the descriptor holds it: a hexadecimal or octal field number, enum value or range bound is written in decimal, an exclusive range end as its last number or max, and a number the reader read as NaN (a digit separator, 1_0, which the lexer takes and JavaScript's Number refuses) as 0_0, which reads back as NaN.",
-      "A string literal is written between double quotes, or single quotes where its text holds a double quote and no single quote, its escapes as written, since the descriptor keeps a literal's text between its quotes; a text that holds both quotes is written between the quotes whose every occurrence in it is escaped; a backtick string holding a line break, which the descriptor keeps with its backticks and no quotes hold, is written as itself, but for a reserved name, which the reader takes only from a quoted literal or an identifier; and a text that nothing holds where it goes is refused: a control character that no literal or backtick string holds (a tab, a line break outside a backtick string, the other C0 controls), both quotes unescaped, or a backslash at its end that would escape the closing quote.",
-      "An option's value is one string to the descriptor whether the file wrote it as an identifier, a string literal or an aggregate in braces, so it is written as a string literal, as the backtick string it is where it is one, as an aggregate only where neither can hold its text (a line break, or both quotes unescaped), and as an identifier for the options descriptor.proto types as enums (optimize_for, ctype, jstype, retention, targets, idempotency_level and the features) when its text is made of identifier characters; protoc reads an enum-valued or message-valued option written as a literal as a string, and a quoted value of such an option that begins with a digit, which protoc refuses, does not read back; a value no literal or backtick string holds that is no aggregate's body, which no file's descriptor holds, is written in braces too and does not read back; and a value holding a control character that no literal, backtick string or aggregate holds is refused.",
-      "A default is written bare for a field that is not a string or bytes when its text is made of a constant's characters, and as a string literal otherwise; a quoted default of such a field whose text is made of those characters but spells no one constant, which protoc refuses, does not read back.",
-      "Reserved names are written as string literals in a proto2 or proto3 file and as identifiers in an edition file, a message's or an enum's reserved ranges in one reserved statement and its names in another, each extension range in an extensions statement of its own with its options, and each extension in an extend block of its own."
-    ],
-    "whole": "A file's descriptor gathers its imports, messages, enums, services and extensions into a list of each kind, which a declaration anywhere in the file adds to, so a document's tree is complete only at its end: it is read whole before anything is written."
+      "The file is written anew from its tree: comments, blank lines and white space are not kept, and each declaration is written on a line of its own, a block's declarations indented two spaces deeper than the line that opens it.",
+      "An empty statement, a semicolon on its own, declares nothing and is not kept.",
+      "A scalar is kept as the text its tokens spell, run together, so white space between the tokens of one is not: a sign is written against its number, a qualified name with no space around its dots, and adjacent string literals with nothing between them.",
+      "An option's aggregate value in braces is kept as its fields, so its layout, its comments and the separators and colons between its fields are not: it is written on one line, a field holding an aggregate as name { ... } and any other as name: value."
+    ]
   }
 }
 `,
-  render: Object.freeze({ entry: "proto-render", source: `; Protocol Buffers' render: the reader's tree, a FileDescriptorProto, written
-; back as one \`.proto\` file. This is a library of definitions, each named
-; \`proto-...\`, which a host links with its own program (alchemy's
-; \`compile_sources\`); its entry point is \`proto-render\`, and nothing else
+  render: Object.freeze({ entry: "proto-render", source: `; Protocol Buffers' render: the source-ordered tree, the schema
+; \`proto-ast\`, written back as one \`.proto\` file, a declaration at a time
+; as its events arrive. This is a library of definitions, each named
+; \`proto-render-...\` but its entry point, \`proto-render\`, which a host
+; links with its own program (alchemy's \`compile_sources\`); nothing else
 ; here is the host's to call.
 ;
-; The render writes the reader's own tree and no other, as the
-; translation design says a render of a format whose value has a shape of
-; its own does: the manifest names that shape as the schema
-; \`proto-descriptor\`, and a host composes into this render only from a
-; source of the same schema or from a program that builds the tree. The
-; contract is the round trip: the text it writes reads back, through this
-; repository's reader, as the tree it was given. The tree keeps what a
-; descriptor holds and not how the file spelled it, so the render chooses
-; a spelling for each part, the one that reads back the same, as the
-; manifest's loss list says:
+; The tree is the file's declarations in source order (alchemy's
+; docs/streaming-plan.md, section 13.1): \`{"type": "file", "body": [...]}\`,
+; each declaration an object whose \`type\` comes first and whose other
+; members follow in the order the statement spells them:
 ;
-; - The file is the \`syntax\` or \`edition\` declaration, then the package,
-;   the imports (\`public\`, \`weak\`, and edition 2024's \`import option\`) and
-;   the file's options, in the order the tree holds them, then the
-;   messages, the enums, the services and the extensions, each a statement
-;   or a block on lines of its own, indented two spaces a level.
-; - A message's body is its options, then its fields in order, each nested
-;   message written where it keeps its place among the fields' own (a map
-;   field's entry and a group's message are nested types too, written as
-;   the map field and the group), the declared oneofs as blocks around
-;   their fields (a proto3 \`optional\` field's synthetic oneof is not one:
-;   the field is written \`optional\`), then its enums, its extensions (an
-;   \`extend\` block each), its extension ranges and its reserved ranges and
-;   names, in the order the tree holds them. A map field's entry is a
-;   nested type the reader would make for the field again: named for it
-;   by protoc's rule and like the reader's entry in every member. Any
-;   other, a message the file declared with the option \`mapEntry\` among
-;   them, is written as a message, and the field as a field of its type.
-; - A field is its label (none in a oneof; \`optional\` for a proto2 field
-;   the tree marks optional, and for a proto3 field the tree marks
-;   \`proto3Optional\`; nothing for the other optional fields), its type (a
-;   scalar's keyword, or the type name as written), its name, its number
-;   and its options in brackets: \`default\`, \`json_name\` and the rest.
-; - An exclusive range end (a message's reserved and extension ranges) is
-;   written one below the tree's, or \`max\` where it is the bound \`to max\`
-;   gives (536870912, or 2147483647 under \`message_set_wire_format\`); an
-;   enum's inclusive end as it is, \`max\` for 2147483647.
-; - A string from a string literal is kept as its text between the quotes,
-;   escapes as written, so it is written between double quotes, or single
-;   quotes where it holds a double quote and no single quote, and where it
-;   holds both, between the quotes it escapes (an escaped backslash, \`\\\\\`,
-;   escapes no quote after it). A backtick string, which the lexer reads
-;   across lines too, is kept as written, backticks and all, so one
-;   holding a line break, which no quotes hold, is written as itself. A
-;   reserved name is not: the reader takes one from a quoted literal or an
-;   identifier, and the words of a backtick string as names of their own.
-;   An option's value the reader read as an identifier, a quoted literal,
-;   a backtick string or an aggregate in braces is one string to the tree:
-;   it is written quoted, as the backtick string it is, as an aggregate
-;   (\`{...}\`) where neither can hold it (a line break, or both quotes
-;   unescaped), and as an identifier for the options descriptor.proto
-;   types as enums (\`optimize_for\`, \`ctype\`, \`jstype\`, \`retention\`,
-;   \`targets\`, \`idempotency_level\` and the features) where it is made of
-;   identifier characters; a value a program made that no literal or
-;   backtick string holds and that is no aggregate's body is written in
-;   braces too, and the reader refuses it, since alchemy cannot parse an
-;   aggregate. A default is written bare for a field that is not a string
-;   or bytes, where it is made of the characters a constant is, and as a
-;   literal otherwise. alchemy cannot read a string a character at a time,
-;   so two texts a file can hold, each refused by protoc, do not read back:
-;   a quoted value of an enum-typed option that begins with a digit, and a
-;   quoted default of a field that is not a string whose text is a
-;   constant's characters spelling no one constant.
-; - A field or enum number the reader could not read (JavaScript's Number
-;   of \`1_0\`, the lexer's digit separator) is NaN, null in JSON, and is
-;   written \`0_0\`, which reads back the same; an option's number that is
-;   null in JSON is infinite, and is written \`1e999\`.
+;   syntax, edition   value
+;   import            modifier (where written), path
+;   package           name
+;   option            name, value
+;   message, enum     visibility (where written), name, body
+;   service, oneof    name, body
+;   extend            extendee, body
+;   field             label (where written), fieldType, name, number,
+;                     options (where written)
+;   map               keyType, valueType, name, number, options
+;   group             label, name, number, body
+;   extensions        ranges, options
+;   reserved          ranges or names
+;   enumValue         name, number, options
+;   rpc               name, inputStream (true, where written), inputType,
+;                     outputStream, outputType, body (where written)
 ;
-; Anything else fails with TARGET_VALUE_UNREPRESENTABLE, naming what was
-; met: a root that is not an object, a syntax or an edition a \`.proto\`
-; file cannot declare, a member a descriptor holds as a string that is not
-; one, a field type that is no scalar's, an option's value that is not a
-; string, a number or a boolean, and a string that nothing a \`.proto\` file
-; writes holds where the string goes: a control character (no literal
-; holds one, a backtick string only a line break, and an option's
-; aggregate only the tab and line breaks between its tokens), and outside
-; an option's value, both quotes unescaped or a backslash at the end,
-; which would escape the closing quote.
+; A scalar is the text the source spells, a string literal with its
+; quotes, so each is written as it is. A range is \`from\` and, where it has
+; one, \`to\`; an option in brackets is \`name\` and \`value\`; an option's value
+; is its text or an aggregate's fields, each \`name\` and \`value\`, written in
+; braces on one line, a field holding an aggregate as \`name { ... }\` and
+; any other as \`name: value\`.
 ;
-; The tree is materialized whole before a line is written, since the
-; syntax comes first in the file and last in the tree, and a field's place
-; depends on the nested types after it. A pass over the events before
-; that gives every object's string \`name\` a member \`$name\` holding it as
-; a key, the one way alchemy compares two strings it did not write: a
-; field's type name is looked up in a nested type's \`$name\`. Nothing of
-; that member is written.
+; The text: each declaration on a line of its own, a block's declarations
+; two spaces deeper than the line that opens it, and the block's closing
+; brace on a line of its own; an empty file is no text at all. The
+; contract is the round trip: the text reads back, through this
+; repository's reader, as the tree it was written from. The render checks
+; the tree's shape (each node's type, its members and their order, a body
+; holding only what its parent's block holds) and writes each scalar as it
+; is, so a tree the reader could not have built (a name holding a space,
+; a type that is a keyword where it stands) is written as its members say
+; and does not read back as itself. A root that is no file, a type, a
+; member or a value no node of the schema has, a member out of its place
+; or repeated, a declaration where its parent's block holds none of its
+; kind, and a node missing what its text needs fail with
+; TARGET_VALUE_UNREPRESENTABLE, naming what was met.
+;
+; The state is a stack of the containers open, innermost last: [:file key
+; at] for the root, [:body indent parent] for a block's declarations,
+; [:node indent kind key at begun braced] for a declaration (its line's
+; indentation, its type, the member whose value comes next, the place of
+; the last member written, whether its line has begun, whether its block
+; was written), [:options count] and [:option key at] for an option list,
+; [:aggregate count] and [:field key at] for an aggregate, [:ranges count]
+; and [:range key at] for ranges, [:names count] for reserved names, and
+; :done once the file has closed. Nothing grows with the file's length,
+; only with its nesting.
 
-; ---- the annotation
+def proto-render-refuse [message]
+  fail :unrepresentable (string-join "" ["the tree is not a proto file: " message])
 
-; Each object's \`name\`, when it is a string, gets a member \`$name\` right
-; after it: an object whose one key is the name. The state is whether the
-; last event was the key \`name\`.
-def proto-mark-step [s event]
-  match event
-    case (key name)
-      match name
-        case "name" (transition :name [event])
-        case _ (transition :other [event])
-    case (scalar value)
-      match s
-        case :name
+; The place of a member in a declaration of the kind, or missing where
+; the kind has no such member.
+def proto-render-place [nk name]
+  match [nk name]
+    case [k "type"] 0
+    case ["syntax" "value"] 1
+    case ["edition" "value"] 1
+    case ["import" "modifier"] 1
+    case ["import" "path"] 2
+    case ["package" "name"] 1
+    case ["option" "name"] 1
+    case ["option" "value"] 2
+    case ["message" "visibility"] 1
+    case ["message" "name"] 2
+    case ["message" "body"] 3
+    case ["enum" "visibility"] 1
+    case ["enum" "name"] 2
+    case ["enum" "body"] 3
+    case ["service" "name"] 1
+    case ["service" "body"] 2
+    case ["oneof" "name"] 1
+    case ["oneof" "body"] 2
+    case ["extend" "extendee"] 1
+    case ["extend" "body"] 2
+    case ["field" "label"] 1
+    case ["field" "fieldType"] 2
+    case ["field" "name"] 3
+    case ["field" "number"] 4
+    case ["field" "options"] 5
+    case ["map" "keyType"] 1
+    case ["map" "valueType"] 2
+    case ["map" "name"] 3
+    case ["map" "number"] 4
+    case ["map" "options"] 5
+    case ["group" "label"] 1
+    case ["group" "name"] 2
+    case ["group" "number"] 3
+    case ["group" "body"] 4
+    case ["extensions" "ranges"] 1
+    case ["extensions" "options"] 2
+    case ["reserved" "ranges"] 1
+    case ["reserved" "names"] 1
+    case ["enumValue" "name"] 1
+    case ["enumValue" "number"] 2
+    case ["enumValue" "options"] 3
+    case ["rpc" "name"] 1
+    case ["rpc" "inputStream"] 2
+    case ["rpc" "inputType"] 3
+    case ["rpc" "outputStream"] 4
+    case ["rpc" "outputType"] 5
+    case ["rpc" "body"] 6
+    case _ missing
+
+; The place a declaration's text needs reached: before its block or its
+; options, and at its end.
+def proto-render-needs [nk]
+  match nk
+    case "syntax" 1
+    case "edition" 1
+    case "import" 2
+    case "package" 1
+    case "option" 2
+    case "message" 2
+    case "enum" 2
+    case "service" 1
+    case "oneof" 1
+    case "extend" 1
+    case "field" 4
+    case "map" 4
+    case "group" 3
+    case "extensions" 1
+    case "reserved" 1
+    case "enumValue" 2
+    case "rpc" 5
+    case _ 0
+
+; The member a declaration's text needs before its block or its options,
+; named in a refusal.
+def proto-render-needed [nk]
+  match nk
+    case "field" "number"
+    case "map" "number"
+    case "group" "number"
+    case "enumValue" "number"
+    case "extend" "extendee"
+    case "rpc" "outputType"
+    case "extensions" "ranges"
+    case "reserved" "ranges or names"
+    case "syntax" "value"
+    case "edition" "value"
+    case "import" "path"
+    case "option" "value"
+    case _ "name"
+
+; Whether a declaration of the kind holds a block, which its text ends.
+def proto-render-blocked [nk]
+  match nk
+    case "message" true
+    case "enum" true
+    case "service" true
+    case "oneof" true
+    case "extend" true
+    case "group" true
+    case _ false
+
+; Whether a block of the parent's kind holds a declaration of the kind.
+def proto-render-holds [parent nk]
+  match [parent nk]
+    case ["file" "syntax"] true
+    case ["file" "edition"] true
+    case ["file" "import"] true
+    case ["file" "package"] true
+    case ["file" "option"] true
+    case ["file" "message"] true
+    case ["file" "enum"] true
+    case ["file" "service"] true
+    case ["file" "extend"] true
+    case ["message" k] (proto-render-in-message k)
+    case ["group" k] (proto-render-in-message k)
+    case ["enum" "option"] true
+    case ["enum" "reserved"] true
+    case ["enum" "enumValue"] true
+    case ["service" "option"] true
+    case ["service" "rpc"] true
+    case ["rpc" "option"] true
+    case ["oneof" "option"] true
+    case ["oneof" "field"] true
+    case ["oneof" "group"] true
+    case ["extend" "field"] true
+    case _ false
+
+def proto-render-in-message [nk]
+  match nk
+    case "option" true
+    case "field" true
+    case "map" true
+    case "group" true
+    case "oneof" true
+    case "message" true
+    case "enum" true
+    case "extend" true
+    case "extensions" true
+    case "reserved" true
+    case _ false
+
+; The text a member's scalar writes in a declaration of the kind, its
+; line's indentation ahead of it where the line has not begun.
+def proto-render-member-text [nk name value]
+  match [nk name]
+    case ["syntax" "value"] (string-join "" ["syntax = " value])
+    case ["edition" "value"] (string-join "" ["edition = " value])
+    case ["import" "modifier"] (string-join "" ["import " value " "])
+    case ["package" "name"] (string-join "" ["package " value])
+    case ["option" "name"] (string-join "" ["option " value " = "])
+    case ["option" "value"] value
+    case ["message" "visibility"] (string-join "" [value " "])
+    case ["message" "name"] (string-join "" ["message " value])
+    case ["enum" "visibility"] (string-join "" [value " "])
+    case ["enum" "name"] (string-join "" ["enum " value])
+    case ["service" "name"] (string-join "" ["service " value])
+    case ["oneof" "name"] (string-join "" ["oneof " value])
+    case ["extend" "extendee"] (string-join "" ["extend " value])
+    case ["group" "label"] (string-join "" [value " "])
+    case ["group" "name"] (string-join "" ["group " value])
+    case ["group" "number"] (string-join "" [" = " value])
+    case ["field" "label"] (string-join "" [value " "])
+    case ["field" "fieldType"] (string-join "" [value " "])
+    case ["field" "name"] value
+    case ["field" "number"] (string-join "" [" = " value])
+    case ["map" "keyType"] (string-join "" ["map<" value])
+    case ["map" "valueType"] (string-join "" [", " value "> "])
+    case ["map" "name"] value
+    case ["map" "number"] (string-join "" [" = " value])
+    case ["enumValue" "name"] value
+    case ["enumValue" "number"] (string-join "" [" = " value])
+    case ["rpc" "name"] (string-join "" ["rpc " value " ("])
+    case ["rpc" "inputStream"] "stream "
+    case ["rpc" "inputType"] (string-join "" [value ") returns ("])
+    case ["rpc" "outputStream"] "stream "
+    case ["rpc" "outputType"] (string-join "" [value ")"])
+
+; An import's path, which begins the line where no modifier did.
+def proto-render-path [begun value]
+  match begun
+    case true value
+    case _ (string-join "" ["import " value])
+
+; The stack with its innermost container replaced.
+def proto-render-put [stack ctx]
+  push ctx (pop stack)
+
+; A scalar's value, checked: a string, or \`true\` for an rpc's stream.
+def proto-render-value [nk name value]
+  match [name (kind value)]
+    case ["inputStream" :boolean] (if value value (proto-render-refuse "an rpc's inputStream is true or left out"))
+    case ["outputStream" :boolean] (if value value (proto-render-refuse "an rpc's outputStream is true or left out"))
+    case ["inputStream" k] (proto-render-refuse "an rpc's inputStream is true or left out")
+    case ["outputStream" k] (proto-render-refuse "an rpc's outputStream is true or left out")
+    case [n :string] value
+    case _ (proto-render-refuse (string-join "" ["a " nk "'s " name " is text"]))
+
+; A declaration's member is about to be written: its place, checked.
+def proto-render-placed [nk name at]
+  match (proto-render-place nk name)
+    case missing (proto-render-refuse (string-join "" ["a " nk " has no member " name]))
+    case place
+      match (compare place at)
+        case :greater place
+        case _ (proto-render-refuse (string-join "" ["a " nk "'s " name " comes after what it precedes, or twice"]))
+
+; A declaration's type is read: its kind, held to its parent's block.
+def proto-render-type [stack ctx value]
+  match ctx
+    case [:node indent nk key at begun braced]
+      match (top (pop stack))
+        case [:body i parent]
           match (kind value)
-            case :string (transition :other [event (key "$name") object-start (key value) (scalar true) object-end])
-            case _ (transition :other [event])
-        case _ (transition :other [event])
-    case _ (transition :other [event])
+            case :string
+              match (proto-render-holds parent value)
+                case true (transition (proto-render-put stack [:node indent value "" 0 false false]) [])
+                case _ (proto-render-refuse (string-join "" ["a " parent "'s block holds no " value]))
+            case _ (proto-render-refuse "a declaration's type is text")
 
-def proto-mark-finish [s] []
+; A scalar member of a declaration.
+def proto-render-node-scalar [stack ctx value]
+  match ctx
+    case [:node indent nk "type" at begun braced] (proto-render-type stack ctx value)
+    case [:node indent "" key at begun braced] (proto-render-refuse "a declaration's first member is not its type")
+    case [:node indent nk key at begun braced]
+      let [place (proto-render-placed nk key at) checked (proto-render-value nk key value)]
+        let [text (match [nk key] (case ["import" "path"] (proto-render-path begun checked)) (case _ (proto-render-member-text nk key checked)))]
+          transition (proto-render-put stack [:node indent nk "" place true braced]) [(if begun text (string-join "" [indent text]))]
 
-; Whether the string s is the name of the object o.
-def proto-named [s o]
-  match (kind (get "$name" o))
-    case :record
-      match (kind (get-path (as-path [s]) (get "$name" o)))
-        case :missing false
-        case _ true
-    case _ false
+; A container member of a declaration begins: a block, options in
+; brackets, ranges, names, or an option's aggregate.
+def proto-render-node-array [stack ctx]
+  match ctx
+    case [:node indent "" key at begun braced] (proto-render-refuse "a declaration's first member is not its type")
+    case [:node indent nk key at begun braced]
+      let [place (proto-render-placed nk key at)]
+        match key
+          case "body"
+            match (compare at (proto-render-needs nk))
+              case :less (proto-render-refuse (string-join "" ["a " nk " has a block and no " (proto-render-needed nk)]))
+              case _ (transition (push [:body (string-join "" [indent "  "]) nk] (proto-render-put stack [:node indent nk "" place true true])) [" {\\n"])
+          case "options"
+            match (compare at (proto-render-needs nk))
+              case :less (proto-render-refuse (string-join "" ["a " nk " has options and no " (proto-render-needed nk)]))
+              case _ (transition (push [:options 0] (proto-render-put stack [:node indent nk "" place true braced])) [" ["])
+          case "ranges" (transition (push [:ranges 0] (proto-render-put stack [:node indent nk "" place true braced])) [(string-join "" [indent nk " "])])
+          case "names" (transition (push [:names 0] (proto-render-put stack [:node indent nk "" place true braced])) [(string-join "" [indent nk " "])])
+          case "value"
+            match nk
+              case "option" (transition (push [:aggregate 0] (proto-render-put stack [:node indent nk "" place true braced])) ["{"])
+              case _ (proto-render-refuse (string-join "" ["a " nk "'s value is text"]))
+          case _ (proto-render-refuse (string-join "" ["a " nk "'s " key " is text"]))
 
-; ---- members
-
-def proto-has [k o]
-  match (kind (get k o))
-    case :missing false
-    case _ true
-
-def proto-list [k o]
-  match (kind (get k o))
-    case :vector (as-vector (get k o))
-    case _ []
-
-def proto-record [k o]
-  match (kind (get k o))
-    case :record (get k o)
-    case _ (record)
-
-def proto-at [v i]
-  get-path (as-path [i]) v
-
-; A member the tree holds as a string, or a failure naming it.
-def proto-text [what k o]
-  match (kind (get k o))
-    case :string (get k o)
-    case _ (fail :unrepresentable (string-join "" ["the tree is not a FileDescriptorProto: " what " has no string " k]))
-
-def proto-name [what o]
-  proto-text what "name" o
-
-def proto-nonempty [s]
-  match s
-    case "" false
-    case _ true
-
-def proto-real-key [k]
-  match k
-    case "$name" false
-    case _ true
-
-def proto-less [a b]
-  match (compare a b)
-    case :less true
-    case _ false
-
-def proto-same-number [a b]
-  match (compare a b)
-    case :equal true
-    case _ false
-
-def proto-member [i v]
-  match (count (filter (fn [x] (proto-same-number x i)) v))
-    case 0 false
-    case _ true
-
-def proto-lines [items]
-  string-join "\\n" (filter proto-nonempty items)
-
-def proto-deeper [indent]
-  string-join "" [indent "  "]
-
-; A block: its head, then its body on the lines below it, or \`{}\` when the
-; body is empty.
-def proto-block [indent head body]
-  match body
-    case "" (string-join "" [indent head " {}"])
-    case _ (string-join "" [indent head " {\\n" body "\\n" indent "}"])
-
-; ---- scalars
-
-; A number: its lexeme, or as the JSON renderer writes it; NaN, null in
-; JSON, as \`0_0\`, which the reader reads as NaN again.
-def proto-num [n]
-  match (kind n)
-    case :number
-      match (number-class n)
-        case :finite (scalar-text csv-options n)
-        case :infinity "1e999"
-        case :negative-infinity "-1e999"
-        case :nan "0_0"
-    case :null "0_0"
-    case _ (fail :unrepresentable "the tree is not a FileDescriptorProto: a number is not one")
-
-; The characters a literal holds as they are between double quotes, and
-; between single quotes: none of the controls, and not that quote.
-def proto-no-dq [[32 33] [35 1114111]]
-
-def proto-no-sq [[32 38] [40 1114111]]
-
-def proto-ident-chars [[48 57] [65 90] [95 95] [97 122]]
-
-; The characters of a bare constant: a number, a signed one, an identifier.
-def proto-bare-chars [[43 43] [45 46] [48 57] [65 90] [95 95] [97 122]]
-
-; The characters a backtick string holds, as the lexer reads one: the
-; line feed and the carriage return that carry it across lines, and none
-; of the other controls.
-def proto-in-backtick [[10 10] [13 13] [32 1114111]]
-
-; The characters an aggregate holds: its tokens, and the tab, the line
-; feed and the carriage return as the whitespace between them.
-def proto-in-aggregate [[9 10] [13 13] [32 1114111]]
-
-; Whether s is a backtick string's text as the reader keeps it, the
-; backticks and all: the lexer reads a backtick string across lines too,
-; a backslash escaping the character after it, and the reader keeps a
-; constant that is not quoted as it was written. So s has a backtick at
-; each end and none unescaped between them, no backslash before the last
-; that would escape it, and no control but a line break.
-def proto-backtick [s]
-  let [parts (split "\`" s)]
-    match (proto-less 2 (count parts))
-      case false false
-      case true
-        match (match (proto-at parts 0) (case "" (match (top parts) (case "" true) (case _ false))) (case _ false))
-          case false false
-          case true
-            match (chars-within proto-in-backtick s)
-              case false false
-              case true (proto-escaped-inside "\`" (proto-after "\`" (string-join "\`" (pop parts))))
-
-; Whether text could stand between quotes q as the lexer reads them: every
-; q in it escaped, and no backslash at its end to escape the closing one.
-def proto-escaped-inside [q text]
-  match (proto-quotes-escaped q text)
-    case false false
-    case true
-      match (proto-open-escape text)
-        case true false
-        case false true
-
-; Whether every quote q in s is escaped, as in the text of a literal
-; between those quotes. The lexer reads an escape as a backslash and the
-; character after it, so an escaped backslash (\`\\\\\`) escapes nothing
-; after it: s is read in the runs between its escaped backslashes, found
-; from the front as the lexer finds them, and in a run a quote is escaped
-; where a backslash comes right before it.
-def proto-quotes-escaped [q s]
-  match (count (filter (fn [run] (proto-bare-quote q run)) (split "\\\\\\\\" s)))
-    case 0 true
-    case _ false
-
-; Whether a run of a literal's text that holds no escaped backslash holds
-; the quote q with no backslash right before it.
-def proto-bare-quote [q run]
-  match (count (filter (fn [piece] (proto-less 1 (count (split q piece)))) (split (string-join "" ["\\\\" q]) run)))
-    case 0 false
-    case _ true
-
-; Whether s ends with a backslash that escapes nothing in it, which would
-; escape the quote written after it: its last run between escaped
-; backslashes ends with one.
-def proto-open-escape [s]
-  let [pieces (split "\\\\" (top (split "\\\\\\\\" s)))]
-    match (count pieces)
-      case 1 false
-      case _
-        match (top pieces)
-          case "" true
-          case _ false
-
-; A literal's text between quotes that hold it, or "" where none do:
-; double quotes where it holds no double quote, single quotes where it
-; holds no single quote, and where it holds both, the quotes it escapes.
-; No quotes hold a control character, both quotes unescaped, or a
-; backslash at the end that would escape the closing quote.
-def proto-quoted [s]
-  match (chars-within [[32 1114111]] s)
-    case false ""
-    case true
-      match (proto-open-escape s)
-        case true ""
-        case false
-          match (chars-within proto-no-dq s)
-            case true (string-join "" ["\\"" s "\\""])
-            case false
-              match (chars-within proto-no-sq s)
-                case true (string-join "" ["'" s "'"])
-                case false
-                  match (proto-quotes-escaped "\\"" s)
-                    case true (string-join "" ["\\"" s "\\""])
-                    case false
-                      match (proto-quotes-escaped "'" s)
-                        case true (string-join "" ["'" s "'"])
-                        case false ""
-
-; A string literal whose text is s, as written: between quotes, or as the
-; backtick string it is, which holds a line break no quotes hold. A text
-; neither holds fails.
-def proto-literal [s]
-  match (proto-quoted s)
-    case ""
-      match (proto-backtick s)
-        case true s
-        case false (fail :unrepresentable "a string holds what no literal or backtick string holds: a control character, both quotes unescaped, or a backslash that would escape the closing quote")
-    case q q
-
-; An option's string: a literal, the backtick string it is, or the
-; aggregate it is, whose braces hold what no literal holds (a line break,
-; or both quotes unescaped). A control that no literal, backtick string
-; or aggregate holds fails.
-def proto-option-string [s]
-  match (proto-quoted s)
-    case ""
-      match (proto-backtick s)
-        case true s
-        case false
-          match (chars-within proto-in-aggregate s)
-            case true (string-join "" ["{" s "}"])
-            case false (fail :unrepresentable "an option's value holds a control character that no literal, backtick string or aggregate holds")
-    case q q
-
-; The options descriptor.proto types as enums, whose values are identifiers.
-def proto-enum-option [k]
-  match k
-    case "optimize_for" true
-    case "ctype" true
-    case "jstype" true
-    case "retention" true
-    case "targets" true
-    case "idempotency_level" true
-    case "features.field_presence" true
-    case "features.enum_type" true
-    case "features.repeated_field_encoding" true
-    case "features.utf8_validation" true
-    case "features.message_encoding" true
-    case "features.json_format" true
-    case "features.enforce_naming_style" true
-    case "features.default_symbol_visibility" true
-    case "features.(pb.cpp).string_type" true
-    case "features.(pb.java).utf8_validation" true
-    case "features.(pb.java).nest_in_file_class" true
-    case "features.(pb.go).api_level" true
-    case "features.(pb.go).strip_enum_prefix" true
-    case _ false
-
-def proto-identifier [s]
-  match s
-    case "" false
-    case "true" false
-    case "false" false
-    case _ (chars-within proto-ident-chars s)
-
-def proto-value [k v]
-  match (kind v)
-    case :boolean
-      match v
-        case true "true"
-        case false "false"
-    case :number (proto-num v)
-    case :null "1e999"
-    case :string
-      match (proto-enum-option k)
-        case true
-          match (proto-identifier v)
-            case true v
-            case false (proto-option-string v)
-        case false (proto-option-string v)
-    case _ (fail :unrepresentable "the tree is not a FileDescriptorProto: an option's value is not a string, a number or a boolean")
-
-; ---- options
-
-def proto-option-lines [indent opts]
-  string-join "\\n"
-    map
-      fn [k]
-        string-join "" [indent "option " k " = " (proto-value k (get k opts)) ";"]
-      filter proto-real-key (keys opts)
-
-def proto-option-items [opts]
-  string-join ", "
-    map
-      fn [k]
-        string-join "" [k " = " (proto-value k (get k opts))]
-      filter proto-real-key (keys opts)
-
-def proto-brackets [items]
-  match items
-    case "" ""
-    case _ (string-join "" [" [" items "]"])
-
-def proto-plain-options [o]
-  proto-brackets (proto-option-items (proto-record "options" o))
-
-; ---- fields
-
-def proto-default [f]
-  let [v (proto-text "a field's default" "defaultValue" f)]
-    match (get "type" f)
-      case "TYPE_STRING" (proto-literal v)
-      case "TYPE_BYTES" (proto-literal v)
-      case _
-        match v
-          case "" (proto-literal v)
-          case _
-            match (chars-within proto-bare-chars v)
-              case true v
-              case false (proto-literal v)
-
-def proto-field-options [f]
-  proto-brackets
-    string-join ", "
-      filter proto-nonempty
-        vector
-          match (proto-has "defaultValue" f)
-            case true (string-join "" ["default = " (proto-default f)])
-            case false ""
-          match (proto-has "jsonName" f)
-            case true (string-join "" ["json_name = " (proto-literal (proto-text "a field" "jsonName" f))])
-            case false ""
-          proto-option-items (proto-record "options" f)
-
-def proto-scalar-type [t]
-  match t
-    case "TYPE_DOUBLE" "double"
-    case "TYPE_FLOAT" "float"
-    case "TYPE_INT64" "int64"
-    case "TYPE_UINT64" "uint64"
-    case "TYPE_INT32" "int32"
-    case "TYPE_FIXED64" "fixed64"
-    case "TYPE_FIXED32" "fixed32"
-    case "TYPE_BOOL" "bool"
-    case "TYPE_STRING" "string"
-    case "TYPE_BYTES" "bytes"
-    case "TYPE_UINT32" "uint32"
-    case "TYPE_SFIXED32" "sfixed32"
-    case "TYPE_SFIXED64" "sfixed64"
-    case "TYPE_SINT32" "sint32"
-    case "TYPE_SINT64" "sint64"
-    case _ (fail :unrepresentable "the tree is not a FileDescriptorProto: a field's type is no scalar a .proto file names")
-
-def proto-type [f]
-  match (proto-has "type" f)
-    case true (proto-scalar-type (get "type" f))
-    case false (proto-text "a field" "typeName" f)
-
-def proto-label [syntax f]
-  match (get "label" f)
-    case "LABEL_REQUIRED" "required "
-    case "LABEL_REPEATED" "repeated "
-    case _
-      match (get "proto3Optional" f)
-        case true "optional "
+; A declaration ends: its terminator, once its text holds what it needs.
+def proto-render-node-end [stack ctx]
+  match ctx
+    case [:node indent nk key at begun braced]
+      match (compare at (proto-render-needs nk))
+        case :less (proto-render-refuse (string-join "" ["a " nk " with no " (proto-render-needed nk)]))
         case _
-          match syntax
-            case "proto2" "optional "
-            case _ ""
+          match [(proto-render-blocked nk) braced]
+            case [true true] (transition (pop stack) ["\\n"])
+            case [true false] (proto-render-refuse (string-join "" ["a " nk " with no body"]))
+            case [false true] (transition (pop stack) ["\\n"])
+            case _ (transition (pop stack) [";\\n"])
 
-def proto-field-line [syntax indent f labelled]
-  string-join ""
-    vector
-      indent
-      match labelled
-        case true (proto-label syntax f)
-        case false ""
-      proto-type f
-      " "
-      proto-name "a field" f
-      " = "
-      proto-num (get "number" f)
-      proto-field-options f
-      ";"
+; A container ends: a block's closing brace, on a line of its own; an
+; option list's bracket; an aggregate's brace.
+def proto-render-array-end [stack]
+  match (top stack)
+    case [:body indent parent]
+      let [rest (pop stack)]
+        match (top rest)
+          case [:node i nk key at begun braced] (transition rest [(string-join "" [i "}"])])
+          case _ (transition rest [])
+    case [:options count] (transition (pop stack) ["]"])
+    case [:aggregate count] (transition (pop stack) [" }"])
+    case [:ranges count] (transition (pop stack) [])
+    case [:names count] (transition (pop stack) [])
+    case _ (proto-render-refuse "an array where none is")
 
-def proto-visibility [o]
-  match (get "visibility" o)
-    case "VISIBILITY_EXPORT" "export "
-    case "VISIBILITY_LOCAL" "local "
-    case _ ""
+def proto-render-object-start [stack]
+  match (count stack)
+    case 0 (transition [[:file "" 0]] [])
+    case _
+      match (top stack)
+        case [:body indent parent] (transition (push [:node indent "" "type" -1 false false] stack) [])
+        case [:options count] (transition (push [:option "" 0] (proto-render-put stack [:options (inc count)])) [(if (equal count 0) "" ", ")])
+        case [:aggregate count] (transition (push [:field "" 0] (proto-render-put stack [:aggregate (inc count)])) [" "])
+        case [:ranges count] (transition (push [:range "" 0] (proto-render-put stack [:ranges (inc count)])) [(if (equal count 0) "" ", ")])
+        case _ (proto-render-refuse "an object where none is")
 
-; ---- ranges
+def proto-render-object-end [stack]
+  match (top stack)
+    case [:file key at]
+      match at
+        case 2 (transition [:done] [])
+        case _ (proto-render-refuse "a file with no body")
+    case [:node indent nk key at begun braced] (proto-render-node-end stack (top stack))
+    case [:option key at]
+      match at
+        case 2 (transition (pop stack) [])
+        case _ (proto-render-refuse "an option with no name or no value")
+    case [:field key at]
+      match at
+        case 2 (transition (pop stack) [])
+        case _ (proto-render-refuse "an aggregate's field with no name or no value")
+    case [:range key at]
+      match (compare at 1)
+        case :less (proto-render-refuse "a range with no from")
+        case _ (transition (pop stack) [])
+    case _ (proto-render-refuse "an object's end where none is open")
 
-; The decimal digits, and the places of a number's text.
-def proto-digits-down ["9" "8" "7" "6" "5" "4" "3" "2" "1"]
+def proto-render-array-start [stack]
+  match (top stack)
+    case [:file "body" 1] (transition (push [:body "" "file"] (proto-render-put stack [:file "" 2])) [])
+    case [:node indent nk key at begun braced] (proto-render-node-array stack (top stack))
+    case [:option "value" 1] (transition (push [:aggregate 0] (proto-render-put stack [:option "" 2])) ["{"])
+    case [:field "value" 1] (transition (push [:aggregate 0] (proto-render-put stack [:field "" 2])) [" {"])
+    case _ (proto-render-refuse "an array where none is")
 
-def proto-digits-up ["0" "1" "2" "3" "4" "5" "6" "7" "8" "9"]
+; A key names the member whose value follows.
+def proto-render-key [stack name]
+  match (top stack)
+    case [:file key at] (transition (proto-render-put stack [:file name at]) [])
+    case [:node indent nk key at begun braced] (transition (proto-render-put stack [:node indent nk name at begun braced]) [])
+    case [:option key at] (transition (proto-render-put stack [:option name at]) [])
+    case [:field key at] (transition (proto-render-put stack [:field name at]) [])
+    case [:range key at] (transition (proto-render-put stack [:range name at]) [])
+    case _ (proto-render-refuse "a key outside an object")
 
-def proto-places [0 1 2 3 4 5 6 7 8 9 10 11 12 13 14 15 16 17 18 19 20 21 22 23]
+; A text, checked.
+def proto-render-text [value what]
+  match (kind value)
+    case :string value
+    case _ (proto-render-refuse (string-join "" [what " is text"]))
 
-def proto-places-of [text]
-  filter (fn [i] (proto-less i (length text))) proto-places
+def proto-render-scalar [stack value]
+  match (top stack)
+    case [:file "type" 0]
+      match value
+        case "file" (transition (proto-render-put stack [:file "" 1]) [])
+        case _ (proto-render-refuse "the root's type is not file")
+    case [:node indent nk key at begun braced] (proto-render-node-scalar stack (top stack) value)
+    case [:option "name" 0] (transition (proto-render-put stack [:option "" 1]) [(string-join "" [(proto-render-text value "an option's name") " = "])])
+    case [:option "value" 1] (transition (proto-render-put stack [:option "" 2]) [(proto-render-text value "an option's value")])
+    case [:field "name" 0] (transition (proto-render-put stack [:field "" 1]) [(proto-render-text value "an aggregate field's name")])
+    case [:field "value" 1] (transition (proto-render-put stack [:field "" 2]) [(string-join "" [": " (proto-render-text value "an aggregate field's value")])])
+    case [:range "from" 0] (transition (proto-render-put stack [:range "" 1]) [(proto-render-text value "a range's from")])
+    case [:range "to" 1] (transition (proto-render-put stack [:range "" 2]) [(string-join "" [" to " (proto-render-text value "a range's to")])])
+    case [:names count] (transition (proto-render-put stack [:names (inc count)]) [(string-join "" [(if (equal count 0) "" ", ") (proto-render-text value "a reserved name")])])
+    case _ (proto-render-refuse "a value where none is, or a member out of its place")
 
-; A digit after a prefix, a leading zero dropped.
-def proto-append-digit [prefix d]
-  match [prefix d]
-    case ["" "0"] ""
-    case _ (string-join "" [prefix d])
-
-; The decimal text of n - 1 for an integer n of at least 1, a digit a
-; place from the left: at each place, the largest digit after which some
-; number is still below n, which is the one whose zeros after it are.
-; alchemy has no arithmetic, so the predecessor is found by comparison.
-def proto-pred-pos [self places prefix n]
-  match (count places)
+def proto-render-step [stack event]
+  match (count stack)
     case 0
-      match prefix
-        case "" "0"
-        case _ prefix
+      match event
+        case object-start (proto-render-object-start stack)
+        case _ (proto-render-refuse "the root is not an object")
     case _
-      let [zeros (repeat (count (pop places)) "0")]
-        let [found (filter (fn [d] (proto-less (number (string-join "" [prefix d zeros])) n)) proto-digits-down)]
-          match (count found)
-            case 0 (self self (pop places) (proto-append-digit prefix "0") n)
-            case _ (self self (pop places) (proto-append-digit prefix (proto-at found 0)) n)
-
-def proto-below-negated [prefix d nines n]
-  let [digits (string-join "" [(proto-append-digit prefix d) nines])]
-    match digits
-      case "" false
-      case _ (proto-less (number (string-join "" ["-" digits])) n)
-
-; The same for a negative n: the smallest m with -m below n, a digit a
-; place from the left, the smallest digit after which nines still are.
-def proto-pred-neg [self places prefix n]
-  match (count places)
-    case 0 (string-join "" ["-" prefix])
-    case _
-      let [nines (repeat (count (pop places)) "9")]
-        let [found (filter (fn [d] (proto-below-negated prefix d nines n)) proto-digits-up)]
-          self self (pop places) (proto-append-digit prefix (proto-at found 0)) n
-
-def proto-pred [n]
-  match (compare n 0)
-    case :greater (proto-pred-pos proto-pred-pos (proto-places-of (proto-num n)) "" n)
-    case :equal "-1"
-    case _ (proto-pred-neg proto-pred-neg (proto-places-of (proto-num n)) "" n)
-
-; A message's range, whose end is exclusive: \`start\`, \`start to last\` or
-; \`start to max\`.
-def proto-range-ex [maxv r]
-  let [s (get "start" r)]
-    let [e (get "end" r)]
-      match (compare e maxv)
-        case :equal (string-join "" [(proto-num s) " to max"])
+      match (top stack)
+        case :done (fail :protocol-order "the events hold more after the file, which a tree's never do")
         case _
-          let [p (proto-pred e)]
-            match (compare (number p) s)
-              case :equal (proto-num s)
-              case _ (string-join "" [(proto-num s) " to " p])
+          match event
+            case object-start (proto-render-object-start stack)
+            case object-end (proto-render-object-end stack)
+            case array-start (proto-render-array-start stack)
+            case array-end (proto-render-array-end stack)
+            case (key name) (proto-render-key stack name)
+            case (scalar value) (proto-render-scalar stack value)
 
-; An enum's reserved range, whose end is inclusive.
-def proto-range-in [r]
-  let [s (get "start" r)]
-    let [e (get "end" r)]
-      match (compare e s)
-        case :equal (proto-num s)
-        case _
-          match (compare e 2147483647)
-            case :equal (string-join "" [(proto-num s) " to max"])
-            case _ (string-join "" [(proto-num s) " to " (proto-num e)])
+def proto-render-finish [stack]
+  match stack
+    case [:done] []
+    case [] (fail :protocol-order "the events hold no value, where a tree's hold one")
+    case _ (fail :protocol-order "the events ended inside a container, which a tree's never do")
 
-; The end \`to max\` gives in a message.
-def proto-max [m]
-  match (get "message_set_wire_format" (proto-record "options" m))
-    case true 2147483647
-    case _ 536870912
+; The render: the tree's events in, the \`.proto\` file's text out.
+def proto-render [input]
+  join ""
+    scan-emit [] proto-render-step proto-render-finish (events input)
+` }),
+  transduce: Object.freeze({ entry: "proto-transduce", source: `; proto's transducer part: the source-ordered tree's JSON events from the
+; proto grammar's rule passes, for a host that reads parser events (dmog's
+; \`translate\` and \`run --grammar proto\`). Every event is the one the walk
+; of the tree \`parseTree\` builds gives (the schema \`proto-ast\`, alchemy's
+; docs/streaming-plan.md section 13.1): the file's declarations in source
+; order, each an object whose \`type\` comes first and whose other members
+; follow in the order the statement spells them, and every scalar the
+; text the source spells, its tokens run together. It is hand-written,
+; since the grammar is compiled from proto-grammar/*.abnf and builds a
+; \`{rule, src, kids}\` node per rule, which the passes do not show.
+;
+; The passes. The compiled grammar names a statement's alternative after
+; the rule that dispatches it, and the dispatch pushes it: \`topLevelDef$alt4\`
+; is a message, \`messageElement$alt12\` a field (\`proto-transduce-statement\`
+; has the table, which proto-grammar/*.abnf's alternative order fixes, and
+; each runtime's tests hold it to the keyword each alternative opens with).
+; A statement's object begins at its alternative's open pass and ends at
+; the close of the last rule its alternative is replaced with (\`$step1\`,
+; \`$step2\`, ...), so a statement is a chain of rules that one marker
+; spans: a close whose alternate replaces its rule hands its marker on to
+; the rule that replaces it, as an open replaced at once does. An extend's
+; field (\`field\`), an rpc block's option (\`optionStmt\`), an option in
+; brackets (\`fieldOption\`) and an aggregate's field (\`messageValueEntry\`)
+; are rules of their own, and so is each statement's value: a member is
+; the text of the rule that holds it (\`ident\` a name, \`fieldNumber\` a
+; number, \`fieldType\` a type, \`optionName\` an option's name, \`constant\` a
+; value, \`strLit\` a path), every token the passes between its open and its
+; close consumed, run together, as the grammar's node keeps its \`src\`.
+; What the grammar inlines into the rule that leads to it is read from the
+; tokens: an import's modifier, a message's or an enum's visibility, an
+; rpc's \`stream\`, a body's braces, an enum value's name and its signed
+; number, the name of an option in brackets (up to its \`=\`), the bounds of
+; a reserved or an extensions range, a reserved name, an aggregate field's
+; name and the string literals it runs together. An aggregate (a constant
+; whose alternative is \`constant$alt5\`) is its fields, an array.
+;
+; The state is [started marks frames text carry]: whether any pass came
+; (a source that makes none, the empty file, is an empty file at finish);
+; a marker per open rule whose close will come, innermost last (:none,
+; :text, :array, :statement, :file); a frame per open statement, [kind
+; phase], the phase saying what its next token is; the text being read,
+; [string mode] or missing, at most one at a time, whose mode says what
+; ends it (:rule, its rule's close; :token, a token its frame reads as an
+; end, or another member); and the marker a replaced rule hands on, or
+; missing. Nothing grows with the document's length, only with its
+; nesting and the text of one member, under max_metadata_bytes.
 
-; A reserved name: an identifier in an editions file, a literal before.
-def proto-reserved-name [syntax n]
-  match syntax
-    case "editions"
-      match (proto-identifier n)
-        case true n
-        case false (proto-name-literal n)
-    case _ (proto-name-literal n)
+; The kind of statement a rule begins, by its name, or missing.
+def proto-transduce-statement [name]
+  match (first-split "$alt" name)
+    case ["syntaxOrEdition" n]
+      match n
+        case "0" :syntax
+        case "1" :edition
+        case _ missing
+    case ["topLevelDef" n]
+      match n
+        case "0" :import
+        case "1" :import
+        case "2" :package
+        case "3" :option
+        case "4" :message
+        case "5" :enum
+        case "6" :service
+        case "7" :extend
+        case "8" :empty
+        case "9" :visible-message
+        case "10" :visible-enum
+        case _ missing
+    case ["messageElement" n]
+      match n
+        case "0" :enum
+        case "1" :message
+        case "2" :option
+        case "3" :oneof
+        case "4" :map
+        case "5" :extend
+        case "6" :extensions
+        case "7" :reserved
+        case "8" :empty
+        case "9" :visible-message
+        case "10" :visible-enum
+        case "11" :group
+        case "12" :field
+        case _ missing
+    case ["enumElement" n]
+      match n
+        case "0" :option
+        case "1" :reserved
+        case "2" :empty
+        case "3" :enum-value
+        case _ missing
+    case ["oneofElement" n]
+      match n
+        case "0" :option
+        case "1" :empty
+        case "2" :group
+        case "3" :oneof-field
+        case _ missing
+    case ["serviceElement" n]
+      match n
+        case "0" :option
+        case "1" :empty
+        case "2" :rpc
+        case _ missing
+    case ["field"] :field
+    case ["optionStmt"] :option
+    case ["fieldOption"] :field-option
+    case ["messageValueEntry"] :entry
+    case _ missing
 
-; A reserved name between quotes. The reader takes a reserved name from a
-; quoted literal or an identifier, and reads the words of a backtick
-; string as names of their own, so a name no quotes hold fails.
-def proto-name-literal [n]
-  match (proto-quoted n)
-    case "" (fail :unrepresentable "a reserved name holds what no quotes hold: a control character, both quotes unescaped, or a backslash that would escape the closing quote")
-    case q q
+; The \`type\` a statement's object holds.
+def proto-transduce-type [kind]
+  match kind
+    case :visible-message "message"
+    case :visible-enum "enum"
+    case :oneof-field "field"
+    case :enum-value "enumValue"
+    case :syntax "syntax"
+    case :edition "edition"
+    case :import "import"
+    case :package "package"
+    case :option "option"
+    case :message "message"
+    case :enum "enum"
+    case :service "service"
+    case :extend "extend"
+    case :oneof "oneof"
+    case :map "map"
+    case :extensions "extensions"
+    case :reserved "reserved"
+    case :group "group"
+    case :field "field"
+    case :rpc "rpc"
 
-def proto-reserved-names [syntax indent names]
-  match (count names)
-    case 0 ""
-    case _ (string-join "" [indent "reserved " (string-join ", " (map (fn [n] (proto-reserved-name syntax n)) names)) ";"])
-
-def proto-reserved-ranges [indent text]
-  match text
-    case "" ""
-    case _ (string-join "" [indent "reserved " text ";"])
-
-; ---- messages
-
-; Whether two strings are the same. alchemy matches a string against a
-; literal and against no other string, but \`split\` cuts a string at every
-; occurrence of a separator that is not empty, so a string cut by itself,
-; and by nothing else, is two empty strings.
-def proto-same-text [a b]
-  match a
-    case ""
-      match b
-        case "" true
-        case _ false
-    case _
-      match (split a b)
-        case ["" ""] true
-        case _ false
-
-; Whether v is a string and the string s.
-def proto-is-text [s v]
-  match (kind v)
-    case :string (proto-same-text s v)
+; Whether a statement of the kind holds a body in braces.
+def proto-transduce-has-body [kind]
+  match kind
+    case :message true
+    case :visible-message true
+    case :enum true
+    case :visible-enum true
+    case :service true
+    case :oneof true
+    case :extend true
+    case :group true
+    case :rpc true
     case _ false
 
-; Whether the string p begins with the string c, which is not empty, and p
-; without that first c.
-def proto-begins [c p]
-  let [parts (split c p)]
-    match (proto-at parts 0)
-      case "" (proto-less 1 (count parts))
+; The member a rule's text is in a statement of the kind: a key, :type for
+; a map's or an rpc's type (the first or the second), :strings for the
+; first string literal of an aggregate field's run, :options for an
+; option list, or missing where the rule is no member of it.
+def proto-transduce-member [kind name]
+  match [kind name]
+    case [:syntax "strLit"] "value"
+    case [:edition "strLit"] "value"
+    case [:import "strLit"] "path"
+    case [:entry "strLit"] :strings
+    case [:package "fullIdent"] "name"
+    case [:oneof-field "fullIdent"] "fieldType"
+    case [:option "optionName"] "name"
+    case [:option "constant"] "value"
+    case [:field-option "constant"] "value"
+    case [:entry "constant"] "value"
+    case [:message "ident"] "name"
+    case [:visible-message "ident"] "name"
+    case [:enum "ident"] "name"
+    case [:visible-enum "ident"] "name"
+    case [:service "ident"] "name"
+    case [:oneof "ident"] "name"
+    case [:group "ident"] "name"
+    case [:field "ident"] "name"
+    case [:oneof-field "ident"] "name"
+    case [:map "ident"] "name"
+    case [:rpc "ident"] "name"
+    case [:group "fieldNumber"] "number"
+    case [:field "fieldNumber"] "number"
+    case [:oneof-field "fieldNumber"] "number"
+    case [:map "fieldNumber"] "number"
+    case [:field "label"] "label"
+    case [:group "label"] "label"
+    case [:field "fieldType"] "fieldType"
+    case [:map "fieldType"] :type
+    case [:extend "messageType"] "extendee"
+    case [:rpc "messageType"] :type
+    case [:field "fieldOptions"] :options
+    case [:oneof-field "fieldOptions"] :options
+    case [:map "fieldOptions"] :options
+    case [:extensions "fieldOptions"] :options
+    case [:enum-value "fieldOptions"] :options
+    case _ missing
+
+; The machine a step threads: [marks frames text carry outputs].
+def proto-transduce-emit [m more]
+  match m
+    case [marks frames text carry outputs] [marks frames text carry (push-all more outputs)]
+
+def proto-transduce-frame [m]
+  match m
+    case [marks frames text carry outputs]
+      match (count frames)
+        case 0 missing
+        case _ (top frames)
+
+; The innermost frame in a new phase.
+def proto-transduce-phase [m phase]
+  match m
+    case [marks frames text carry outputs]
+      match (top frames)
+        case [kind old] [marks (push [kind phase] (pop frames)) text carry outputs]
+
+def proto-transduce-set-text [m text]
+  match m
+    case [marks frames old carry outputs] [marks frames text carry outputs]
+
+; The text being read, with \`more\` written at its end.
+def proto-transduce-write [m more]
+  match m
+    case [marks frames [s mode] carry outputs] [marks frames [(string-join "" [s more]) mode] carry outputs]
+
+; The text ends: its scalar.
+def proto-transduce-end-text [m]
+  match m
+    case [marks frames [s mode] carry outputs] [marks frames missing carry (push (scalar s) outputs)]
+    case _ m
+
+; The innermost frame's pending text and the containers its phase holds
+; open, closed: a range's bound, its object and the ranges' array, or a
+; reserved name list's array.
+def proto-transduce-settle [m]
+  let [ended (match m (case [marks frames [s :token] carry outputs] (proto-transduce-end-text m)) (case _ m))]
+    match (proto-transduce-frame ended)
+      case [kind :from] (proto-transduce-phase (proto-transduce-emit ended [object-end array-end]) :done)
+      case [kind :to] (proto-transduce-phase (proto-transduce-emit ended [object-end array-end]) :done)
+      case [kind :next] (proto-transduce-phase (proto-transduce-emit ended [array-end]) :done)
+      case [kind :names] (proto-transduce-phase (proto-transduce-emit ended [array-end]) :done)
+      case _ ended
+
+; A statement begins: its frame, and the events that open its object.
+def proto-transduce-begin [m kind]
+  match m
+    case [marks frames text carry outputs]
+      match kind
+        case :empty [marks (push [kind :start] frames) text carry outputs]
+        case :field-option [marks (push [kind :name] frames) ["" :token] carry (push-all [object-start (key "name")] outputs)]
+        case :entry [marks (push [kind :entry-name] frames) text carry (push object-start outputs)]
+        case :visible-message [marks (push [kind :visibility] frames) text carry (push-all [object-start (key "type") (scalar "message")] outputs)]
+        case :visible-enum [marks (push [kind :visibility] frames) text carry (push-all [object-start (key "type") (scalar "enum")] outputs)]
+        case :rpc [marks (push [kind :in] frames) text carry (push-all [object-start (key "type") (scalar "rpc")] outputs)]
+        case :map [marks (push [kind :key] frames) text carry (push-all [object-start (key "type") (scalar "map")] outputs)]
+        case _ [marks (push [kind :start] frames) text carry (push-all [object-start (key "type") (scalar (proto-transduce-type kind))] outputs)]
+
+; A statement ends: its pending text and containers close, then its
+; object.
+def proto-transduce-finish-statement [m]
+  let [settled (proto-transduce-settle m)]
+    match settled
+      case [marks frames text carry outputs]
+        match (top frames)
+          case [:empty phase] [marks (pop frames) text carry outputs]
+          case _ [marks (pop frames) text carry (push object-end outputs)]
+
+; A token whose text begins the frame's text.
+def proto-transduce-begin-text [m src]
+  proto-transduce-set-text m [src :token]
+
+; A reserved or an extensions statement's list: a range's bounds or a name.
+def proto-transduce-list [m kind phase token]
+  let [src (get :src token)]
+    match phase
+      case :start (proto-transduce-phase m :list)
+      case :list
+        if (match [kind (get :name token) src] (case [:extensions n s] true) (case [k "#NR" s] true) (case [k n "-"] true) (case _ false))
+          proto-transduce-phase (proto-transduce-begin-text (proto-transduce-emit m [(key "ranges") array-start object-start (key "from")]) src) :from
+          proto-transduce-phase (proto-transduce-emit m [(key "names") array-start (scalar src)]) :names
+      case :next (proto-transduce-phase (proto-transduce-begin-text (proto-transduce-emit m [object-start (key "from")]) src) :from)
+      case :names
+        match src
+          case "," m
+          case ";" (proto-transduce-phase (proto-transduce-emit m [array-end]) :done)
+          case _ (proto-transduce-emit m [(scalar src)])
+      case _ m
+
+; A token the frame reads, no rule's text being open and the frame's own
+; text not ending at it.
+def proto-transduce-frame-token [m token]
+  let [src (get :src token)]
+    match (proto-transduce-frame m)
+      case missing m
+      case [kind phase]
+        match [(proto-transduce-has-body kind) phase src]
+          case [true :body "}"] (proto-transduce-phase (proto-transduce-emit m [array-end]) :done)
+          case [true :body s] m
+          case [true p "{"] (proto-transduce-phase (proto-transduce-emit (proto-transduce-settle m) [(key "body") array-start]) :body)
+          case _
+            match kind
+              case :import
+                match [phase src]
+                  case [:start s] (proto-transduce-phase m :keyword)
+                  case [:keyword ";"] m
+                  case [:keyword s] (proto-transduce-phase (proto-transduce-emit m [(key "modifier") (scalar s)]) :done)
+                  case _ m
+              case :visible-message
+                match phase
+                  case :visibility (proto-transduce-phase (proto-transduce-emit m [(key "visibility") (scalar src)]) :start)
+                  case _ m
+              case :visible-enum
+                match phase
+                  case :visibility (proto-transduce-phase (proto-transduce-emit m [(key "visibility") (scalar src)]) :start)
+                  case _ m
+              case :oneof-field
+                match [phase src]
+                  case [:start "."] (proto-transduce-phase m :dot)
+                  case _ m
+              case :rpc
+                match [phase src]
+                  case [:in "stream"] (proto-transduce-emit m [(key "inputStream") (scalar true)])
+                  case [:out "stream"] (proto-transduce-emit m [(key "outputStream") (scalar true)])
+                  case _ m
+              case :enum-value
+                match [phase src]
+                  case [:start s] (proto-transduce-phase (proto-transduce-emit m [(key "name") (scalar s)]) :named)
+                  case [:named "="] (proto-transduce-phase (proto-transduce-begin-text (proto-transduce-emit m [(key "number")]) "") :number)
+                  case _ m
+              case :entry
+                match phase
+                  case :entry-name (proto-transduce-phase (proto-transduce-emit m [(key "name") (scalar src)]) :colon)
+                  case _ m
+              case :reserved (proto-transduce-list m kind phase token)
+              case :extensions (proto-transduce-list m kind phase token)
+              case _ m
+
+; Whether a token ends the frame's own text: an option name's \`=\`, an
+; enum value's \`;\`, a token other than a string literal after an
+; aggregate field's run of them, and a range bound's \`to\`, \`,\` or \`;\`.
+def proto-transduce-ends [phase token]
+  let [src (get :src token)]
+    match phase
+      case :name (equal src "=")
+      case :number (equal src ";")
+      case :strings (if (equal (get :name token) "#ST") false true)
+      case :from (match src (case "to" true) (case "," true) (case ";" true) (case _ false))
+      case :to (match src (case "," true) (case ";" true) (case _ false))
       case _ false
 
-def proto-after [c p]
-  let [parts (split c p)]
-    string-join c (map (fn [i] (proto-at parts i)) (filter (fn [i] (proto-less 0 i)) (indices parts)))
+; The frame's own text, ended by a token, and what the token says next.
+def proto-transduce-text-end [m token]
+  let [src (get :src token)]
+    let [ended (proto-transduce-end-text m)]
+      match (proto-transduce-frame ended)
+        case [kind :name] (proto-transduce-phase ended :value)
+        case [kind :number] (proto-transduce-phase ended :done)
+        case [kind :strings] (proto-transduce-phase ended :done)
+        case [kind :from]
+          match src
+            case "to" (proto-transduce-phase (proto-transduce-begin-text (proto-transduce-emit ended [(key "to")]) "") :to)
+            case "," (proto-transduce-phase (proto-transduce-emit ended [object-end]) :next)
+            case _ (proto-transduce-phase (proto-transduce-emit ended [object-end array-end]) :done)
+        case [kind :to]
+          match src
+            case "," (proto-transduce-phase (proto-transduce-emit ended [object-end]) :next)
+            case _ (proto-transduce-phase (proto-transduce-emit ended [object-end array-end]) :done)
+        case _ ended
 
-; The letters protoc puts in upper case in an entry's name.
-def proto-letters [["a" "A"] ["b" "B"] ["c" "C"] ["d" "D"] ["e" "E"] ["f" "F"] ["g" "G"] ["h" "H"] ["i" "I"] ["j" "J"] ["k" "K"] ["l" "L"] ["m" "M"] ["n" "N"] ["o" "O"] ["p" "P"] ["q" "Q"] ["r" "R"] ["s" "S"] ["t" "T"] ["u" "U"] ["v" "V"] ["w" "W"] ["x" "X"] ["y" "Y"] ["z" "Z"]]
+; One token a pass consumed: written to a rule's text, or to the frame's
+; own text unless it ends it, or read by the frame.
+def proto-transduce-token [m token]
+  match m
+    case [marks frames [s :rule] carry outputs] (proto-transduce-write m (get :src token))
+    case [marks frames [s :token] carry outputs]
+      match (proto-transduce-frame m)
+        case [kind phase]
+          if (proto-transduce-ends phase token)
+            match phase
+              case :strings (proto-transduce-frame-token (proto-transduce-text-end m token) token)
+              case _ (proto-transduce-text-end m token)
+            proto-transduce-write m (get :src token)
+    case _ (proto-transduce-frame-token m token)
 
-; A part of a name, its first letter in upper case where it is one from a
-; to z.
-def proto-capital [p]
-  let [hits (filter (fn [l] (proto-begins (proto-at l 0) p)) proto-letters)]
-    match (count hits)
-      case 0 p
-      case _ (string-join "" [(proto-at (proto-at hits 0) 1) (proto-after (proto-at (proto-at hits 0) 0) p)])
+; The tokens a pass consumed, in order: at most three in this grammar,
+; and four read, so that a fifth fails rather than vanishes.
+def proto-transduce-tokens [m rule]
+  let [tokens (get :tokens rule)]
+    match (count tokens)
+      case 0 m
+      case 1 (proto-transduce-token m (transduce-token 0 rule))
+      case 2 (proto-transduce-token (proto-transduce-token m (transduce-token 0 rule)) (transduce-token 1 rule))
+      case 3 (proto-transduce-token (proto-transduce-token (proto-transduce-token m (transduce-token 0 rule)) (transduce-token 1 rule)) (transduce-token 2 rule))
+      case 4 (proto-transduce-token (proto-transduce-token (proto-transduce-token (proto-transduce-token m (transduce-token 0 rule)) (transduce-token 1 rule)) (transduce-token 2 rule)) (transduce-token 3 rule))
+      case _ (fail :protocol-order "a rule pass consumed more tokens than any of the proto grammar's alternates")
 
-; The name protoc gives a map field's entry, which the reader gives the
-; entry it makes: the field's name with each \`_\` dropped and the letter
-; after it, and the first, in upper case, then \`Entry\` (\`map_field\` is
-; \`MapFieldEntry\`).
-def proto-entry-name [name]
-  string-join "" [(string-join "" (map proto-capital (split "_" name))) "Entry"]
+; The rule pushed by a pass's alternate, or "".
+def proto-transduce-pushes [rule]
+  match (get :alt rule)
+    case missing ""
+    case alt (get :p alt)
 
-; Whether every key of the object o is one of the keys allowed.
-def proto-only [allowed o]
-  match (count (filter (fn [k] (proto-less (count (filter (fn [a] (proto-same-text a k)) allowed)) 1)) (keys o)))
-    case 0 true
-    case _ false
-
-def proto-empty [k o]
-  match (kind (get k o))
-    case :vector
-      match (count (as-vector (get k o)))
-        case 0 true
-        case _ false
-    case _ false
-
-; The options the reader copies from a map field to its entry's key and
-; value: \`features\`, and those whose name begins \`features.\`.
-def proto-feature-key [k]
-  match k
-    case "features" true
-    case _ (proto-begins "features." k)
-
-; Whether two options' values are the same: of one kind, and alike.
-def proto-same-value [a b]
-  match [(kind a) (kind b)]
-    case [:string :string] (proto-same-text a b)
-    case [:number :number] (proto-same-number a b)
-    case [:boolean :boolean]
-      match [a b]
-        case [true true] true
-        case [false false] true
-        case _ false
-    case [:record :record] (proto-same-text (scalar-text csv-options a) (scalar-text csv-options b))
-    case _ false
-
-; Whether a field of an entry has the options the reader gives it: the
-; features of the map field fo, by name, \`feats\`, and none where it has
-; none.
-def proto-entry-options [fo feats g]
-  match [(count feats) (proto-has "options" g)]
-    case [0 false] true
-    case [0 true] false
-    case [_ false] false
-    case _
-      let [o (get "options" g)]
-        match (kind o)
-          case :record
-            match (proto-same-number (count (keys o)) (count feats))
-              case true (proto-same-number (count (filter (fn [k] (proto-same-value (get k o) (get k fo))) feats)) (count feats))
-              case false false
-          case _ false
-
-def proto-entry-field-keys ["name" "$name" "number" "label" "type" "typeName" "options"]
-
-; Whether g is a field of an entry as the reader makes it, \`key\` 1 or
-; \`value\` 2: optional, of a type or a type name, and with no option but
-; the features the map field passes down.
-def proto-entry-field [name number fo feats g]
-  match (kind g)
-    case :record
-      match [(proto-is-text name (get "name" g)) (get "label" g) (kind (get "number" g)) (proto-has "type" g) (proto-has "typeName" g) (proto-only proto-entry-field-keys g)]
-        case [true "LABEL_OPTIONAL" :number true false true]
-          match (proto-same-number (get "number" g) number)
-            case true (proto-entry-options fo feats g)
-            case false false
-        case [true "LABEL_OPTIONAL" :number false true true]
-          match (proto-same-number (get "number" g) number)
-            case true (proto-entry-options fo feats g)
-            case false false
-        case _ false
-    case _ false
-
-def proto-entry-keys ["name" "$name" "field" "nestedType" "enumType" "oneofDecl" "extension" "options"]
-
-; Whether the nested type n is the entry the reader makes for the map
-; field f, so that f written as a map reads back with n as it is: n named
-; for f by protoc's rule, with no member but its fields, its empty lists
-; and the option \`mapEntry\` alone, and its fields \`key\` and \`value\` as the
-; reader makes them. A message the file declares, the option \`mapEntry\`
-; in it, is any other one, and is written as a message.
-def proto-map-entry [f n]
-  match [(kind (get "name" f)) (kind (get "name" n))]
-    case [:string :string]
-      match [(proto-same-text (proto-entry-name (get "name" f)) (get "name" n)) (proto-only proto-entry-keys n)]
-        case [true true]
-          let [o (proto-record "options" n)]
-            match [(proto-empty "nestedType" n) (proto-empty "enumType" n) (proto-empty "oneofDecl" n) (proto-empty "extension" n) (count (keys o)) (get "mapEntry" o)]
-              case [true true true true 1 true]
-                let [kv (proto-list "field" n)]
-                  match (count kv)
-                    case 2
-                      let [fo (proto-record "options" f)]
-                        let [feats (filter proto-feature-key (keys fo))]
-                          match [(proto-entry-field "key" 1 fo feats (proto-at kv 0)) (proto-entry-field "value" 2 fo feats (proto-at kv 1))]
-                            case [true true] true
-                            case _ false
-                    case _ false
-              case _ false
-        case _ false
-    case _ false
-
-def proto-first [v]
-  match (count v)
-    case 0 -1
-    case _ (proto-at v 0)
-
-def proto-last [v]
-  match (count v)
-    case 0 -1
-    case _ (top v)
-
-def proto-entry-named [f n]
-  match (proto-named (get "typeName" f) n)
-    case true (proto-map-entry f n)
-    case false false
-
-; The nested type a field is written with, its index, or -1: a group's
-; message, and a map field's entry. A map field is a repeated field whose
-; type is named for a nested type that is the entry the reader would make
-; for it (\`proto-map-entry\`).
-def proto-attached [ns f]
-  match (get "type" f)
-    case "TYPE_GROUP" (proto-first (filter (fn [t] (proto-named (get "typeName" f) (proto-at ns t))) (indices ns)))
-    case _
-      match (get "label" f)
-        case "LABEL_REPEATED"
-          match [(proto-has "type" f) (proto-has "typeName" f) (proto-has "oneofIndex" f) (proto-has "extendee" f)]
-            case [false true false false] (proto-first (filter (fn [t] (proto-entry-named f (proto-at ns t))) (indices ns)))
-            case _ -1
-        case _ -1
-
-; Whether a field is in a declared oneof: a proto3 \`optional\` field's
-; oneof is synthetic, and the field is written \`optional\`.
-def proto-in-oneof [f]
-  match (proto-has "oneofIndex" f)
-    case true
-      match (get "proto3Optional" f)
-        case true false
+; Whether a pass's alternate replaces its rule.
+def proto-transduce-replaced [rule]
+  match (get :alt rule)
+    case missing false
+    case alt
+      match (get :r alt)
+        case "" false
         case _ true
-    case false false
 
-def proto-same-oneof [fs j k]
-  let [a (proto-at fs j)]
-    let [b (proto-at fs k)]
-      match (proto-in-oneof b)
-        case true (proto-same-number (get "oneofIndex" a) (get "oneofIndex" b))
-        case false false
-
-; A unit is a field, or a declared oneof's fields, which are adjacent in
-; the tree; it is written at its first field.
-def proto-unit-start [fs j]
-  match (proto-in-oneof (proto-at fs j))
-    case false true
-    case true
-      match (count (filter (fn [k] (proto-less k j)) (filter (fn [k] (proto-same-oneof fs j k)) (indices fs))))
-        case 0 true
-        case _ false
-
-def proto-unit-fields [fs j]
-  match (proto-in-oneof (proto-at fs j))
-    case false [j]
-    case true (filter (fn [k] (proto-same-oneof fs j k)) (indices fs))
-
-def proto-attached-of [att ks]
-  filter (fn [t] (proto-less -1 t)) (map (fn [k] (proto-at att k)) ks)
-
-; The nested types written as messages, between two attached ones.
-def proto-plain-nested [ns att lo hi]
-  filter
-    fn [t]
-      match (proto-member t att)
-        case true false
-        case false
-          match [(proto-less lo t) (proto-less t hi)]
-            case [true true] true
-            case _ false
-    indices ns
-
-; The messages due before a unit: those after the nested type of the last
-; attached field before it and before the unit's own first.
-def proto-nested-before [indent ns bodies fs att j]
-  let [mine (proto-attached-of att (proto-unit-fields fs j))]
-    match (count mine)
-      case 0 ""
-      case _
-        let [lo (proto-last (proto-attached-of att (filter (fn [k] (proto-less k j)) (indices fs))))]
-          string-join "\\n"
-            map (fn [t] (proto-message indent (proto-at ns t) (proto-at bodies t))) (proto-plain-nested ns att lo (proto-at mine 0))
-
-def proto-nested-after [indent ns bodies att]
-  let [lo (proto-last (filter (fn [t] (proto-less -1 t)) att))]
-    string-join "\\n"
-      map (fn [t] (proto-message indent (proto-at ns t) (proto-at bodies t))) (proto-plain-nested ns att lo 4294967296)
-
-; The declared oneofs: all but the synthetic ones of proto3 \`optional\`.
-def proto-declared-oneofs [m]
-  let [synthetic (map (fn [f] (get "oneofIndex" f)) (filter (fn [f] (match (get "proto3Optional" f) (case true (proto-has "oneofIndex" f)) (case _ false))) (proto-list "field" m)))]
-    filter (fn [i] (match (proto-member i synthetic) (case true false) (case false true))) (indices (proto-list "oneofDecl" m))
-
-; The declared oneofs no field is in.
-def proto-empty-oneofs [m]
-  let [used (map (fn [f] (get "oneofIndex" f)) (filter proto-in-oneof (proto-list "field" m)))]
-    filter (fn [i] (match (proto-member i used) (case true false) (case false true))) (proto-declared-oneofs m)
-
-def proto-oneof-block [indent m i members]
-  let [o (proto-at (proto-list "oneofDecl" m) i)]
-    proto-block indent (string-join "" ["oneof " (proto-name "a oneof" o)])
-      proto-lines
-        vector
-          proto-option-lines (proto-deeper indent) (proto-record "options" o)
-          members
-
-; The empty oneofs due before a unit's oneof: those after the last oneof
-; written before it.
-def proto-oneofs-before [indent m fs j]
-  let [f (proto-at fs j)]
-    match (proto-in-oneof f)
-      case false ""
-      case true
-        let [lo (proto-last (map (fn [k] (get "oneofIndex" (proto-at fs k))) (filter (fn [k] (match (proto-less k j) (case true (proto-in-oneof (proto-at fs k))) (case false false))) (indices fs))))]
-          string-join "\\n"
-            map
-              fn [i]
-                proto-oneof-block indent m i ""
-              filter (fn [i] (match [(proto-less lo i) (proto-less i (get "oneofIndex" f))] (case [true true] true) (case _ false))) (proto-empty-oneofs m)
-
-def proto-oneofs-after [indent m]
-  let [lo (proto-last (map (fn [f] (get "oneofIndex" f)) (filter proto-in-oneof (proto-list "field" m))))]
-    string-join "\\n"
-      map
-        fn [i]
-          proto-oneof-block indent m i ""
-        filter (fn [i] (proto-less lo i)) (proto-empty-oneofs m)
-
-def proto-group-block [syntax indent f body labelled]
-  proto-block indent
-    string-join ""
-      vector
-        match labelled
-          case true (proto-label syntax f)
-          case false ""
-        "group "
-        proto-text "a group" "typeName" f
-        " = "
-        proto-num (get "number" f)
-    body
-
-def proto-map-line [indent f n]
-  let [kv (proto-list "field" n)]
-    string-join ""
-      vector
-        indent
-        "map<"
-        proto-type (proto-at kv 0)
-        ", "
-        proto-type (proto-at kv 1)
-        "> "
-        proto-name "a map field" f
-        " = "
-        proto-num (get "number" f)
-        proto-field-options f
-        ";"
-
-; A field's statement: a field, a map field, or a group with its body. A
-; group outside a oneof is written with the body the message's own were
-; written with; one in a oneof, a level deeper, has its body written there.
-def proto-field-statement [self syntax indent ns bodies att fs k labelled]
-  let [f (proto-at fs k)]
-    let [t (proto-at att k)]
-      match (proto-less t 0)
-        case true (proto-field-line syntax indent f labelled)
-        case false
-          match (get "type" f)
-            case "TYPE_GROUP"
-              match labelled
-                case true (proto-group-block syntax indent f (proto-at bodies t) labelled)
-                case false (proto-group-block syntax indent f (self self syntax (proto-deeper indent) (proto-at ns t)) labelled)
-            case _ (proto-map-line indent f (proto-at ns t))
-
-def proto-unit-text [self syntax indent m ns bodies fs att j]
-  let [f (proto-at fs j)]
-    match (proto-in-oneof f)
-      case false (proto-field-statement self syntax indent ns bodies att fs j true)
-      case true
-        proto-oneof-block indent m (get "oneofIndex" f)
-          string-join "\\n"
-            map (fn [k] (proto-field-statement self syntax (proto-deeper indent) ns bodies att fs k false)) (proto-unit-fields fs j)
-
-def proto-unit [self syntax indent m ns bodies fs att j]
-  match (proto-unit-start fs j)
-    case false ""
-    case true
-      proto-lines
-        vector
-          proto-nested-before indent ns bodies fs att j
-          proto-oneofs-before indent m fs j
-          proto-unit-text self syntax indent m ns bodies fs att j
-
-; A message's extension ranges, reserved ranges and reserved names, in the
-; order the tree holds them.
-def proto-range-key [syntax indent maxv m k]
-  match k
-    case "extensionRange"
-      string-join "\\n"
-        map
-          fn [r]
-            string-join "" [indent "extensions " (proto-range-ex maxv r) (proto-plain-options r) ";"]
-          proto-list "extensionRange" m
-    case "reservedRange" (proto-reserved-ranges indent (string-join ", " (map (fn [r] (proto-range-ex maxv r)) (proto-list "reservedRange" m))))
-    case "reservedName" (proto-reserved-names syntax indent (proto-list "reservedName" m))
-    case _ ""
-
-; A message's body, the one definition the render recurses through, as
-; \`self\`. Every nested type's body is written first, a level deeper, and
-; the rest of the body places them: the recursion then nests a few
-; evaluation levels a message level, well within alchemy's bound for the
-; 100 levels the reader accepts, where placing a message among the fields
-; first would nest some twenty.
-def proto-message-body [self syntax indent m]
-  let [ns (proto-list "nestedType" m)]
-    let [bodies (map (fn [n] (self self syntax (proto-deeper indent) n)) ns)]
-      proto-message-parts self syntax indent m ns bodies
-
-def proto-message-parts [self syntax indent m ns bodies]
-  let [fs (proto-list "field" m)]
-    let [att (map (fn [f] (proto-attached ns f)) fs)]
-      proto-lines
-        vector
-          proto-option-lines indent (proto-record "options" m)
-          proto-lines (map (fn [j] (proto-unit self syntax indent m ns bodies fs att j)) (indices fs))
-          proto-nested-after indent ns bodies att
-          proto-oneofs-after indent m
-          string-join "\\n" (map (fn [e] (proto-enum syntax indent e)) (proto-list "enumType" m))
-          string-join "\\n" (map (fn [f] (proto-extend syntax indent f)) (proto-list "extension" m))
-          proto-lines (map (fn [k] (proto-range-key syntax indent (proto-max m) m k)) (keys m))
-
-; A message's block around its body.
-def proto-message [indent m body]
-  proto-block indent (string-join "" [(proto-visibility m) "message " (proto-name "a message" m)]) body
-
-; ---- enums, services, extensions
-
-def proto-enum-key [syntax indent e k]
-  match k
+; A member's rule opens in a frame: its key, and its text or its
+; container begun; the marker its close will act on.
+def proto-transduce-member-open [m kind phase member rule]
+  match member
+    case :options [(proto-transduce-emit (proto-transduce-settle m) [(key "options") array-start]) :array]
+    case :strings [(proto-transduce-phase (proto-transduce-set-text (proto-transduce-emit m [(key "value")]) ["" :token]) :strings) :none]
+    case :type
+      match [kind phase]
+        case [:map :key] [(proto-transduce-set-text (proto-transduce-phase (proto-transduce-emit m [(key "keyType")]) :value) ["" :rule]) :text]
+        case [:map p] [(proto-transduce-set-text (proto-transduce-emit m [(key "valueType")]) ["" :rule]) :text]
+        case [:rpc :in] [(proto-transduce-set-text (proto-transduce-phase (proto-transduce-emit m [(key "inputType")]) :out) ["" :rule]) :text]
+        case [:rpc p] [(proto-transduce-set-text (proto-transduce-emit m [(key "outputType")]) ["" :rule]) :text]
     case "value"
-      string-join "\\n"
-        map
-          fn [v]
-            string-join "" [indent (proto-name "an enum value" v) " = " (proto-num (get "number" v)) (proto-plain-options v) ";"]
-          proto-list "value" e
-    case "options" (proto-option-lines indent (proto-record "options" e))
-    case "reservedRange" (proto-reserved-ranges indent (string-join ", " (map proto-range-in (proto-list "reservedRange" e))))
-    case "reservedName" (proto-reserved-names syntax indent (proto-list "reservedName" e))
-    case _ ""
+      match (proto-transduce-pushes rule)
+        case "constant$alt5" [(proto-transduce-emit m [(key "value") array-start]) :array]
+        case _ [(proto-transduce-set-text (proto-transduce-emit m [(key "value")]) ["" :rule]) :text]
+    case "fieldType"
+      match [kind phase]
+        case [:oneof-field :dot] [(proto-transduce-set-text (proto-transduce-phase (proto-transduce-emit m [(key "fieldType")]) :typed) ["." :rule]) :text]
+        case _ [(proto-transduce-set-text (proto-transduce-emit m [(key "fieldType")]) ["" :rule]) :text]
+    case name [(proto-transduce-set-text (proto-transduce-emit m [(key name)]) ["" :rule]) :text]
 
-def proto-enum [syntax indent e]
-  proto-block indent (string-join "" [(proto-visibility e) "enum " (proto-name "an enum" e)])
-    proto-lines (map (fn [k] (proto-enum-key syntax (proto-deeper indent) e k)) (keys e))
+; A rule opens that begins no statement: a member of the innermost frame,
+; or part of the text being read, or nothing.
+def proto-transduce-inner-open [m rule]
+  match m
+    case [marks frames [s :rule] carry outputs] [m :none]
+    case _
+      match (proto-transduce-frame m)
+        case missing [m :none]
+        case [kind phase]
+          match (proto-transduce-member kind (get :name rule))
+            case missing [m :none]
+            case member
+              match m
+                case [marks frames [s :token] carry outputs]
+                  match [member phase]
+                    case [:strings :strings] [m :none]
+                    case _ (proto-transduce-member-open (proto-transduce-settle m) kind phase member rule)
+                case _ (proto-transduce-member-open m kind phase member rule)
 
-def proto-stream [flag]
-  match flag
-    case true "stream "
-    case _ ""
+; An open pass, no marker handed on: the file, a statement, or a rule
+; inside one.
+def proto-transduce-fresh [m rule]
+  let [name (get :name rule)]
+    match name
+      case "__start__" [(proto-transduce-emit (match m (case [marks frames text carry outputs] [marks (push [:file :body] frames) text carry outputs])) [object-start (key "type") (scalar "file") (key "body") array-start]) :file]
+      case _
+        match (proto-transduce-statement name)
+          case missing (proto-transduce-inner-open m rule)
+          case kind [(proto-transduce-begin m kind) :statement]
 
-def proto-method [indent r]
-  let [head (string-join "" ["rpc " (proto-name "a method" r) " (" (proto-stream (get "clientStreaming" r)) (proto-text "a method" "inputType" r) ") returns (" (proto-stream (get "serverStreaming" r)) (proto-text "a method" "outputType" r) ")"])]
-    match (proto-has "options" r)
-      case false (string-join "" [indent head ";"])
-      case true (proto-block indent head (proto-option-lines (proto-deeper indent) (proto-record "options" r)))
+; A marker's close.
+def proto-transduce-act [m mark]
+  match mark
+    case :text (proto-transduce-end-text m)
+    case :array (proto-transduce-emit m [array-end])
+    case :statement (proto-transduce-finish-statement m)
+    case :file
+      match m
+        case [marks frames text carry outputs] [marks (pop frames) text carry (push-all [array-end object-end] outputs)]
+    case _ m
 
-def proto-service [indent s]
-  proto-block indent (string-join "" ["service " (proto-name "a service" s)])
-    proto-lines
-      vector
-        proto-option-lines (proto-deeper indent) (proto-record "options" s)
-        string-join "\\n" (map (fn [r] (proto-method (proto-deeper indent) r)) (proto-list "method" s))
+def proto-transduce-open [m rule]
+  match m
+    case [marks frames text carry outputs]
+      match carry
+        case missing
+          match (proto-transduce-fresh m rule)
+            case [opened mark]
+              let [read (proto-transduce-tokens opened rule)]
+                match read
+                  case [ms fs t c os]
+                    match (proto-transduce-replaced rule)
+                      case true [ms fs t mark os]
+                      case _ [(push mark ms) fs t missing os]
+        case mark
+          let [read (proto-transduce-tokens [marks frames text missing outputs] rule)]
+            match read
+              case [ms fs t c os]
+                match (proto-transduce-replaced rule)
+                  case true [ms fs t mark os]
+                  case _ [(push mark ms) fs t missing os]
 
-; An extension, in an \`extend\` block of its own.
-def proto-extend [syntax indent f]
-  proto-block indent (string-join "" ["extend " (proto-text "an extension" "extendee" f)])
-    proto-field-line syntax (proto-deeper indent) f true
+def proto-transduce-close [m rule]
+  match m
+    case [marks frames text carry outputs]
+      let [mark (top marks)]
+        let [read (proto-transduce-tokens [(pop marks) frames text carry outputs] rule)]
+          match (proto-transduce-replaced rule)
+            case true
+              match read
+                case [ms fs t c os] [ms fs t mark os]
+            case _ (proto-transduce-act read mark)
 
-; ---- the file
+def proto-transduce-step [state pass]
+  match state
+    case [started marks frames text carry]
+      let [m [marks frames text carry []]]
+        let [next (match pass (case (open rule) (proto-transduce-open m rule)) (case (close rule) (proto-transduce-close m rule)))]
+          match next
+            case [ms fs t c outputs] (transition [true ms fs t c] outputs)
 
-def proto-syntax-line [file]
-  match (get "syntax" file)
-    case "proto2" "syntax = \\"proto2\\";"
-    case "proto3" "syntax = \\"proto3\\";"
-    case "editions"
-      match (get "edition" file)
-        case "EDITION_2023" "edition = \\"2023\\";"
-        case "EDITION_2024" "edition = \\"2024\\";"
-        case _ (fail :unrepresentable "the tree is not a FileDescriptorProto: its edition is not one a .proto file declares")
-    case _ (fail :unrepresentable "the tree is not a FileDescriptorProto: its syntax is not proto2, proto3 or editions")
+; A source that made no pass is the empty file.
+def proto-transduce-finish [state]
+  match state
+    case [false marks frames text carry] [object-start (key "type") (scalar "file") (key "body") array-start array-end object-end]
+    case [true [] [] text carry] []
+    case _ (fail :protocol-order "the rule passes ended inside a statement, which a file's never do")
 
-def proto-import-kind [file i]
-  match (proto-member i (proto-list "publicDependency" file))
-    case true "public "
-    case false
-      match (proto-member i (proto-list "weakDependency" file))
-        case true "weak "
-        case false ""
-
-def proto-dependency [file i d]
-  match (kind d)
-    case :string (string-join "" ["import " (proto-import-kind file i) (proto-literal d) ";"])
-    case _ (fail :unrepresentable "the tree is not a FileDescriptorProto: an import is not a string")
-
-; The package, the imports and the file's options, in the order the tree
-; holds them.
-def proto-head-key [file k]
-  match k
-    case "package" (string-join "" ["package " (proto-text "the file" "package" file) ";"])
-    case "dependency"
-      let [ds (proto-list "dependency" file)]
-        string-join "\\n" (map (fn [i] (proto-dependency file i (proto-at ds i))) (indices ds))
-    case "optionDependency"
-      string-join "\\n"
-        map
-          fn [d]
-            string-join "" ["import option " (proto-literal d) ";"]
-          proto-list "optionDependency" file
-    case "options" (proto-option-lines "" (proto-record "options" file))
-    case _ ""
-
-def proto-file [file]
-  match (kind file)
-    case :record
-      let [syntax (get "syntax" file)]
-        string-join ""
-          vector
-            proto-lines
-              vector
-                proto-syntax-line file
-                proto-lines (map (fn [k] (proto-head-key file k)) (keys file))
-                string-join "\\n" (map (fn [m] (proto-message "" m (proto-message-body proto-message-body syntax "  " m))) (proto-list "messageType" file))
-                string-join "\\n" (map (fn [e] (proto-enum syntax "" e)) (proto-list "enumType" file))
-                string-join "\\n" (map (fn [s] (proto-service "" s)) (proto-list "service" file))
-                string-join "\\n" (map (fn [f] (proto-extend syntax "" f)) (proto-list "extension" file))
-            "\\n"
-    case _ (fail :unrepresentable "the tree is not a FileDescriptorProto: its root is not an object")
-
-; The render: the tree's events in, the file's text out.
-def proto-render [input]
-  concat-map proto-file
-    select root
-      as-events (scan-emit :other proto-mark-step proto-mark-finish (events input))
+def proto-transduce [input]
+  as-events (scan-emit [false [] [] missing missing] proto-transduce-step proto-transduce-finish (parser-events input))
 ` })
 })
 

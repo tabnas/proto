@@ -3,7 +3,9 @@
 ## Exports
 
 ```js ignore
-const { parse, toDescriptor, Proto, preflight, MAX_NESTING_DEPTH } = require('@tabnas/proto')
+const {
+  parse, toDescriptor, parseTree, toTree, make, Proto, preflight, MAX_NESTING_DEPTH,
+} = require('@tabnas/proto')
 ```
 
 ### `parse(src, options?) => FileDescriptorProto`
@@ -26,6 +28,33 @@ engine is the only peer dependency.
 ### `toDescriptor(cst, options?) => FileDescriptorProto`
 
 Turn a CST (from `tn.parse`) into a FileDescriptorProto.
+
+### `parseTree(src) => TreeNode`
+
+Parse a `.proto` source string to its source-ordered tree, the schema
+`proto-ast`: the file's declarations in the order the file writes them,
+which a translation reads and writes. It runs `preflight` first, as
+`parse` does. Every node is an object whose first member, `type`, names
+it, and whose other members follow in the order the statement spells
+them; every scalar is the text the source spells, a string literal with
+its quotes. The section "Source-ordered tree" below has the nodes.
+
+```js
+const { parseTree } = require('@tabnas/proto')
+
+const tree = parseTree('syntax = "proto3";\nmessage M { repeated int32 a = 1; }')
+tree.body[0] // => { type: 'syntax', value: '"proto3"' }
+tree.body[1].body[0] // => { type: 'field', label: 'repeated', fieldType: 'int32', name: 'a', number: '1' }
+```
+
+### `toTree(cst) => TreeNode` and `make() => Tabnas`
+
+`make()` builds the parser `parse` and `parseTree` use: a fresh engine
+with the grammar installed. `toTree` turns its CST into the tree. A host
+that streams a document reads the rule passes of the parser `make()`
+builds through the transducer part, `translate().transduce`, which makes
+the tree's events a declaration at a time; it runs `preflight` on the
+source first.
 
 ### `preflight(src)` and `MAX_NESTING_DEPTH`
 
@@ -51,6 +80,36 @@ try { parse(deep) } catch (err) { refusal = err.message }
 refusal // => 'proto: document nests 101 levels deep, past the 100 this parser accepts'
 MAX_NESTING_DEPTH // => 100
 ```
+
+## Source-ordered tree
+
+`{ type: 'file', body: [...] }`, each declaration in `body` an object of
+these members, in this order, a member in brackets there only where the
+statement writes it:
+
+| `type` | Members |
+|---|---|
+| `syntax`, `edition` | `value` |
+| `import` | [`modifier`], `path` |
+| `package` | `name` |
+| `option` | `name`, `value` |
+| `message`, `enum` | [`visibility`], `name`, `body` |
+| `service`, `oneof` | `name`, `body` |
+| `extend` | `extendee`, `body` |
+| `field` | [`label`], `fieldType`, `name`, `number`, [`options`] |
+| `map` | `keyType`, `valueType`, `name`, `number`, [`options`] |
+| `group` | [`label`], `name`, `number`, `body` |
+| `extensions` | `ranges`, [`options`] |
+| `reserved` | `ranges` or `names` |
+| `enumValue` | `name`, `number`, [`options`] |
+| `rpc` | `name`, [`inputStream`], `inputType`, [`outputStream`], `outputType`, [`body`] |
+
+A body holds its own declarations in source order. A range is
+`{ from, to }`, `to` where the range writes one; an option in brackets is
+`{ name, value }`; `inputStream` and `outputStream` are `true`. An
+option's value is its text, or, for an aggregate in braces, the list of
+its fields, `[{ name, value }]`. A field's value is text, or an aggregate
+in turn. Comments and empty statements are left out.
 
 ## Options
 

@@ -77,20 +77,48 @@ func TestTranslationEmbed(t *testing.T) {
 	}
 }
 
-// The tree is the descriptor's own shape, so the manifest names it.
-func TestTranslationSchema(t *testing.T) {
+// The transducer part the manifest names is the one the package carries,
+// under the entry a host calls.
+func TestTranslationTransduce(t *testing.T) {
+	inCheckout(t)
 	var spec struct {
 		Translate struct {
-			Reads  string `json:"reads"`
-			Writes string `json:"writes"`
-			Root   string `json:"root"`
-			Schema string `json:"schema"`
+			Transduce string `json:"transduce"`
 		} `json:"translate"`
 	}
 	if err := json.Unmarshal([]byte(Translate().Manifest), &spec); err != nil {
 		t.Fatal(err)
 	}
-	if spec.Translate.Reads != "tree" || spec.Translate.Writes != "tree" || spec.Translate.Root != "object" || spec.Translate.Schema != "proto-descriptor" {
+	parts := Translate()
+	if spec.Translate.Transduce != "alchemy/transduce.alc" || parts.Transduce == nil || parts.Transduce.Entry != "proto-transduce" {
+		t.Fatalf("transduce is %q, entry %#v", spec.Translate.Transduce, parts.Transduce)
+	}
+	transduce, err := os.ReadFile("../" + spec.Translate.Transduce)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if parts.Transduce.Source != string(transduce) {
+		t.Fatalf("embedded transducer differs from %s: run npm run embed in ts", spec.Translate.Transduce)
+	}
+}
+
+// The tree is the file's declarations in source order, the format's own
+// shape, so the manifest names it; a document streams through the part,
+// so the manifest says nothing of reading it whole.
+func TestTranslationSchema(t *testing.T) {
+	var spec struct {
+		Translate struct {
+			Reads  string  `json:"reads"`
+			Writes string  `json:"writes"`
+			Root   string  `json:"root"`
+			Schema string  `json:"schema"`
+			Whole  *string `json:"whole"`
+		} `json:"translate"`
+	}
+	if err := json.Unmarshal([]byte(Translate().Manifest), &spec); err != nil {
+		t.Fatal(err)
+	}
+	if spec.Translate.Reads != "tree" || spec.Translate.Writes != "tree" || spec.Translate.Root != "object" || spec.Translate.Schema != "proto-ast" || spec.Translate.Whole != nil {
 		t.Fatalf("translate is %+v", spec.Translate)
 	}
 }
@@ -106,13 +134,19 @@ func TestTranslateReturnsACopy(t *testing.T) {
 		first.Render.Entry = ""
 		first.Render.Source = ""
 	}
-	first.Lift, first.Embed, first.Render = nil, nil, nil
+	if first.Transduce != nil {
+		first.Transduce.Entry = ""
+	}
+	first.Lift, first.Embed, first.Render, first.Transduce = nil, nil, nil, nil
 	second := Translate()
 	if second.Manifest == "" {
 		t.Fatal("a change to one call's manifest reached the next call")
 	}
 	if second.Render == nil || *second.Render != want {
 		t.Fatalf("a change to one call's render reached the next call: %#v", second.Render)
+	}
+	if second.Transduce == nil || second.Transduce.Entry != "proto-transduce" {
+		t.Fatalf("a change to one call's transducer reached the next call: %#v", second.Transduce)
 	}
 }
 

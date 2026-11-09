@@ -12,6 +12,8 @@ import type { GrammarSpec } from '@tabnas/parser'
 // run gen-grammar` (gen-grammar.js). Generated: never edit it.
 import compiledGrammar from './proto-grammar.json'
 import { buildFile } from './build-descriptor'
+import { buildTree } from './build-tree'
+import type { TreeNode, TreeValue } from './build-tree'
 import { recordAggregate } from './aggregate'
 import { MAX_NESTING_DEPTH, preflight } from './preflight'
 import {
@@ -86,13 +88,42 @@ function parse(src: string, options?: Partial<ProtoOptions>): FileDescriptorProt
   return toDescriptor(tn.parse(src), options)
 }
 
+// The parser a host reads a `.proto` document with: a fresh engine with
+// the grammar installed, as `parse` builds one. Its rule passes are what
+// the transducer part (alchemy/transduce.alc) reads, and its value is the
+// `{rule, src, kids}` CST that `toTree` and `toDescriptor` walk. A host
+// runs `preflight(src)` on a source before it hands it to this parser.
+function make(): Tabnas {
+  const tn = new Tabnas({ rewind: { history: 8192 } })
+  Proto(tn)
+  return tn
+}
+
+// The source-ordered tree of a parsed proto CST: the file's declarations
+// in the order the file writes them (the schema `proto-ast`; see
+// ./build-tree.ts). It is the tree the translation parts read and write.
+function toTree(cst: any): TreeNode {
+  return buildTree(cst)
+}
+
+// Convenience: parse a `.proto` source string to its source-ordered tree
+// in one call, refusing a document that nests past MAX_NESTING_DEPTH
+// first, as `parse` does.
+function parseTree(src: string): TreeNode {
+  preflight(src)
+  return toTree(make().parse(src))
+}
+
 // VERSION is this package's version. It MUST equal package.json "version":
 // the release orchestrator rewrites both, and test/version.test.ts fails the
 // build if they drift. Mirrors `const VERSION` in go/proto.go.
 const VERSION = '0.6.11'
 
-export { Proto, parse, toDescriptor, preflight, MAX_NESTING_DEPTH, VERSION }
-export type { ProtoVersion }
+export {
+  Proto, parse, toDescriptor, parseTree, toTree, make, preflight,
+  MAX_NESTING_DEPTH, VERSION,
+}
+export type { ProtoVersion, TreeNode, TreeValue }
 export * from './descriptor'
 export { translate } from './translate'
 export type { TranslationPart, TranslationParts } from './translate'

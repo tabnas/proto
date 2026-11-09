@@ -1,16 +1,16 @@
 /* Copyright (c) 2026 Richard Rodger and other contributors, MIT License */
 'use strict'
 
-// The render, run: a descriptor written as a .proto file by the render the
-// package carries (`translate().render`), through the `alchemy` command
-// (tabnas/alchemy-cli), which this package does not depend on, then read
-// back with this package's reader. Set TABNAS_ALCHEMY to the command's
-// path to run these tests; without it they skip.
+// The render, run: a source-ordered tree (`parseTree`'s, the schema
+// `proto-ast`) written as a .proto file by the render the package carries
+// (`translate().render`), through a command that runs alchemy programs
+// (`dmog run`, tabnas/dmog), which this package does not depend on, then
+// read back with this package's reader. Set TABNAS_ALCHEMY to the
+// command's path to run these tests; without it they skip.
 //
-// The contract is the round trip: the text reads back as the descriptor
-// it was written from. What no text a .proto file can hold carries is
-// refused with TARGET_VALUE_UNREPRESENTABLE, never written as a file the
-// reader refuses.
+// The contract is the round trip: the text reads back as the tree it was
+// written from. A tree that is not the schema's is refused with
+// TARGET_VALUE_UNREPRESENTABLE, naming what was met.
 
 import * as assert from 'node:assert/strict'
 import { mkdtempSync, rmSync, writeFileSync } from 'node:fs'
@@ -19,7 +19,7 @@ import * as path from 'node:path'
 import { spawn } from 'node:child_process'
 import { after, test } from 'node:test'
 
-const { parse, translate } = require('..')
+const { parseTree, translate } = require('..')
 
 const ALCHEMY = process.env.TABNAS_ALCHEMY
 const skip = ALCHEMY ? false : 'TABNAS_ALCHEMY does not name the alchemy command'
@@ -126,14 +126,14 @@ function render(what: string, tree: unknown): Promise<Out> {
   })
 }
 
-// A file read, written and read again: the same descriptor, member for
-// member, and where `text` is given, that text.
+// A file read, written and read again: the same tree, member for member,
+// and where `text` is given, that text.
 async function roundTrip(src: string, text?: string) {
-  const tree = parse(src)
+  const tree = parseTree(src)
   const out = await render(`the round trip of ${brief(src)}`, tree)
   assert.equal(typeof out.text, 'string', JSON.stringify(out))
   if (undefined !== text) assert.equal(out.text, text)
-  assert.equal(JSON.stringify(parse(out.text as string)), JSON.stringify(tree))
+  assert.equal(JSON.stringify(parseTree(out.text as string)), JSON.stringify(tree))
 }
 
 async function refuses(what: string, tree: unknown, message: RegExp) {
@@ -142,75 +142,58 @@ async function refuses(what: string, tree: unknown, message: RegExp) {
   assert.match(out.message as string, message)
 }
 
-test('the render writes a file that reads back as its descriptor', { skip }, async () => {
+test('the render writes a file that reads back as its tree', { skip }, async () => {
   await roundTrip('syntax = "proto2";\noption a = "x";\nmessage M {\n  optional string s = 1 [default = "y"];\n}\n',
     'syntax = "proto2";\noption a = "x";\nmessage M {\n  optional string s = 1 [default = "y"];\n}\n')
+  await roundTrip('', '')
 })
 
-// A backtick string is kept with its backticks, as written, and the lexer
-// reads one across lines; no quotes hold a line break, so one holding a
-// line break is written as itself. As an aggregate, an option's had read
-// back as an error, and quoted, a default's, an import's and a json_name's.
-test('the render writes a backtick string holding a line break as itself', { skip }, async () => {
+// Every declaration, in its place: the file's in source order, each block
+// two spaces deeper, an aggregate on one line.
+test('the render writes every declaration where the file wrote it', { skip }, async () => {
+  await roundTrip(
+    'edition = "2024";\npackage p;\n' +
+    'import public "a.proto";\nimport option "b.proto";\n' +
+    'option (o) = { a: 1 b: "x" "y", c { d: -inf } };\n' +
+    'export message M {\n  optional int32 f = 1 [default = -1, (o).p = { q: true }];\n' +
+    '  map<string, .x.Y> m = 2;\n  group G = 3 { required bytes b = 1; }\n' +
+    '  oneof u { option (v) = 1; .a.B w = 4; }\n  extensions 100 to 199, 300 [(e) = 1];\n' +
+    '  reserved 5, 6 to max;\n  reserved x, y;\n  local enum E { option allow_alias = true; A = 0; B = -0x1 [(z) = "w"]; reserved -3 to -2; }\n' +
+    '  extend Ext { repeated string s = 101; }\n}\n' +
+    'service S { rpc A (M) returns (M); rpc B (stream M) returns (stream .M) { option deprecated = true; } }\n' +
+    'extend google.protobuf.FileOptions { optional int32 f = 50000; }\n',
+    'edition = "2024";\npackage p;\nimport public "a.proto";\nimport option "b.proto";\n' +
+    'option (o) = { a: 1 b: "x""y" c { d: -inf } };\n' +
+    'export message M {\n  optional int32 f = 1 [default = -1, (o).p = { q: true }];\n' +
+    '  map<string, .x.Y> m = 2;\n  group G = 3 {\n    required bytes b = 1;\n  }\n' +
+    '  oneof u {\n    option (v) = 1;\n    .a.B w = 4;\n  }\n  extensions 100 to 199, 300 [(e) = 1];\n' +
+    '  reserved 5, 6 to max;\n  reserved x, y;\n' +
+    '  local enum E {\n    option allow_alias = true;\n    A = 0;\n    B = -0x1 [(z) = "w"];\n    reserved -3 to -2;\n  }\n' +
+    '  extend Ext {\n    repeated string s = 101;\n  }\n}\n' +
+    'service S {\n  rpc A (M) returns (M);\n  rpc B (stream M) returns (stream .M) {\n    option deprecated = true;\n  }\n}\n' +
+    'extend google.protobuf.FileOptions {\n  optional int32 f = 50000;\n}\n')
+})
+
+// A scalar is the text the source spells, so a backtick string holding a
+// line break is written as itself, and both quotes as written.
+test('the render writes every scalar as the source spelled it', { skip }, async () => {
   await roundTrip('syntax = "proto2";\noption a = `x\ny`;\n', 'syntax = "proto2";\noption a = `x\ny`;\n')
-  await roundTrip('syntax = "proto2";\nimport `x\ny`;\n')
-  await roundTrip('syntax = "proto2";\nmessage M {\n  optional string s = 1 [default = `x\ny`, json_name = `j\nk`, (o) = `p\rq`];\n}\n')
-  await roundTrip('syntax = "proto2";\nenum E {\n  A = 0 [(o) = `x\ny`];\n}\n')
-  // test/spec/nesting.tsv: braces in a backtick string, across lines
-  await roundTrip('syntax = "proto2";\noption a = `{{{\n}`;\n')
-  // one with no line break is written quoted, which reads back the same
-  await roundTrip('syntax = "proto2";\noption a = `x`;\n', 'syntax = "proto2";\noption a = "`x`";\n')
-  // a backtick escaped inside one, and a backslash escaped before its end
-  await roundTrip('syntax = "proto2";\noption a = `a\\`b\nc`;\n', 'syntax = "proto2";\noption a = `a\\`b\nc`;\n')
-  await roundTrip('syntax = "proto2";\noption a = `x\\\\\ny\\\\`;\n', 'syntax = "proto2";\noption a = `x\\\\\ny\\\\`;\n')
-})
-
-// An option's value holding both quotes, from a literal, escapes the
-// quotes it is between, so it is written between them; as an aggregate it
-// had read back as an error. An escaped backslash escapes no quote after
-// it, which had been taken for an escaped quote and written between the
-// quotes it does not escape. An aggregate's text, its quotes unescaped,
-// stays an aggregate.
-test('the render writes a text holding both quotes between the quotes it escapes', { skip }, async () => {
-  await roundTrip('syntax = "proto2";\noption a = "a\\"b\'c";\n', 'syntax = "proto2";\noption a = "a\\"b\'c";\n')
   await roundTrip('syntax = "proto2";\noption a = \'a"b\\\'c\';\n', 'syntax = "proto2";\noption a = \'a"b\\\'c\';\n')
-  await roundTrip('syntax = "proto2";\noption a = \'p\\\\"q\\\'r\';\n', 'syntax = "proto2";\noption a = \'p\\\\"q\\\'r\';\n')
-  await roundTrip('syntax = "proto2";\noption a = "p\\\\\'q\\"r";\n', 'syntax = "proto2";\noption a = "p\\\\\'q\\"r";\n')
-  await roundTrip('syntax = "proto2";\nmessage M {\n  optional string s = 1 [default = \'a"b\\\'c\'];\n}\n')
-  await roundTrip('syntax = "proto2";\noption a = { a: "x"\n c: \'y\' };\n')
+  await roundTrip('message message { message message = 1; optional option option = 2; }\n')
 })
 
-// The reader takes a reserved name from a quoted literal or an
-// identifier, and reads the words of a backtick string as names of their
-// own, so a reserved name is written between quotes, those it escapes
-// where it holds both, and one that no quotes hold is refused.
-test('the render writes a reserved name between quotes that hold it', { skip }, async () => {
-  await roundTrip('syntax = "proto2";\nmessage M {\n  reserved \'a"b\\\'c\', "d\\"e";\n}\n',
-    'syntax = "proto2";\nmessage M {\n  reserved \'a"b\\\'c\', \'d\\"e\';\n}\n')
-  const tree = parse('syntax = "proto2";\nmessage M {\n  reserved "a";\n}\n')
-  for (const name of ['`x\ny`', 'x"y\'z', 'x\\']) {
-    const copy = JSON.parse(JSON.stringify(tree))
-    copy.messageType[0].reservedName = [name]
-    await refuses(`the reserved name ${brief(JSON.stringify(name))}`, copy, /a reserved name holds what no quotes hold/)
-  }
-})
-
-// No literal holds a control character, a backtick string only a line
-// break, and an aggregate only the tab and the line breaks between its
-// tokens; no quotes hold a text with both quotes unescaped, or one ending
-// in a backslash that would escape the closing quote. A tree a program
-// built with such a string is refused, where it had been written as a
-// file the reader refuses or reads as another.
-test('the render refuses a string that nothing holds where it goes', { skip }, async () => {
-  const tree = parse('syntax = "proto2";\noption a = "x";\nmessage M {\n  optional string s = 1 [default = "y"];\n}\n')
-  await refuses('an option holding U+0001', { ...tree, options: { a: 'x\u0001y' } },
-    /an option's value holds a control character that no literal, backtick string or aggregate holds/)
-  for (const v of ['x\ty', 'x\ny', 'x"y\'z', 'x\\', '`x\ty`', '`x\ny\\`']) {
-    const copy = JSON.parse(JSON.stringify(tree))
-    copy.messageType[0].field[0].defaultValue = v
-    await refuses(`the default ${brief(JSON.stringify(v))}`, copy, /a string holds what no literal or backtick string holds/)
-  }
-  const named = JSON.parse(JSON.stringify(tree))
-  named.messageType[0].field[0].jsonName = 'x"y\'z'
-  await refuses('a json_name holding both quotes unescaped', named, /a string holds what no literal or backtick string holds/)
+// A tree the reader could not have built is refused, naming what was met.
+test('the render refuses a tree that is not the schema\'s', { skip }, async () => {
+  const file = (body: unknown[]) => ({ type: 'file', body })
+  await refuses('a root that is no file', { type: 'message', name: 'M', body: [] }, /the root's type is not file/)
+  await refuses('a field at the top', file([{ type: 'field', fieldType: 'int32', name: 'f', number: '1' }]),
+    /a file's block holds no field/)
+  await refuses('a member out of its place',
+    file([{ type: 'message', name: 'M', body: [{ type: 'field', name: 'f', fieldType: 'int32', number: '1' }] }]),
+    /a field's fieldType comes after what it precedes/)
+  await refuses('a field with no number',
+    file([{ type: 'message', name: 'M', body: [{ type: 'field', fieldType: 'int32', name: 'f' }] }]),
+    /a field with no number/)
+  await refuses('a name that is no text', file([{ type: 'package', name: 1 }]), /a package's name is text/)
+  await refuses('a member no node has', file([{ type: 'package', name: 'p', path: 'x' }]), /a package has no member path/)
 })

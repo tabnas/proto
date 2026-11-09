@@ -1,0 +1,23 @@
+input	expected
+# Each statement is known by the alternative its dispatch rule pushes, which
+# proto-grammar/*.abnf's alternative order fixes; alchemy/transduce.alc reads
+# the passes by these names, so a grammar that renumbers them fails here.
+syntax = "proto3";	["syntaxOrEdition$alt0"]
+edition = "2023";	["syntaxOrEdition$alt1"]
+import "a";	["topLevelDef$alt0"]
+import option "a";	["topLevelDef$alt1"]
+package a;	["topLevelDef$alt2"]
+option a = 1;	["topLevelDef$alt3"]
+option a = { b: 1 };	["topLevelDef$alt3","constant$alt5","messageValueEntry"]
+message M {}	["topLevelDef$alt4"]
+enum E {}	["topLevelDef$alt5"]
+service S {}	["topLevelDef$alt6"]
+extend E {}	["topLevelDef$alt7"]
+;	["topLevelDef$alt8"]
+export message M {}	["topLevelDef$alt9"]
+local enum E {}	["topLevelDef$alt10"]
+message M { enum E {} message N {} option a = 1; oneof o {} map<a, b> m = 1; extend E {} extensions 1; reserved 1; ; export message P {} local enum F {} group G = 1 {} int32 f = 2 [a = 1]; }	["topLevelDef$alt4","messageElement$alt0","messageElement$alt1","messageElement$alt2","messageElement$alt3","messageElement$alt4","messageElement$alt5","messageElement$alt6","messageElement$alt7","messageElement$alt8","messageElement$alt9","messageElement$alt10","messageElement$alt11","messageElement$alt12","fieldOption"]
+enum E { option a = 1; reserved 1; ; A = 0; }	["topLevelDef$alt5","enumElement$alt0","enumElement$alt1","enumElement$alt2","enumElement$alt3"]
+message M { oneof o { option a = 1; ; group G = 1 {} int32 f = 2; } }	["topLevelDef$alt4","messageElement$alt3","oneofElement$alt0","oneofElement$alt1","oneofElement$alt2","oneofElement$alt3"]
+service S { option a = 1; ; rpc R (M) returns (M) { option a = 1; } }	["topLevelDef$alt6","serviceElement$alt0","serviceElement$alt1","serviceElement$alt2","optionStmt"]
+extend E { optional int32 f = 1; }	["topLevelDef$alt7","field"]

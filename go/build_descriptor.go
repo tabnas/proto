@@ -413,6 +413,25 @@ func typeNodeOf(n map[string]any) map[string]any {
 	return child(n, "fullIdent")
 }
 
+// typeTextOf is the field type's text. Where the type surfaces as a bare
+// fullIdent, the optional leading dot of messageType was inlined with it,
+// into the text ahead of the node, and a fully qualified type keeps it
+// there: `oneof o { .a.B t = 5; }` names `.a.B`, not `a.B`.
+func typeTextOf(n map[string]any) string {
+	t := typeNodeOf(n)
+	if t == nil {
+		return ""
+	}
+	if nrule(t) != "fullIdent" {
+		return nsrc(t)
+	}
+	g := gapsBefore(n, "fullIdent")
+	if len(g) > 0 && strings.HasSuffix(g[0], ".") {
+		return "." + nsrc(t)
+	}
+	return nsrc(t)
+}
+
 // applyFieldOptions attaches an option list to a field, splitting out the
 // json_name / default pseudo-options, and returns the record of its option
 // order (order.go).
@@ -433,12 +452,11 @@ func applyFieldOptions(f *FieldDescriptorProto, opts map[string]any) *order {
 
 func buildField(n map[string]any, version ProtoVersion) (FieldDescriptorProto, *order) {
 	label := child(n, "label")
-	typeNode := typeNodeOf(n)
 	name := child(n, "ident")
 	number := child(n, "fieldNumber")
 
 	lbl, p3 := fieldLabel(label, version)
-	typ, typeName := fieldTypeName(srcOr(typeNode))
+	typ, typeName := fieldTypeName(typeTextOf(n))
 	f := FieldDescriptorProto{
 		Name:           srcOr(name),
 		Number:         numOr(number),

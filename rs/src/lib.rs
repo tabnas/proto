@@ -48,6 +48,7 @@
 //! repository `AGENTS.md`.
 
 mod aggregate;
+mod ast;
 mod build_descriptor;
 mod descriptor;
 mod detect_version;
@@ -464,6 +465,59 @@ pub fn parse_value_with(
     to_descriptor_value(&cst, options)
 }
 
+/// Turn a parsed proto CST into the source-ordered tree: the file's
+/// declarations in the order the file writes them, the schema `proto-ast`
+/// (alchemy's `docs/streaming-plan.md`, section 13.1). Every node is an
+/// object whose `type` comes first and whose other members follow in the
+/// order the statement spells them, and every scalar is the text the
+/// source spells. It is the tree the translation parts read and write,
+/// and the one the transducer part (`alchemy/transduce.alc`) streams from
+/// the parse's rule passes.
+///
+/// As for [`to_descriptor`], a caller who parsed the source itself runs
+/// [`preflight`] on that source first; [`parse_tree_with`] does both, and
+/// the walk refuses a CST nesting past [`MAX_NESTING_DEPTH`].
+///
+/// ```
+/// fn main() -> Result<(), Box<dyn std::error::Error>> {
+///     let parser = tabnas_proto::make();
+///     let source = "message M { int32 a = 1; }";
+///     tabnas_proto::preflight(source)?;
+///     let cst = parser.parse(source)?;
+///     assert_eq!(tabnas_proto::to_tree(&cst)?, tabnas_proto::parse_tree(source)?);
+///     Ok(())
+/// }
+/// ```
+pub fn to_tree(cst: &Value) -> Result<Value, ProtoError> {
+    ast::build_tree(cst)
+}
+
+/// Parse a `.proto` source string to its source-ordered tree on a parser
+/// the caller holds: [`preflight`], then the engine, then [`to_tree`].
+pub fn parse_tree_with(parser: &Tabnas, src: &str) -> Result<Value, ProtoError> {
+    preflight(src)?;
+    let cst = parser.parse(src)?;
+    to_tree(&cst)
+}
+
+/// Parse a `.proto` source string to its source-ordered tree, the schema
+/// `proto-ast`: the file's declarations in source order.
+///
+/// ```
+/// fn main() -> Result<(), Box<dyn std::error::Error>> {
+///     let tree = tabnas_proto::parse_tree("syntax = \"proto3\";\nmessage M { int32 a = 1; }")?;
+///     let tabnas::Value::Object(file) = &tree else { panic!("an object") };
+///     let tabnas::Value::Array(body) = &file["body"] else { panic!("a list") };
+///     let tabnas::Value::Object(syntax) = &body[0] else { panic!("an object") };
+///     // A scalar is the source's text: a string literal keeps its quotes.
+///     assert_eq!(syntax["value"], tabnas::Value::String("\"proto3\"".into()));
+///     Ok(())
+/// }
+/// ```
+pub fn parse_tree(src: &str) -> Result<Value, ProtoError> {
+    parse_tree_with(shared(), src)
+}
+
 /// One optional alchemy translation source and its explicit entry point.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub struct TranslationPart {
@@ -484,6 +538,10 @@ pub struct TranslationParts {
     pub embed: Option<TranslationPart>,
     /// An optional render from the write shape to text.
     pub render: Option<TranslationPart>,
+    /// An optional transducer: the format's JSON events from its parser's
+    /// rule passes, which a host that reads parser events reads a document
+    /// through.
+    pub transduce: Option<TranslationPart>,
 }
 
 const TRANSLATION: TranslationParts = TranslationParts {
@@ -494,18 +552,25 @@ const TRANSLATION: TranslationParts = TranslationParts {
         entry: "proto-render",
         source: Some(include_str!("../translate/render.alc")),
     }),
+    transduce: Some(TranslationPart {
+        entry: "proto-transduce",
+        source: Some(include_str!("../translate/transduce.alc")),
+    }),
 };
 
-/// Return the translation parts of `.proto` files: the manifest, and the
-/// render that writes a FileDescriptorProto, the reader's tree, back as a
-/// `.proto` file. There is no lift, and no embed: the tree is the
-/// descriptor's own shape, the schema `proto-descriptor`, which a host
+/// Return the translation parts of `.proto` files: the manifest, the
+/// render that writes the source-ordered tree ([`parse_tree`]'s, the
+/// schema `proto-ast`) back as a `.proto` file, and the transducer part,
+/// `proto-transduce`, that makes the same tree's JSON events from the
+/// grammar's rule passes (the manifest's `translate.transduce`). There is
+/// no lift, and no embed: the tree is the format's own shape, which a host
 /// renders only from a source of the same schema or from a program that
-/// builds a descriptor.
+/// builds the tree.
 ///
 /// ```
 /// let parts = tabnas_proto::translate().expect("proto carries translation parts");
 /// assert_eq!(parts.render.map(|part| part.entry), Some("proto-render"));
+/// assert_eq!(parts.transduce.map(|part| part.entry), Some("proto-transduce"));
 /// assert_eq!(parts.embed, None);
 /// ```
 #[must_use]
@@ -516,14 +581,14 @@ pub const fn translate() -> Option<TranslationParts> {
 /// The plugin's manifest, `tabnas.plugin.json`, as the repository carries
 /// it. Its `translate` object is what a host that translates reads: the
 /// shape the format is read as and written from (`tree`), the schema of
-/// that tree (`proto-descriptor`), the root the render needs (`object`),
-/// the file that holds the render, and the sentences that say what a
-/// written file does not keep. The crate embeds its own copy,
+/// that tree (`proto-ast`), the root the render needs (`object`), the
+/// files that hold the render and the transducer part, and the sentences
+/// that say what a written file does not keep. The crate embeds its own copy,
 /// `translate/manifest.json`, since a packaged crate holds nothing outside
 /// `rs/`; `tests/translate_test.rs` holds the copy to the file.
 ///
 /// ```
-/// assert!(tabnas_proto::manifest_text().contains("\"proto-descriptor\""));
+/// assert!(tabnas_proto::manifest_text().contains("\"proto-ast\""));
 /// ```
 pub fn manifest_text() -> &'static str {
     TRANSLATION.manifest
@@ -531,8 +596,8 @@ pub fn manifest_text() -> &'static str {
 
 /// The render, `alchemy/render.alc`, the file the manifest's
 /// `translate.render` names: a library of alchemy definitions, with no
-/// `export`, whose entry point `proto-render` writes a FileDescriptorProto's
-/// events as one `.proto` file that reads back as the same descriptor. A
+/// `export`, whose entry point `proto-render` writes the source-ordered
+/// tree's events as one `.proto` file that reads back as the same tree. A
 /// host links it with its own program. The crate embeds its own copy,
 /// `translate/render.alc`, held to the file as the manifest's is.
 ///
@@ -541,6 +606,23 @@ pub fn manifest_text() -> &'static str {
 /// ```
 pub fn render_text() -> &'static str {
     match TRANSLATION.render {
+        Some(part) => part.source.unwrap_or_default(),
+        None => "",
+    }
+}
+
+/// The transducer part, `alchemy/transduce.alc`, the file the manifest's
+/// `translate.transduce` names: a library of alchemy definitions, with no
+/// `export`, whose entry point `proto-transduce` makes the source-ordered
+/// tree's JSON events (the ones [`parse_tree`]'s tree walks to) from the
+/// rule passes of a parser [`make`] builds. The crate embeds its own copy,
+/// `translate/transduce.alc`, held to the file as the render's is.
+///
+/// ```
+/// assert!(tabnas_proto::transduce_text().contains("def proto-transduce [input]"));
+/// ```
+pub fn transduce_text() -> &'static str {
+    match TRANSLATION.transduce {
         Some(part) => part.source.unwrap_or_default(),
         None => "",
     }
