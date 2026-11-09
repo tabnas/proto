@@ -21,7 +21,7 @@ import (
 // VERSION is this module's version. It MUST equal ts/package.json
 // "version": the release orchestrator rewrites both, and
 // TestVersionMatchesPackageJSON fails the build if they drift.
-const VERSION = "0.6.11"
+const VERSION = "0.6.12"
 
 //go:generate go run grammar_gen.go
 
