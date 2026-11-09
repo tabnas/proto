@@ -163,3 +163,18 @@ this repo; do not reintroduce them.
 - **No silent skip on a missing corpus.** Everything the conformance runners
   read is committed under `protobuf-suite/`, so an absent file is a failure,
   not a reason to pass quietly.
+
+## `tree/` and `passes/`
+
+`tree/*.tsv` holds the source-ordered tree (`parseTree`, `ParseTree`,
+`parse_tree`): `input` is a `.proto` source and `expected` the tree's JSON
+text, compared as text, so member order is part of the row; an
+`ERROR:<substring>` cell is a fragment of the message, as in `spec/`.
+`passes/*.tsv` holds the names of the rules the transducer part
+(`alchemy/transduce.alc`) knows a statement by, in the order their open
+passes come: a grammar edit that renumbers a dispatch rule's
+alternatives fails it. Generate a cell from the TypeScript build. The
+runners are `ts/test/tree.test.ts` and `ts/test/passes.test.ts`,
+`go/tree_test.go` and `go/passes_test.go`, and `rs/tests/tree_test.rs` and
+`rs/tests/passes_test.rs`, each through the support runner over its
+directory.

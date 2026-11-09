@@ -61,8 +61,8 @@ func TestParseValueIsTheCanonicalJSON(t *testing.T) {
 	}
 	// Ratcheted at what is on disk today, so a loader that finds fewer rows
 	// cannot pass by measuring less.
-	if checked != 235 {
-		t.Errorf("test/spec holds %d descriptor rows, not the 235 this test was measured against", checked)
+	if checked != 236 {
+		t.Errorf("test/spec holds %d descriptor rows, not the 236 this test was measured against", checked)
 	}
 }
 

@@ -193,7 +193,7 @@ fn constant_value(node: &Value) -> OptionValue {
 /// everything BEFORE the trailing `"=" constant`. Anchoring at the end
 /// matters: `option (file_opt1) = 1;` would otherwise find the value `1`
 /// inside the name `file_opt1`.
-fn option_name_of<'a>(stmt: &'a Value, value: Option<&Value>) -> &'a str {
+pub(crate) fn option_name_of<'a>(stmt: &'a Value, value: Option<&Value>) -> &'a str {
     if let Some(named) = child(stmt, "optionName") {
         return nsrc(named);
     }
@@ -350,6 +350,27 @@ fn type_node_of(node: &Value) -> Option<&Value> {
         .or_else(|| child(node, "fullIdent"))
 }
 
+/// The field type's text. Where the type surfaces as a bare `fullIdent`,
+/// the optional leading dot of `messageType` was inlined with it, into
+/// the text ahead of the node, and a fully qualified type keeps it there:
+/// `oneof o { .a.B t = 5; }` names `.a.B`, not `a.B`.
+pub(crate) fn type_text_of(node: &Value) -> String {
+    let Some(found) = type_node_of(node) else {
+        return String::new();
+    };
+    if "fullIdent" != nrule(found) {
+        return nsrc(found).to_string();
+    }
+    let dotted = gaps_before(node, "fullIdent")
+        .first()
+        .is_some_and(|gap| gap.ends_with('.'));
+    if dotted {
+        format!(".{}", nsrc(found))
+    } else {
+        nsrc(found).to_string()
+    }
+}
+
 fn apply_field_options(field: &mut FieldDescriptorProto, opts: Option<&Value>) {
     let pseudo = read_field_options(opts);
     if let Some(json_name) = pseudo.json_name {
@@ -365,7 +386,7 @@ fn apply_field_options(field: &mut FieldDescriptorProto, opts: Option<&Value>) {
 
 fn build_field(node: &Value, version: ProtoVersion) -> FieldDescriptorProto {
     let (label, proto3_optional) = field_label(child(node, "label"), version);
-    let (field_type, type_name) = field_type_name(src_or(type_node_of(node)));
+    let (field_type, type_name) = field_type_name(&type_text_of(node));
     let mut field = FieldDescriptorProto {
         name: src_or(child(node, "ident")).to_string(),
         number: number_of(child(node, "fieldNumber")),
@@ -425,7 +446,7 @@ fn build_group(
 /// A group is the one construct with BOTH a field number and a message
 /// body; `message` has a body but no number, `map` and a plain field a
 /// number but no body.
-fn is_group(node: &Value) -> bool {
+pub(crate) fn is_group(node: &Value) -> bool {
     child(node, "fieldNumber").is_some() && child(node, "messageBody").is_some()
 }
 
@@ -858,7 +879,7 @@ fn is_message_set(message: &DescriptorProto) -> bool {
 
 /// An `option` statement, as opposed to an `optional`-labelled field,
 /// whose `kw` is empty because the `label` node starts `src`.
-fn is_option_stmt(element: &Value) -> bool {
+pub(crate) fn is_option_stmt(element: &Value) -> bool {
     kw(element).starts_with("option")
 }
 
@@ -1099,7 +1120,7 @@ fn build_service(node: &Value) -> ServiceDescriptorProto {
 /// text. No identifier or type holds a parenthesis, so for an rpc these
 /// are its input and its output, whatever the names in them are spelled.
 /// Mirrors the TypeScript `parenthesised`.
-fn parenthesised(src: &str) -> Vec<&str> {
+pub(crate) fn parenthesised(src: &str) -> Vec<&str> {
     let mut out = Vec::new();
     let mut at = 0;
     while out.len() < 2 {

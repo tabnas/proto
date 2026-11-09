@@ -136,9 +136,8 @@ func parseCST(src string) (any, error) {
 	if err := Preflight(src); err != nil {
 		return nil, err
 	}
-	rh := 8192
-	j := tabnas.Make(tabnas.Options{Rewind: &tabnas.RewindOptions{History: &rh}})
-	if err := Proto(j); err != nil {
+	j, err := Make()
+	if err != nil {
 		return nil, err
 	}
 	return j.Parse(src)

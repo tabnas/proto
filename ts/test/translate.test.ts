@@ -35,11 +35,39 @@ test('translation parts carry the embed the manifest names, and none where it na
   }
 })
 
-// The tree is the descriptor's own shape, so the manifest names it.
-test('the manifest names the descriptor schema and an object root', () => {
+// The transducer part the manifest names is the one the package carries,
+// under the entry a host calls.
+test('translation parts carry the transducer the manifest names', () => {
+  const parts = translate()
+  const spec = JSON.parse(readFileSync(path.join(root, 'tabnas.plugin.json'), 'utf8')).translate
+  assert.equal(spec.transduce, 'alchemy/transduce.alc')
+  assert.equal(parts.transduce?.entry, 'proto-transduce')
+  assert.equal(parts.transduce?.source, readFileSync(path.join(root, spec.transduce), 'utf8'))
+})
+
+// The tree is the file's declarations in source order, the format's own
+// shape, so the manifest names it; a document streams through the part,
+// so the manifest says nothing of reading it whole.
+test('the manifest names the source-ordered schema and an object root', () => {
   const spec = JSON.parse(translate().manifest).translate
   assert.equal(spec.reads, 'tree')
   assert.equal(spec.writes, 'tree')
   assert.equal(spec.root, 'object')
-  assert.equal(spec.schema, 'proto-descriptor')
+  assert.equal(spec.schema, 'proto-ast')
+  assert.equal(spec.whole, undefined)
+  for (const line of spec.loss) {
+    assert.match(line, /^[A-Z].*\.$/s, `${JSON.stringify(line)} is not a sentence`)
+  }
+})
+
+// A host links the parts with its own program and other formats' parts,
+// so every definition is named for proto and neither file defines an
+// export of its own.
+test('the render and the transducer are libraries named for proto', () => {
+  const parts = translate()
+  for (const [entry, source] of [['proto-render', parts.render.source], ['proto-transduce', parts.transduce.source]]) {
+    const names = [...source.matchAll(/^def ([^\s\[]+)/gm)].map((m) => m[1])
+    assert.ok(names.includes(entry), entry)
+    for (const name of names) assert.ok(name.startsWith('proto-'), `${name} is not named for proto`)
+  }
 })

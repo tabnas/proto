@@ -109,8 +109,8 @@ fn every_descriptor_row_is_the_canonical_json_byte_for_byte() {
     // Ratcheted at what is on disk today, so a loader that finds fewer
     // rows cannot pass by measuring less.
     assert_eq!(
-        checked, 235,
-        "test/spec holds {checked} descriptor rows, not the 235 this suite was measured against"
+        checked, 236,
+        "test/spec holds {checked} descriptor rows, not the 236 this suite was measured against"
     );
 }
 

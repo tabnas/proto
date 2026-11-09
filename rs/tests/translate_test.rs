@@ -83,26 +83,48 @@ fn the_embed_the_manifest_names_is_the_one_the_crate_embeds() {
 }
 
 #[test]
-fn the_structural_interface_names_the_render_entry() {
+fn the_transducer_the_manifest_names_is_the_one_the_crate_embeds() {
+    let translate = translate();
+    let path = translate["transduce"]
+        .as_str()
+        .expect("translate.transduce names a file");
+    let on_disk = fs::read_to_string(common::repo_dir().join(path))
+        .unwrap_or_else(|e| panic!("translate.transduce names {path}, which cannot be read: {e}"));
+    assert_eq!(
+        on_disk,
+        tabnas_proto::transduce_text(),
+        "translate.transduce names {path}, and rs/translate/transduce.alc, which \
+         transduce_text() embeds, is another text: run npm run embed in ts"
+    );
+}
+
+#[test]
+fn the_structural_interface_names_the_render_and_transducer_entries() {
     let parts = tabnas_proto::translate().expect("proto carries translation parts");
     assert_eq!(parts.manifest, tabnas_proto::manifest_text());
     assert_eq!(parts.lift, None);
     let render = parts.render.expect("proto carries a render");
     assert_eq!(render.entry, "proto-render");
     assert_eq!(render.source, Some(tabnas_proto::render_text()));
+    let transduce = parts.transduce.expect("proto carries a transducer");
+    assert_eq!(transduce.entry, "proto-transduce");
+    assert_eq!(transduce.source, Some(tabnas_proto::transduce_text()));
 }
 
-/// A `.proto` file is read as a tree and written from one, the
-/// descriptor's own shape, which the manifest names as its schema; the
-/// render needs the descriptor, an object, at the root.
+/// A `.proto` file is read as a tree and written from one, the file's
+/// declarations in source order, which the manifest names as its schema;
+/// the render needs the file, an object, at the root, and a document
+/// streams through the part, so the manifest says nothing of reading it
+/// whole.
 #[test]
-fn proto_reads_and_writes_its_descriptor_with_no_lift() {
+fn proto_reads_and_writes_its_source_ordered_tree_with_no_lift() {
     let translate = translate();
     assert_eq!(translate["reads"], "tree");
     assert_eq!(translate["writes"], "tree");
     assert_eq!(translate["root"], "object");
-    assert_eq!(translate["schema"], "proto-descriptor");
+    assert_eq!(translate["schema"], "proto-ast");
     assert_eq!(translate.get("lift"), None);
+    assert_eq!(translate.get("whole"), None);
 }
 
 /// The host prints the loss lines verbatim, so each is a sentence.
@@ -122,18 +144,24 @@ fn the_loss_is_a_list_of_sentences() {
     }
 }
 
-/// A host links the render with its own program and other formats'
-/// parts, so every definition is named for proto, the entry point is
-/// `proto-render`, and the file defines no `export` of its own.
+/// A host links the render and the transducer with its own program and
+/// other formats' parts, so every definition is named for proto, the entry
+/// points are `proto-render` and `proto-transduce`, and neither file
+/// defines an `export` of its own.
 #[test]
-fn the_render_is_a_library_named_for_proto() {
-    let names: Vec<&str> = tabnas_proto::render_text()
-        .lines()
-        .filter_map(|line| line.strip_prefix("def "))
-        .filter_map(|rest| rest.split_whitespace().next())
-        .collect();
-    assert!(names.contains(&"proto-render"), "{names:?}");
-    for name in &names {
-        assert!(name.starts_with("proto-"), "{name} is not named for proto");
+fn the_parts_are_libraries_named_for_proto() {
+    for (entry, text) in [
+        ("proto-render", tabnas_proto::render_text()),
+        ("proto-transduce", tabnas_proto::transduce_text()),
+    ] {
+        let names: Vec<&str> = text
+            .lines()
+            .filter_map(|line| line.strip_prefix("def "))
+            .filter_map(|rest| rest.split_whitespace().next())
+            .collect();
+        assert!(names.contains(&entry), "{names:?}");
+        for name in &names {
+            assert!(name.starts_with("proto-"), "{name} is not named for proto");
+        }
     }
 }

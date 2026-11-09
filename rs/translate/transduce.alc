@@ -1,0 +1,519 @@
+; proto's transducer part: the source-ordered tree's JSON events from the
+; proto grammar's rule passes, for a host that reads parser events (dmog's
+; `translate` and `run --grammar proto`). Every event is the one the walk
+; of the tree `parseTree` builds gives (the schema `proto-ast`, alchemy's
+; docs/streaming-plan.md section 13.1): the file's declarations in source
+; order, each an object whose `type` comes first and whose other members
+; follow in the order the statement spells them, and every scalar the
+; text the source spells, its tokens run together. It is hand-written,
+; since the grammar is compiled from proto-grammar/*.abnf and builds a
+; `{rule, src, kids}` node per rule, which the passes do not show.
+;
+; The passes. The compiled grammar names a statement's alternative after
+; the rule that dispatches it, and the dispatch pushes it: `topLevelDef$alt4`
+; is a message, `messageElement$alt12` a field (`proto-transduce-statement`
+; has the table, which proto-grammar/*.abnf's alternative order fixes, and
+; each runtime's tests hold it to the keyword each alternative opens with).
+; A statement's object begins at its alternative's open pass and ends at
+; the close of the last rule its alternative is replaced with (`$step1`,
+; `$step2`, ...), so a statement is a chain of rules that one marker
+; spans: a close whose alternate replaces its rule hands its marker on to
+; the rule that replaces it, as an open replaced at once does. An extend's
+; field (`field`), an rpc block's option (`optionStmt`), an option in
+; brackets (`fieldOption`) and an aggregate's field (`messageValueEntry`)
+; are rules of their own, and so is each statement's value: a member is
+; the text of the rule that holds it (`ident` a name, `fieldNumber` a
+; number, `fieldType` a type, `optionName` an option's name, `constant` a
+; value, `strLit` a path), every token the passes between its open and its
+; close consumed, run together, as the grammar's node keeps its `src`.
+; What the grammar inlines into the rule that leads to it is read from the
+; tokens: an import's modifier, a message's or an enum's visibility, an
+; rpc's `stream`, a body's braces, an enum value's name and its signed
+; number, the name of an option in brackets (up to its `=`), the bounds of
+; a reserved or an extensions range, a reserved name, an aggregate field's
+; name and the string literals it runs together. An aggregate (a constant
+; whose alternative is `constant$alt5`) is its fields, an array.
+;
+; The state is [started marks frames text carry]: whether any pass came
+; (a source that makes none, the empty file, is an empty file at finish);
+; a marker per open rule whose close will come, innermost last (:none,
+; :text, :array, :statement, :file); a frame per open statement, [kind
+; phase], the phase saying what its next token is; the text being read,
+; [string mode] or missing, at most one at a time, whose mode says what
+; ends it (:rule, its rule's close; :token, a token its frame reads as an
+; end, or another member); and the marker a replaced rule hands on, or
+; missing. Nothing grows with the document's length, only with its
+; nesting and the text of one member, under max_metadata_bytes.
+
+; The kind of statement a rule begins, by its name, or missing.
+def proto-transduce-statement [name]
+  match (first-split "$alt" name)
+    case ["syntaxOrEdition" n]
+      match n
+        case "0" :syntax
+        case "1" :edition
+        case _ missing
+    case ["topLevelDef" n]
+      match n
+        case "0" :import
+        case "1" :import
+        case "2" :package
+        case "3" :option
+        case "4" :message
+        case "5" :enum
+        case "6" :service
+        case "7" :extend
+        case "8" :empty
+        case "9" :visible-message
+        case "10" :visible-enum
+        case _ missing
+    case ["messageElement" n]
+      match n
+        case "0" :enum
+        case "1" :message
+        case "2" :option
+        case "3" :oneof
+        case "4" :map
+        case "5" :extend
+        case "6" :extensions
+        case "7" :reserved
+        case "8" :empty
+        case "9" :visible-message
+        case "10" :visible-enum
+        case "11" :group
+        case "12" :field
+        case _ missing
+    case ["enumElement" n]
+      match n
+        case "0" :option
+        case "1" :reserved
+        case "2" :empty
+        case "3" :enum-value
+        case _ missing
+    case ["oneofElement" n]
+      match n
+        case "0" :option
+        case "1" :empty
+        case "2" :group
+        case "3" :oneof-field
+        case _ missing
+    case ["serviceElement" n]
+      match n
+        case "0" :option
+        case "1" :empty
+        case "2" :rpc
+        case _ missing
+    case ["field"] :field
+    case ["optionStmt"] :option
+    case ["fieldOption"] :field-option
+    case ["messageValueEntry"] :entry
+    case _ missing
+
+; The `type` a statement's object holds.
+def proto-transduce-type [kind]
+  match kind
+    case :visible-message "message"
+    case :visible-enum "enum"
+    case :oneof-field "field"
+    case :enum-value "enumValue"
+    case :syntax "syntax"
+    case :edition "edition"
+    case :import "import"
+    case :package "package"
+    case :option "option"
+    case :message "message"
+    case :enum "enum"
+    case :service "service"
+    case :extend "extend"
+    case :oneof "oneof"
+    case :map "map"
+    case :extensions "extensions"
+    case :reserved "reserved"
+    case :group "group"
+    case :field "field"
+    case :rpc "rpc"
+
+; Whether a statement of the kind holds a body in braces.
+def proto-transduce-has-body [kind]
+  match kind
+    case :message true
+    case :visible-message true
+    case :enum true
+    case :visible-enum true
+    case :service true
+    case :oneof true
+    case :extend true
+    case :group true
+    case :rpc true
+    case _ false
+
+; The member a rule's text is in a statement of the kind: a key, :type for
+; a map's or an rpc's type (the first or the second), :strings for the
+; first string literal of an aggregate field's run, :options for an
+; option list, or missing where the rule is no member of it.
+def proto-transduce-member [kind name]
+  match [kind name]
+    case [:syntax "strLit"] "value"
+    case [:edition "strLit"] "value"
+    case [:import "strLit"] "path"
+    case [:entry "strLit"] :strings
+    case [:package "fullIdent"] "name"
+    case [:oneof-field "fullIdent"] "fieldType"
+    case [:option "optionName"] "name"
+    case [:option "constant"] "value"
+    case [:field-option "constant"] "value"
+    case [:entry "constant"] "value"
+    case [:message "ident"] "name"
+    case [:visible-message "ident"] "name"
+    case [:enum "ident"] "name"
+    case [:visible-enum "ident"] "name"
+    case [:service "ident"] "name"
+    case [:oneof "ident"] "name"
+    case [:group "ident"] "name"
+    case [:field "ident"] "name"
+    case [:oneof-field "ident"] "name"
+    case [:map "ident"] "name"
+    case [:rpc "ident"] "name"
+    case [:group "fieldNumber"] "number"
+    case [:field "fieldNumber"] "number"
+    case [:oneof-field "fieldNumber"] "number"
+    case [:map "fieldNumber"] "number"
+    case [:field "label"] "label"
+    case [:group "label"] "label"
+    case [:field "fieldType"] "fieldType"
+    case [:map "fieldType"] :type
+    case [:extend "messageType"] "extendee"
+    case [:rpc "messageType"] :type
+    case [:field "fieldOptions"] :options
+    case [:oneof-field "fieldOptions"] :options
+    case [:map "fieldOptions"] :options
+    case [:extensions "fieldOptions"] :options
+    case [:enum-value "fieldOptions"] :options
+    case _ missing
+
+; The machine a step threads: [marks frames text carry outputs].
+def proto-transduce-emit [m more]
+  match m
+    case [marks frames text carry outputs] [marks frames text carry (push-all more outputs)]
+
+def proto-transduce-frame [m]
+  match m
+    case [marks frames text carry outputs]
+      match (count frames)
+        case 0 missing
+        case _ (top frames)
+
+; The innermost frame in a new phase.
+def proto-transduce-phase [m phase]
+  match m
+    case [marks frames text carry outputs]
+      match (top frames)
+        case [kind old] [marks (push [kind phase] (pop frames)) text carry outputs]
+
+def proto-transduce-set-text [m text]
+  match m
+    case [marks frames old carry outputs] [marks frames text carry outputs]
+
+; The text being read, with `more` written at its end.
+def proto-transduce-write [m more]
+  match m
+    case [marks frames [s mode] carry outputs] [marks frames [(string-join "" [s more]) mode] carry outputs]
+
+; The text ends: its scalar.
+def proto-transduce-end-text [m]
+  match m
+    case [marks frames [s mode] carry outputs] [marks frames missing carry (push (scalar s) outputs)]
+    case _ m
+
+; The innermost frame's pending text and the containers its phase holds
+; open, closed: a range's bound, its object and the ranges' array, or a
+; reserved name list's array.
+def proto-transduce-settle [m]
+  let [ended (match m (case [marks frames [s :token] carry outputs] (proto-transduce-end-text m)) (case _ m))]
+    match (proto-transduce-frame ended)
+      case [kind :from] (proto-transduce-phase (proto-transduce-emit ended [object-end array-end]) :done)
+      case [kind :to] (proto-transduce-phase (proto-transduce-emit ended [object-end array-end]) :done)
+      case [kind :next] (proto-transduce-phase (proto-transduce-emit ended [array-end]) :done)
+      case [kind :names] (proto-transduce-phase (proto-transduce-emit ended [array-end]) :done)
+      case _ ended
+
+; A statement begins: its frame, and the events that open its object.
+def proto-transduce-begin [m kind]
+  match m
+    case [marks frames text carry outputs]
+      match kind
+        case :empty [marks (push [kind :start] frames) text carry outputs]
+        case :field-option [marks (push [kind :name] frames) ["" :token] carry (push-all [object-start (key "name")] outputs)]
+        case :entry [marks (push [kind :entry-name] frames) text carry (push object-start outputs)]
+        case :visible-message [marks (push [kind :visibility] frames) text carry (push-all [object-start (key "type") (scalar "message")] outputs)]
+        case :visible-enum [marks (push [kind :visibility] frames) text carry (push-all [object-start (key "type") (scalar "enum")] outputs)]
+        case :rpc [marks (push [kind :in] frames) text carry (push-all [object-start (key "type") (scalar "rpc")] outputs)]
+        case :map [marks (push [kind :key] frames) text carry (push-all [object-start (key "type") (scalar "map")] outputs)]
+        case _ [marks (push [kind :start] frames) text carry (push-all [object-start (key "type") (scalar (proto-transduce-type kind))] outputs)]
+
+; A statement ends: its pending text and containers close, then its
+; object.
+def proto-transduce-finish-statement [m]
+  let [settled (proto-transduce-settle m)]
+    match settled
+      case [marks frames text carry outputs]
+        match (top frames)
+          case [:empty phase] [marks (pop frames) text carry outputs]
+          case _ [marks (pop frames) text carry (push object-end outputs)]
+
+; A token whose text begins the frame's text.
+def proto-transduce-begin-text [m src]
+  proto-transduce-set-text m [src :token]
+
+; A reserved or an extensions statement's list: a range's bounds or a name.
+def proto-transduce-list [m kind phase token]
+  let [src (get :src token)]
+    match phase
+      case :start (proto-transduce-phase m :list)
+      case :list
+        if (match [kind (get :name token) src] (case [:extensions n s] true) (case [k "#NR" s] true) (case [k n "-"] true) (case _ false))
+          proto-transduce-phase (proto-transduce-begin-text (proto-transduce-emit m [(key "ranges") array-start object-start (key "from")]) src) :from
+          proto-transduce-phase (proto-transduce-emit m [(key "names") array-start (scalar src)]) :names
+      case :next (proto-transduce-phase (proto-transduce-begin-text (proto-transduce-emit m [object-start (key "from")]) src) :from)
+      case :names
+        match src
+          case "," m
+          case ";" (proto-transduce-phase (proto-transduce-emit m [array-end]) :done)
+          case _ (proto-transduce-emit m [(scalar src)])
+      case _ m
+
+; A token the frame reads, no rule's text being open and the frame's own
+; text not ending at it.
+def proto-transduce-frame-token [m token]
+  let [src (get :src token)]
+    match (proto-transduce-frame m)
+      case missing m
+      case [kind phase]
+        match [(proto-transduce-has-body kind) phase src]
+          case [true :body "}"] (proto-transduce-phase (proto-transduce-emit m [array-end]) :done)
+          case [true :body s] m
+          case [true p "{"] (proto-transduce-phase (proto-transduce-emit (proto-transduce-settle m) [(key "body") array-start]) :body)
+          case _
+            match kind
+              case :import
+                match [phase src]
+                  case [:start s] (proto-transduce-phase m :keyword)
+                  case [:keyword ";"] m
+                  case [:keyword s] (proto-transduce-phase (proto-transduce-emit m [(key "modifier") (scalar s)]) :done)
+                  case _ m
+              case :visible-message
+                match phase
+                  case :visibility (proto-transduce-phase (proto-transduce-emit m [(key "visibility") (scalar src)]) :start)
+                  case _ m
+              case :visible-enum
+                match phase
+                  case :visibility (proto-transduce-phase (proto-transduce-emit m [(key "visibility") (scalar src)]) :start)
+                  case _ m
+              case :oneof-field
+                match [phase src]
+                  case [:start "."] (proto-transduce-phase m :dot)
+                  case _ m
+              case :rpc
+                match [phase src]
+                  case [:in "stream"] (proto-transduce-emit m [(key "inputStream") (scalar true)])
+                  case [:out "stream"] (proto-transduce-emit m [(key "outputStream") (scalar true)])
+                  case _ m
+              case :enum-value
+                match [phase src]
+                  case [:start s] (proto-transduce-phase (proto-transduce-emit m [(key "name") (scalar s)]) :named)
+                  case [:named "="] (proto-transduce-phase (proto-transduce-begin-text (proto-transduce-emit m [(key "number")]) "") :number)
+                  case _ m
+              case :entry
+                match phase
+                  case :entry-name (proto-transduce-phase (proto-transduce-emit m [(key "name") (scalar src)]) :colon)
+                  case _ m
+              case :reserved (proto-transduce-list m kind phase token)
+              case :extensions (proto-transduce-list m kind phase token)
+              case _ m
+
+; Whether a token ends the frame's own text: an option name's `=`, an
+; enum value's `;`, a token other than a string literal after an
+; aggregate field's run of them, and a range bound's `to`, `,` or `;`.
+def proto-transduce-ends [phase token]
+  let [src (get :src token)]
+    match phase
+      case :name (equal src "=")
+      case :number (equal src ";")
+      case :strings (if (equal (get :name token) "#ST") false true)
+      case :from (match src (case "to" true) (case "," true) (case ";" true) (case _ false))
+      case :to (match src (case "," true) (case ";" true) (case _ false))
+      case _ false
+
+; The frame's own text, ended by a token, and what the token says next.
+def proto-transduce-text-end [m token]
+  let [src (get :src token)]
+    let [ended (proto-transduce-end-text m)]
+      match (proto-transduce-frame ended)
+        case [kind :name] (proto-transduce-phase ended :value)
+        case [kind :number] (proto-transduce-phase ended :done)
+        case [kind :strings] (proto-transduce-phase ended :done)
+        case [kind :from]
+          match src
+            case "to" (proto-transduce-phase (proto-transduce-begin-text (proto-transduce-emit ended [(key "to")]) "") :to)
+            case "," (proto-transduce-phase (proto-transduce-emit ended [object-end]) :next)
+            case _ (proto-transduce-phase (proto-transduce-emit ended [object-end array-end]) :done)
+        case [kind :to]
+          match src
+            case "," (proto-transduce-phase (proto-transduce-emit ended [object-end]) :next)
+            case _ (proto-transduce-phase (proto-transduce-emit ended [object-end array-end]) :done)
+        case _ ended
+
+; One token a pass consumed: written to a rule's text, or to the frame's
+; own text unless it ends it, or read by the frame.
+def proto-transduce-token [m token]
+  match m
+    case [marks frames [s :rule] carry outputs] (proto-transduce-write m (get :src token))
+    case [marks frames [s :token] carry outputs]
+      match (proto-transduce-frame m)
+        case [kind phase]
+          if (proto-transduce-ends phase token)
+            match phase
+              case :strings (proto-transduce-frame-token (proto-transduce-text-end m token) token)
+              case _ (proto-transduce-text-end m token)
+            proto-transduce-write m (get :src token)
+    case _ (proto-transduce-frame-token m token)
+
+; The tokens a pass consumed, in order: at most three in this grammar,
+; and four read, so that a fifth fails rather than vanishes.
+def proto-transduce-tokens [m rule]
+  let [tokens (get :tokens rule)]
+    match (count tokens)
+      case 0 m
+      case 1 (proto-transduce-token m (transduce-token 0 rule))
+      case 2 (proto-transduce-token (proto-transduce-token m (transduce-token 0 rule)) (transduce-token 1 rule))
+      case 3 (proto-transduce-token (proto-transduce-token (proto-transduce-token m (transduce-token 0 rule)) (transduce-token 1 rule)) (transduce-token 2 rule))
+      case 4 (proto-transduce-token (proto-transduce-token (proto-transduce-token (proto-transduce-token m (transduce-token 0 rule)) (transduce-token 1 rule)) (transduce-token 2 rule)) (transduce-token 3 rule))
+      case _ (fail :protocol-order "a rule pass consumed more tokens than any of the proto grammar's alternates")
+
+; The rule pushed by a pass's alternate, or "".
+def proto-transduce-pushes [rule]
+  match (get :alt rule)
+    case missing ""
+    case alt (get :p alt)
+
+; Whether a pass's alternate replaces its rule.
+def proto-transduce-replaced [rule]
+  match (get :alt rule)
+    case missing false
+    case alt
+      match (get :r alt)
+        case "" false
+        case _ true
+
+; A member's rule opens in a frame: its key, and its text or its
+; container begun; the marker its close will act on.
+def proto-transduce-member-open [m kind phase member rule]
+  match member
+    case :options [(proto-transduce-emit (proto-transduce-settle m) [(key "options") array-start]) :array]
+    case :strings [(proto-transduce-phase (proto-transduce-set-text (proto-transduce-emit m [(key "value")]) ["" :token]) :strings) :none]
+    case :type
+      match [kind phase]
+        case [:map :key] [(proto-transduce-set-text (proto-transduce-phase (proto-transduce-emit m [(key "keyType")]) :value) ["" :rule]) :text]
+        case [:map p] [(proto-transduce-set-text (proto-transduce-emit m [(key "valueType")]) ["" :rule]) :text]
+        case [:rpc :in] [(proto-transduce-set-text (proto-transduce-phase (proto-transduce-emit m [(key "inputType")]) :out) ["" :rule]) :text]
+        case [:rpc p] [(proto-transduce-set-text (proto-transduce-emit m [(key "outputType")]) ["" :rule]) :text]
+    case "value"
+      match (proto-transduce-pushes rule)
+        case "constant$alt5" [(proto-transduce-emit m [(key "value") array-start]) :array]
+        case _ [(proto-transduce-set-text (proto-transduce-emit m [(key "value")]) ["" :rule]) :text]
+    case "fieldType"
+      match [kind phase]
+        case [:oneof-field :dot] [(proto-transduce-set-text (proto-transduce-phase (proto-transduce-emit m [(key "fieldType")]) :typed) ["." :rule]) :text]
+        case _ [(proto-transduce-set-text (proto-transduce-emit m [(key "fieldType")]) ["" :rule]) :text]
+    case name [(proto-transduce-set-text (proto-transduce-emit m [(key name)]) ["" :rule]) :text]
+
+; A rule opens that begins no statement: a member of the innermost frame,
+; or part of the text being read, or nothing.
+def proto-transduce-inner-open [m rule]
+  match m
+    case [marks frames [s :rule] carry outputs] [m :none]
+    case _
+      match (proto-transduce-frame m)
+        case missing [m :none]
+        case [kind phase]
+          match (proto-transduce-member kind (get :name rule))
+            case missing [m :none]
+            case member
+              match m
+                case [marks frames [s :token] carry outputs]
+                  match [member phase]
+                    case [:strings :strings] [m :none]
+                    case _ (proto-transduce-member-open (proto-transduce-settle m) kind phase member rule)
+                case _ (proto-transduce-member-open m kind phase member rule)
+
+; An open pass, no marker handed on: the file, a statement, or a rule
+; inside one.
+def proto-transduce-fresh [m rule]
+  let [name (get :name rule)]
+    match name
+      case "__start__" [(proto-transduce-emit (match m (case [marks frames text carry outputs] [marks (push [:file :body] frames) text carry outputs])) [object-start (key "type") (scalar "file") (key "body") array-start]) :file]
+      case _
+        match (proto-transduce-statement name)
+          case missing (proto-transduce-inner-open m rule)
+          case kind [(proto-transduce-begin m kind) :statement]
+
+; A marker's close.
+def proto-transduce-act [m mark]
+  match mark
+    case :text (proto-transduce-end-text m)
+    case :array (proto-transduce-emit m [array-end])
+    case :statement (proto-transduce-finish-statement m)
+    case :file
+      match m
+        case [marks frames text carry outputs] [marks (pop frames) text carry (push-all [array-end object-end] outputs)]
+    case _ m
+
+def proto-transduce-open [m rule]
+  match m
+    case [marks frames text carry outputs]
+      match carry
+        case missing
+          match (proto-transduce-fresh m rule)
+            case [opened mark]
+              let [read (proto-transduce-tokens opened rule)]
+                match read
+                  case [ms fs t c os]
+                    match (proto-transduce-replaced rule)
+                      case true [ms fs t mark os]
+                      case _ [(push mark ms) fs t missing os]
+        case mark
+          let [read (proto-transduce-tokens [marks frames text missing outputs] rule)]
+            match read
+              case [ms fs t c os]
+                match (proto-transduce-replaced rule)
+                  case true [ms fs t mark os]
+                  case _ [(push mark ms) fs t missing os]
+
+def proto-transduce-close [m rule]
+  match m
+    case [marks frames text carry outputs]
+      let [mark (top marks)]
+        let [read (proto-transduce-tokens [(pop marks) frames text carry outputs] rule)]
+          match (proto-transduce-replaced rule)
+            case true
+              match read
+                case [ms fs t c os] [ms fs t mark os]
+            case _ (proto-transduce-act read mark)
+
+def proto-transduce-step [state pass]
+  match state
+    case [started marks frames text carry]
+      let [m [marks frames text carry []]]
+        let [next (match pass (case (open rule) (proto-transduce-open m rule)) (case (close rule) (proto-transduce-close m rule)))]
+          match next
+            case [ms fs t c outputs] (transition [true ms fs t c] outputs)
+
+; A source that made no pass is the empty file.
+def proto-transduce-finish [state]
+  match state
+    case [false marks frames text carry] [object-start (key "type") (scalar "file") (key "body") array-start array-end object-end]
+    case [true [] [] text carry] []
+    case _ (fail :protocol-order "the rule passes ended inside a statement, which a file's never do")
+
+def proto-transduce [input]
+  as-events (scan-emit [false [] [] missing missing] proto-transduce-step proto-transduce-finish (parser-events input))

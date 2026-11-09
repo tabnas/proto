@@ -26,6 +26,12 @@ const fdp = parse('syntax = "proto3"; message M { int32 a = 1; }')
 // fdp.messageType[0].field[0] => { name: 'a', number: 1, label: 'LABEL_OPTIONAL', type: 'TYPE_INT32' }
 ```
 
+A translation reads a file as its source-ordered tree instead,
+`parseTree`: the file's declarations in the order the file writes them,
+each scalar the text the source spells. A host streams it through the
+package's transducer part, a declaration at a time, and writes it back
+with the package's render; [`AGENTS.md`](AGENTS.md) has the details.
+
 ## How it works
 
 The grammar is authored once in ABNF (`proto-grammar/*.abnf`): a shared

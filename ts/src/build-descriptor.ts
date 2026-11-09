@@ -214,6 +214,18 @@ function typeNodeOf(n: Node): Node | undefined {
   return child(n, 'fieldType') ?? child(n, 'messageType') ?? child(n, 'fullIdent')
 }
 
+// The field type's text. Where the type surfaces as a bare `fullIdent`,
+// the optional leading dot of `messageType` was inlined with it, into the
+// text ahead of the node, and a fully qualified type keeps it there:
+// `oneof o { .a.B t = 5; }` names `.a.B`, not `a.B`.
+function typeTextOf(n: Node): string {
+  const t = typeNodeOf(n)
+  if (null == t) return ''
+  if ('fullIdent' !== t.rule) return t.src
+  const gap = gapsBefore(n, 'fullIdent')[0] ?? ''
+  return (gap.endsWith('.') ? '.' : '') + t.src
+}
+
 function applyFieldOptions(f: FieldDescriptorProto, opts: Node | undefined): void {
   const po = readFieldOptions(opts)
   if (undefined !== po.jsonName) f.jsonName = po.jsonName
@@ -223,7 +235,6 @@ function applyFieldOptions(f: FieldDescriptorProto, opts: Node | undefined): voi
 
 function buildField(n: Node, version: ProtoVersion): FieldDescriptorProto {
   const label = child(n, 'label')
-  const type = typeNodeOf(n)
   const name = child(n, 'ident')
   const number = child(n, 'fieldNumber')
 
@@ -231,7 +242,7 @@ function buildField(n: Node, version: ProtoVersion): FieldDescriptorProto {
     name: name ? name.src : '',
     number: number ? Number(number.src) : 0,
     ...fieldLabel(label, version),
-    ...fieldTypeName(type ? type.src : ''),
+    ...fieldTypeName(typeTextOf(n)),
   }
   applyFieldOptions(f, child(n, 'fieldOptions'))
   return f
@@ -658,4 +669,11 @@ export function buildFile(proto: Node, version: ProtoVersion): FileDescriptorPro
     }
   }
   return file
+}
+
+// The CST readers the source-ordered tree's walk shares (./build-tree.ts).
+export type { Node }
+export {
+  R, kw, child, gaps, gapsBefore, optionNameOf, typeTextOf, isGroup,
+  isOptionStmt, parenthesised,
 }
