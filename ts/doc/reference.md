@@ -63,8 +63,12 @@ The host reads its rule passes through the transducer part,
 a time. Its grammar is the compiled one without the builders of the
 syntax tree, so it builds no tree and holds no declaration it has closed.
 Its rule passes are `make()`'s, token for token, and it fails the same
-documents at the same place. Its value is no syntax tree, so never hand
-it to `toTree` or `toDescriptor`.
+documents at the same place. It bounds the engine's rule history at three
+predecessors, where the engine keeps every rule a parse links by default:
+its grammar has no action left to read through the links the bound cuts,
+and `test/streaming.test.ts` holds its passes to those of `make()`'s
+unbounded parser over every document. Its value is no syntax tree, so
+never hand it to `toTree` or `toDescriptor`.
 
 Both parsers declare `lex.window`, so `tn.parseReader(reader)` reads a
 document a window at a time, never whole. `make()`'s parser keeps an

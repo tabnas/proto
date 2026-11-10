@@ -68,9 +68,11 @@ at a time, never whole.
 `make()` builds the parser for a tree. A host that streams a document
 through the transducer part takes `make_streaming()` instead: its rule
 passes are `make()`'s, token for token, and it builds no tree, so it
-holds no declaration it has closed. Its value is no syntax tree: a parse
-returns a null, so never hand it to `to_descriptor` or `to_tree`. It
-declares `lex.window` too.
+holds no declaration it has closed. It keeps the engine's rule history at
+three predecessors, the engine's default here, which the TypeScript and Go
+parsers set themselves. Its value is no syntax tree: a parse returns a
+null, so never hand it to `to_descriptor` or `to_tree`. It declares
+`lex.window` too.
 
 The descriptor serializes to the JSON shape `protoc --descriptor_set_out`
 produces: camelCase names, enum values as their string names, and the

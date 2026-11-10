@@ -288,8 +288,10 @@ pub fn make() -> Tabnas {
 /// pays the install once. It keeps the engine's rule history at three
 /// predecessors, [`tabnas::DEFAULT_RULE_HISTORY`], which the TypeScript
 /// and Go parsers set themselves, their engines keeping every rule by
-/// default; this grammar has no action, so nothing reads back through the
-/// links the bound cuts.
+/// default. The bound is safe because this grammar has no action, so
+/// nothing reads back through the links it cuts, as
+/// `tests/streaming_test.rs` holds: its passes are [`make`]'s over every
+/// document.
 ///
 /// ```
 /// fn main() -> Result<(), Box<dyn std::error::Error>> {

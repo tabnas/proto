@@ -31,10 +31,11 @@ A translation reads a file as its source-ordered tree instead,
 each scalar the text the source spells. A host streams it through the
 package's transducer part, a declaration at a time, and writes it back
 with the package's render. The parser it streams through,
-`makeStreaming()`'s, builds no tree, so a stream holds no declaration it
-has closed; it reads from a reader a window at a time, never the whole
-file, and refuses nesting past the cap as it reads. `make()` builds the
-parser for a tree, whose value is the syntax tree the walks read.
+`makeStreaming()`'s, builds no tree and keeps only the last three rules
+the engine links, so a stream holds no declaration it has closed; it
+reads from a reader a window at a time, never the whole file, and refuses
+nesting past the cap as it reads. `make()` builds the parser for a tree,
+whose value is the syntax tree the walks read.
 [`AGENTS.md`](AGENTS.md) has the details.
 
 ## How it works

@@ -58,9 +58,12 @@ agree (`reconcile: true`, the default) or `parse` throws; set
   window at a time, never whole.
 - `makeStreaming()`. The parser a host streams a document through. Its
   rule passes, which the transducer part reads, are `make()`'s, and it
-  builds no tree, so it holds no declaration it has closed. Its value is
-  no syntax tree: hand `toTree` and `toDescriptor` what `make()`'s parser
-  returns, never what this one does. It declares `lex.window` too.
+  builds no tree, so it holds no declaration it has closed. It also keeps
+  only the last three rules the engine links, where the engine keeps every
+  rule by default. No action of its grammar reads through the links the
+  bound cuts, as `test/streaming.test.ts` holds. Its value is no syntax
+  tree: hand `toTree` and `toDescriptor` what `make()`'s parser returns,
+  never what this one does. It declares `lex.window` too.
 
 Options: `{ version?: 'proto2'|'proto3'|'2023'|'2024' | null,
 reconcile?: boolean }`.
