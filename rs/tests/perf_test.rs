@@ -18,11 +18,14 @@ use tabnas_proto::{make, parse, to_descriptor};
 
 /// Installing the grammar dominates everything else, which is why `parse`
 /// keeps one instance. Pinned so a change that started rebuilding the
-/// parser per call shows up as the regression it would be.
+/// parser per call shows up as the regression it would be. The install is
+/// timed on a parser of its own, since `make` clones the one the process
+/// installed first, which another test may already have.
 #[test]
 fn compiling_the_grammar_happens_once() {
     let start = Instant::now();
-    let parser = make();
+    let mut parser = tabnas_proto::engine();
+    tabnas_proto::proto(&mut parser).expect("the grammar installs");
     let compile = start.elapsed().as_secs_f64();
     assert!(compile < 60.0, "installing the grammar took {compile:.1}s");
 
@@ -37,6 +40,25 @@ fn compiling_the_grammar_happens_once() {
         fifty < compile.max(1.0) * 10.0,
         "50 parses took {fifty:.2}s against a {compile:.2}s install, which is not the \
          one-off cost this instance reuse exists for"
+    );
+}
+
+/// `make` installs the grammar once per process and clones that parser
+/// after, so a host that makes a parser per document, as one reading the
+/// rule passes must, pays the install once. Pinned so a `make` that
+/// installed the grammar anew on every call shows up as the regression it
+/// would be: fifty installs take minutes on this profile.
+#[test]
+fn a_parser_after_the_first_costs_no_install() {
+    drop(make());
+    let start = Instant::now();
+    for _ in 0..50 {
+        drop(make());
+    }
+    let fifty = start.elapsed().as_secs_f64();
+    assert!(
+        fifty < 5.0,
+        "50 parsers took {fifty:.2}s: make installs the grammar anew"
     );
 }
 
