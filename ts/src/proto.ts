@@ -161,12 +161,25 @@ function make(): Tabnas {
   return tn
 }
 
+// The rule history the streaming parser keeps: three predecessors, the
+// bound transduce sets for a stream of a grammar it has verified
+// (`STREAM_RULE_HISTORY`), and the Rust engine's default.
+const STREAMING_RULE_HISTORY = 3
+
 // The parser a host streams a `.proto` document through: its rule passes,
 // which the transducer part (alchemy/transduce.alc) reads a declaration at
 // a time, are `make()`'s, and it builds no tree. Its grammar is the
 // compiled one without the CST's builders, so a parse holds no declaration
 // it has closed, nor any of their text, and its value is not the CST:
 // `tn.parse(src)` returns nothing a walk takes. For a tree, take `make()`.
+//
+// It bounds the engine's rule history too, which is unbounded by default:
+// the engine links each rule to the one it replaced and the one that
+// pushed it, so an unbounded history keeps every rule of a parse, and a
+// stream's memory grows with the document. A grammar that read back
+// through those links past the bound would parse otherwise; this one has
+// no action at all, so nothing reads them, and its passes are `make()`'s
+// with the bound as without (test/streaming.test.ts).
 function makeStreaming(): Tabnas {
   const tn = new Tabnas()
   tn.grammar(STREAMING)
@@ -174,6 +187,7 @@ function makeStreaming(): Tabnas {
     error: { [TOO_DEEP]: TOO_DEEP_MESSAGE },
     hint: { [TOO_DEEP]: TOO_DEEP_HINT },
     lex: { window: true },
+    rule: { history: STREAMING_RULE_HISTORY },
   })
   tn.sub({ lex: readNesting })
   return tn

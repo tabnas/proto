@@ -285,7 +285,11 @@ pub fn make() -> Tabnas {
 /// Like [`make`], it refuses a document nesting past [`MAX_NESTING_DEPTH`]
 /// as it reads it, declares `lex.window`, and returns a clone of a parser
 /// installed once per process, so a host that needs a parser per document
-/// pays the install once.
+/// pays the install once. It keeps the engine's rule history at three
+/// predecessors, [`tabnas::DEFAULT_RULE_HISTORY`], which the TypeScript
+/// and Go parsers set themselves, their engines keeping every rule by
+/// default; this grammar has no action, so nothing reads back through the
+/// links the bound cuts.
 ///
 /// ```
 /// fn main() -> Result<(), Box<dyn std::error::Error>> {
@@ -374,6 +378,7 @@ fn build_streaming() -> Tabnas {
                 .hint
                 .insert(read::TOO_DEEP.to_string(), read::too_deep_hint());
             options.lex.window = true;
+            options.rule.history = Some(tabnas::DEFAULT_RULE_HISTORY);
         })
         .expect("the streaming proto parser takes its options");
     parser.subscribe_lex(read::read_nesting);

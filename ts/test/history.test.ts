@@ -35,6 +35,10 @@ test('the compiled grammar has no probe, and the parsers keep the default histor
   assert.ok(!/"pd_/.test(text), 'a probe key')
   assert.equal((make() as any).options.rewind.history, 64)
   assert.equal((makeStreaming() as any).options.rewind.history, 64)
+  // The streaming parser bounds the rule history, which the parser for a
+  // tree leaves unbounded (./streaming.test.ts holds their passes alike).
+  assert.equal((makeStreaming() as any).options.rule.history, 3)
+  assert.equal((make() as any).options.rule.history, null)
 })
 
 test('every document parses alike at the default history and at 8,192', () => {

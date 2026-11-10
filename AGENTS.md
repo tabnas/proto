@@ -246,7 +246,16 @@ it installs), so a parse builds no CST and holds no declaration it has
 closed, nor its text, and its value is not the CST. Taking the builders
 away changes what a parse builds and nothing of how it goes: a builder is
 an alternate's action, and the grammar's conditions read counters, never
-a node. Each runtime's streaming test (`ts/test/streaming.test.ts`,
+a node. The streaming parser also bounds the engine's rule history at
+three predecessors, which TypeScript's and Go's engines leave unbounded,
+keeping every rule of a parse through the links from each rule to the one
+it replaced and the one that pushed it; Rust's engine bounds it there by
+default. transduce bounds it only for a grammar it has verified, and proto
+is not one, so the bound is the parser's own: with no action left, nothing
+reaches through the links it cuts. Through transduce 0.6.3 in TypeScript,
+the streaming parser held 10.44 MB over 300 of the streaming gate's items
+and 97.84 MB over 3,000 without it, and 0.52 MB and 0.83 MB with it, at
+about a third more time. Each runtime's streaming test (`ts/test/streaming.test.ts`,
 `go/streaming_test.go`, `rs/tests/streaming_test.rs`) holds the two to
 the same rule passes over every document the window test reads, every
 pass's rule, state, depth, alternate, counters, tokens and carried value

@@ -485,6 +485,11 @@ func Make() (*tabnas.Tabnas, error) {
 	return j, nil
 }
 
+// streamingRuleHistory is the rule history the streaming parser keeps:
+// three predecessors, the bound transduce sets for a stream of a grammar it
+// has verified (StreamRuleHistory), and the Rust engine's default.
+const streamingRuleHistory = 3
+
 // MakeStreaming returns the parser a host streams a .proto document
 // through: its rule passes, which the transducer part
 // (alchemy/transduce.alc) reads a declaration at a time, are Make's, and it
@@ -492,6 +497,15 @@ func Make() (*tabnas.Tabnas, error) {
 // builders, so a parse holds no declaration it has closed, nor any of their
 // text, and its value is not the CST: Parse returns nothing a walk takes.
 // For a tree, take Make.
+//
+// It bounds the engine's rule history too, which is unbounded by default:
+// the engine links each rule to the one it replaced and the one that pushed
+// it, so an unbounded history keeps every rule of a parse, and a stream's
+// memory grows with the document. A grammar that read back or wrote through
+// those links past the bound would parse otherwise (tabnas/parser#325);
+// this one has no action but startUndefined's, which sets the start rule's
+// own node, so nothing reaches through them, and its passes are Make's with
+// the bound as without (streaming_test.go).
 func MakeStreaming() (*tabnas.Tabnas, error) {
 	gs, err := streamingGrammar()
 	if err != nil {
@@ -502,11 +516,12 @@ func MakeStreaming() (*tabnas.Tabnas, error) {
 		return nil, err
 	}
 	startUndefined(j)
-	window := true
+	window, history := true, streamingRuleHistory
 	j.SetOptions(tabnas.Options{
 		Error: map[string]string{tooDeep: tooDeepMessage},
 		Hint:  map[string]string{tooDeep: tooDeepHint},
 		Lex:   &tabnas.LexOptions{Window: &window},
+		Rule:  &tabnas.RuleOptions{History: &history},
 	})
 	j.Sub(readNesting, nil)
 	return j, nil

@@ -32,6 +32,22 @@ func TestTheGrammarHasNoProbeAndTheParsersKeepTheDefaultHistory(t *testing.T) {
 			t.Fatalf("%s keeps a history of %d", p.name, got)
 		}
 	}
+	// The streaming parser bounds the rule history, which the parser for a
+	// tree leaves unbounded (streaming_test.go holds their passes alike).
+	stream, err := MakeStreaming()
+	if err != nil {
+		t.Fatal(err)
+	}
+	tree, err := Make()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got := stream.Config().RuleHistory; got != streamingRuleHistory {
+		t.Fatalf("MakeStreaming keeps a rule history of %d", got)
+	}
+	if got := tree.Config().RuleHistory; got != 0 {
+		t.Fatalf("Make keeps a rule history of %d", got)
+	}
 }
 
 func TestEveryDocumentParsesAlikeAtTheDefaultHistoryAndAt8192(t *testing.T) {

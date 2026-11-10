@@ -48,6 +48,9 @@ fn the_grammar_has_no_probe_and_the_parsers_keep_the_default_history() {
     assert_eq!(REWIND_HISTORY, 64);
     assert_eq!(make().options.rewind.history, Some(64));
     assert_eq!(make_streaming().options.rewind.history, Some(64));
+    // Both bound the rule history, the engine's default here.
+    assert_eq!(make_streaming().options.rule.history, Some(3));
+    assert_eq!(make().options.rule.history, Some(3));
 }
 
 #[test]
