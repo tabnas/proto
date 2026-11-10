@@ -55,7 +55,7 @@
     "LICENSE"
   ],
   "peerDependencies": {
-    "@tabnas/parser": ">=0.12.19"
+    "@tabnas/parser": ">=0.12.20"
   },
   "devDependencies": {
     "@tabnas/abnf": "*",
