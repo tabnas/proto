@@ -221,12 +221,17 @@ pub fn engine() -> Tabnas {
     })
 }
 
-/// Build a proto parser: [`engine`] with this plugin installed, the
+/// A proto parser: [`engine`] with this plugin installed, the
 /// counterpart of `new Tabnas().use(Proto)` and the Go `Proto(j)`.
 ///
-/// Installing the grammar dominates a parse, so build one and reuse it.
-/// Read each document through [`parse_with`], which runs the nesting
-/// [`preflight`] the engine's own `parse` does not.
+/// Installing the grammar dominates a parse by more than an order of
+/// magnitude, so it is installed once per process, and each call returns
+/// a clone of that parser. A clone is a parser of its own: it prepares
+/// its own state, and a subscriber added to it, or an option changed on
+/// it, reaches no other parser, so a host that needs a parser per
+/// document, as one that reads the rule passes does, pays the install
+/// once. Read each document through [`parse_with`], which runs the
+/// nesting [`preflight`] the engine's own `parse` does not.
 ///
 /// ```
 /// fn main() -> Result<(), Box<dyn std::error::Error>> {
@@ -238,6 +243,12 @@ pub fn engine() -> Tabnas {
 /// }
 /// ```
 pub fn make() -> Tabnas {
+    shared().clone()
+}
+
+/// [`engine`] with this plugin installed, built anew: the parser
+/// [`shared`] holds, which [`make`] clones.
+fn build() -> Tabnas {
     let mut parser = engine();
     proto(&mut parser).expect("the embedded proto grammar is fixed and valid");
     parser
@@ -251,7 +262,7 @@ pub fn make() -> Tabnas {
 /// only reads instance state, so it is safe for concurrent use.
 fn shared() -> &'static Tabnas {
     static DEFAULT: OnceLock<Tabnas> = OnceLock::new();
-    DEFAULT.get_or_init(make)
+    DEFAULT.get_or_init(build)
 }
 
 /// Turn a parsed proto CST into a [`FileDescriptorProto`], resolving the

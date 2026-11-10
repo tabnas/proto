@@ -7,6 +7,7 @@
 
 mod common;
 
+use std::sync::atomic::{AtomicUsize, Ordering};
 use std::sync::{Arc, Mutex};
 
 use tabnas::RuleState;
@@ -135,4 +136,32 @@ fn repetition_adds_no_rule_depth() {
             "the {what}: {N} reach a deeper rule than two"
         );
     }
+}
+
+/// Each parser `make` returns is its own, though every one is a clone of
+/// the parser the process installed first: a subscriber added to one is
+/// called by no parse on another, nor by `parse`'s shared parser.
+#[test]
+fn each_parser_make_returns_is_its_own() {
+    let source = "syntax = \"proto3\";\nmessage M { int32 a = 1; }";
+    let calls = Arc::new(AtomicUsize::new(0));
+    let mut watched = tabnas_proto::make();
+    let count = calls.clone();
+    watched.subscribe_rule_done(move |_rule, _ctx, _done| {
+        count.fetch_add(1, Ordering::Relaxed);
+    });
+    tabnas_proto::make()
+        .parse(source)
+        .expect("another parser parses");
+    tabnas_proto::parse(source, None).expect("the shared parser parses");
+    assert_eq!(
+        0,
+        calls.load(Ordering::Relaxed),
+        "another parser called the subscriber"
+    );
+    watched.parse(source).expect("the watched parser parses");
+    assert!(
+        calls.load(Ordering::Relaxed) > 0,
+        "its own parser never called the subscriber"
+    );
 }
