@@ -17,6 +17,9 @@ import type { TreeNode, TreeValue } from './build-tree'
 import { recordAggregate } from './aggregate'
 import { MAX_NESTING_DEPTH, preflight } from './preflight'
 import {
+  TOO_DEEP, TOO_DEEP_HINT, TOO_DEEP_MESSAGE, protoReach, readToken,
+} from './read'
+import {
   ProtoVersion, declaredVersion, resolveVersion,
 } from './detect-version'
 import { FileDescriptorProto } from './descriptor'
@@ -56,6 +59,13 @@ const Proto = ((tn: Tabnas, _options?: Partial<ProtoOptions>) => {
   // drops whitespace and comments. This action reads it from the source
   // while the brace tokens are to hand; see ./aggregate.ts.
   tn.rule('constant', (rs: any) => rs.ac(recordAggregate))
+  // The nesting cap, counted as the lexer gives the parser its tokens, and
+  // in a parse from a reader an aggregate's text: see ./read.ts.
+  tn.options({
+    error: { [TOO_DEEP]: TOO_DEEP_MESSAGE },
+    hint: { [TOO_DEEP]: TOO_DEEP_HINT },
+  })
+  tn.sub({ lex: readToken })
 }) as {
   (tn: Tabnas, options?: Partial<ProtoOptions>): void
   defaults: ProtoOptions
@@ -77,10 +87,11 @@ function toDescriptor(cst: any, options?: Partial<ProtoOptions>): FileDescriptor
 // Convenience: parse a `.proto` source string to a FileDescriptorProto in
 // one call. Builds a fresh engine each time; for repeated parsing reuse an
 // engine via `const j = new Tabnas().use(Proto)` and call
-// `toDescriptor(j.parse(src), opts)`, running `preflight(src)` first.
+// `toDescriptor(j.parse(src), opts)`.
 //
 // A document nesting deeper than MAX_NESTING_DEPTH is refused before the
-// engine runs: see ./preflight.ts.
+// engine runs, the message naming its depth: see ./preflight.ts. The
+// engine refuses one too, as it reads the brace past the cap (./read.ts).
 function parse(src: string, options?: Partial<ProtoOptions>): FileDescriptorProto {
   preflight(src)
   const tn = new Tabnas({ rewind: { history: 8192 } })
@@ -91,11 +102,15 @@ function parse(src: string, options?: Partial<ProtoOptions>): FileDescriptorProt
 // The parser a host reads a `.proto` document with: a fresh engine with
 // the grammar installed, as `parse` builds one. Its rule passes are what
 // the transducer part (alchemy/transduce.alc) reads, and its value is the
-// `{rule, src, kids}` CST that `toTree` and `toDescriptor` walk. A host
-// runs `preflight(src)` on a source before it hands it to this parser.
+// `{rule, src, kids}` CST that `toTree` and `toDescriptor` walk. It
+// refuses a document nesting past MAX_NESTING_DEPTH as it reads it, with
+// the code `proto_too_deep`, and declares `lex.window`, so that
+// `tn.parseReader(reader)` reads a document a window at a time, never
+// whole: see ./read.ts.
 function make(): Tabnas {
   const tn = new Tabnas({ rewind: { history: 8192 } })
   Proto(tn)
+  tn.options({ lex: { window: true, match: { 'proto-reach': protoReach() } } })
   return tn
 }
 

@@ -457,14 +457,21 @@ func buildTree(proto map[string]any) *tabnas.OrderedMap {
 // Make returns the parser a host reads a .proto document with: a fresh
 // engine with the grammar installed, as Parse builds one. Its rule passes
 // are what the transducer part (alchemy/transduce.alc) reads, and its value
-// is the {rule, src, kids} CST that ToTree and ToDescriptor walk. A host
-// runs Preflight on a source before it hands it to this parser.
+// is the {rule, src, kids} CST that ToTree and ToDescriptor walk. It refuses
+// a document nesting past MaxNestingDepth as it reads it, with the code
+// proto_too_deep, and declares Lex.Window, so that its ParseReader reads a
+// document a window at a time, never whole: see read.go.
 func Make() (*tabnas.Tabnas, error) {
 	rh := 8192
 	j := tabnas.Make(tabnas.Options{Rewind: &tabnas.RewindOptions{History: &rh}})
 	if err := Proto(j); err != nil {
 		return nil, err
 	}
+	window := true
+	j.SetOptions(tabnas.Options{Lex: &tabnas.LexOptions{
+		Window: &window,
+		Match:  map[string]*tabnas.MatchSpec{"proto-reach": reachMatcher()},
+	}})
 	return j, nil
 }
 

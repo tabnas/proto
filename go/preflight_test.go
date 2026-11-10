@@ -116,8 +116,9 @@ func TestEveryBraceCountsAnAggregatesIncluded(t *testing.T) {
 	}
 }
 
-// The check on its own, for a caller that drives the engine: the engine's
-// own Parse is not guarded.
+// The check on its own, for a caller that wants a whole text's depth. The
+// engine with Proto installed refuses the same documents as it reads them
+// (read.go, window_test.go).
 func TestPreflightOnItsOwn(t *testing.T) {
 	if err := Preflight(nested(MaxNestingDepth - 1)); err != nil {
 		t.Error(err)
@@ -150,10 +151,26 @@ func TestPreflightOnItsOwn(t *testing.T) {
 		t.Errorf("arrived as %d levels", got)
 	}
 
-	// And the walk has no bound of its own: a tree past the cap, from a
-	// caller who skipped the check, is walked whole. The Rust walk refuses
-	// one, which DIVERGENCE.md section 2 records.
-	cst, err = j.Parse(nested(MaxNestingDepth + 1))
+	// The engine refuses a document past the cap as it reads the brace
+	// past it.
+	var te *tabnas.TabnasError
+	if _, err := j.Parse(nested(MaxNestingDepth + 1)); !errors.As(err, &te) || te.Code != tooDeep {
+		t.Fatalf("one past the cap: %v", err)
+	}
+
+	// And the walk has no bound of its own: a tree past the cap, which only
+	// an engine with the grammar alone and not the plugin builds, is walked
+	// whole. The Rust walk refuses one, which DIVERGENCE.md section 2
+	// records.
+	bare := tabnas.Make(tabnas.Options{Rewind: &tabnas.RewindOptions{History: &rh}})
+	gs, err := tabnas.GrammarSpecFromJSON(grammarSpec)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := bare.Grammar(gs); err != nil {
+		t.Fatal(err)
+	}
+	cst, err = bare.Parse(nested(MaxNestingDepth + 1))
 	if err != nil {
 		t.Fatal(err)
 	}

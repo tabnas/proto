@@ -19,7 +19,11 @@ Parse a `.proto` source string. Builds a fresh engine per call, after
 returns the raw `{rule, src, kids}` CST. A node's `src` holds its tokens
 run together and no whitespace. The `constant` node of an aggregate option
 value also carries `aggregate`, the text the descriptor records for that
-value, described under Options below. `Proto.defaults` is
+value, described under Options below. The plugin's parser refuses a
+document nesting deeper than `MAX_NESTING_DEPTH` as it reads it: the
+brace that opens the level past the cap fails the parse at that brace,
+with the code `proto_too_deep`, so the parser never builds a tree deeper
+than the cap. `Proto.defaults` is
 `{ version: null, reconcile: true }`. The grammar arrives compiled
 (`src/proto-grammar.json`, built by `@tabnas/abnf` when the package is
 made), so the plugin installs no ABNF compiler and needs none: the
@@ -49,12 +53,18 @@ tree.body[1].body[0] // => { type: 'field', label: 'repeated', fieldType: 'int32
 
 ### `toTree(cst) => TreeNode` and `make() => Tabnas`
 
-`make()` builds the parser `parse` and `parseTree` use: a fresh engine
-with the grammar installed. `toTree` turns its CST into the tree. A host
-that streams a document reads the rule passes of the parser `make()`
-builds through the transducer part, `translate().transduce`, which makes
-the tree's events a declaration at a time; it runs `preflight` on the
-source first.
+`make()` builds the parser `parseTree` uses: a fresh engine with the
+grammar installed. `toTree` turns its CST into the tree. A host that
+streams a document reads the rule passes of the parser `make()` builds
+through the transducer part, `translate().transduce`, which makes the
+tree's events a declaration at a time.
+
+It declares `lex.window`, so `tn.parseReader(reader)` reads a document a
+window at a time, never whole. The parser reads a keyword whole before it
+cuts it, and keeps an aggregate option value's text from the tokens
+between its braces, since a window never holds the whole source. The parser refuses
+nesting past the cap as it reads, so a host reading through a reader
+needs no check of its own.
 
 ### `preflight(src)` and `MAX_NESTING_DEPTH`
 
@@ -64,12 +74,13 @@ the lexer skips, found where the lexer finds them: a line comment ends at
 a carriage return as well as a line feed, a backtick string is a string,
 and a quote inside a word is part of the word, so the braces after it
 count. `preflight` throws an `Error` that names it. Like every
-refusal the plugin makes itself, the error carries no code. `parse` runs
-the check first. A caller who drives the engine directly runs it on the
-source before `tn.parse`, since the engine's own parse builds the whole
-tree first, and the tree's cost grows with the square of its depth. The
-Go port's `Preflight` and the Rust port's `preflight` refuse the same
-documents with the same message.
+refusal the plugin makes itself, the error carries no code. `parse` and
+`parseTree` run the check first. The plugin's parser refuses the same
+documents as it reads them, with the code `proto_too_deep` at the brace
+past the cap, since the tree's cost grows with the square of its depth.
+`preflight` counts a whole text before any engine runs. The Go port's
+`Preflight` and the Rust port's `preflight` refuse the same documents
+with the same message.
 
 ```js
 const { parse, MAX_NESTING_DEPTH } = require('@tabnas/proto')

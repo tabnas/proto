@@ -57,11 +57,13 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 }
 ```
 
-`parse_with` is the fast path and it is the guarded one: it runs the
-nesting preflight described under [Untrusted input](#untrusted-input),
-which the engine's own `parse` does not. Calling `parser.parse` and
-`to_descriptor` by hand skips that check, and a document nesting deeply
-enough aborts the process before either of them returns.
+`parse_with` is the fast path. It runs the nesting preflight described
+under [Untrusted input](#untrusted-input) before the engine, so that its
+refusal names the document's depth. The parser refuses the same
+documents itself as it reads them, so calling `parser.parse` and
+`to_descriptor` by hand needs no check of its own. `make()`'s parser declares
+`lex.window`, so `parser.parse_reader(reader)` reads a document a window
+at a time, never whole.
 
 The descriptor serializes to the JSON shape `protoc --descriptor_set_out`
 produces: camelCase names, enum values as their string names, and the
@@ -206,9 +208,10 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 }
 ```
 
-An instance driven this way returns a CST rather than a descriptor, so
-nothing else can run the nesting check for it: call `preflight` on the
-source first, as above.
+An instance driven this way returns a CST rather than a descriptor. Its
+parser refuses a document nesting past the cap as it reads it, with the
+code `proto_too_deep` at the brace past the cap. `preflight`, as above,
+checks a whole text before the engine runs.
 
 Use `engine()` rather than a bare `tabnas::Tabnas::new()`: it sets the
 retained backtracking history the union grammar needs, and the engine's
@@ -216,9 +219,11 @@ default of 64 consumed tokens is not enough to rewind one statement.
 
 ### Errors
 
-A rejection is a `ProtoError`. This package declares no error codes of
-its own, so a parse failure carries the engine's base code and a
-rejection the plugin makes on its own account carries none.
+A rejection is a `ProtoError`. This package declares one error code of
+its own, `proto_too_deep`, which the parser raises at the brace that
+opens a level past the nesting cap. Any other parse failure carries the
+engine's base code, and a rejection the plugin makes on its own account,
+the version check and the preflight, carries none.
 
 ```rust
 fn main() -> Result<(), Box<dyn std::error::Error>> {
@@ -240,10 +245,13 @@ from outside the system, and every string in a descriptor, `import` paths
 and `type_name`s included, is text an agent must treat as hostile. See
 the repository [`../AGENTS.md`](../AGENTS.md).
 
-Every runtime bounds a document's nesting. A document nesting deeper
-than `MAX_NESTING_DEPTH` is refused before the engine builds a tree that
-deep, with the message the TypeScript and Go ports give, because the
-tree's cost grows with the square of the depth. Here the reason is
+Every runtime bounds a document's nesting. It refuses a document nesting
+deeper than `MAX_NESTING_DEPTH` before it builds a tree that deep,
+because the tree's cost grows with the square of the depth. `parse` and
+its kin count a whole text first. Their refusal names the depth, in the
+message the other two ports give. The parser refuses the brace that
+opens the level past the cap as it reads it, with the code
+`proto_too_deep`, which is what a parse from a reader meets. Here the reason is
 sharper still: the descriptor walk recurses, and so do `tabnas::Value`'s
 drop and its JSON rendering; a Rust stack that runs out aborts the
 process rather than raising something catchable:
@@ -264,11 +272,12 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 
 Every entry point that takes SOURCE runs that check: `parse`,
 `parse_with` and `parse_value`. `preflight` is the check on its own, for
-a caller that holds the engine and wants the CST. The entry points that
-take a CST, `to_descriptor` and `build_file`, refuse a tree past the cap
-as well, where the other two runtimes walk it whole, but by then the
-tree exists, and a `tabnas::Value` nesting far enough aborts the process
-as it DROPS. Measured on this port, on the 1 MiB
+a caller that wants a whole text checked before any engine runs. The
+parser this crate installs builds no tree past the cap. An engine with
+the grammar alone can. The entry points that take a CST, `to_descriptor`
+and `build_file`, refuse such a tree, where the other two runtimes walk
+it whole, but by then the tree exists, and a `tabnas::Value` nesting far
+enough aborts the process as it DROPS. Measured on this port, on the 1 MiB
 stack a spawned `std::thread` gets by default: a debug build refuses and
 drops a 900-level document, and aborts on a 1000-level one, having
 already refused to walk it. The refusal is not the protection; parsing

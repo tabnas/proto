@@ -70,6 +70,13 @@ func Proto(j *tabnas.Tabnas) error {
 	j.Rule("constant", func(rs *tabnas.RuleSpec, _ *tabnas.Parser) {
 		rs.AddAC(recordAggregate)
 	})
+	// The nesting cap, counted as the lexer gives the parser its tokens,
+	// and in a parse from a reader an aggregate's text: see read.go.
+	j.SetOptions(tabnas.Options{
+		Error: map[string]string{tooDeep: tooDeepMessage},
+		Hint:  map[string]string{tooDeep: tooDeepHint},
+	})
+	j.Sub(readToken, nil)
 	return nil
 }
 
@@ -118,11 +125,11 @@ func toDescriptor(cst any, opts *ProtoOptions) (FileDescriptorProto, *order, err
 
 // Parse parses a .proto source string to a FileDescriptorProto in one call.
 // It builds a fresh engine each time; for repeated parsing reuse an engine:
-// build one with tabnas.Make, install Proto, then call ToDescriptor(j.Parse(src)),
-// running Preflight(src) first.
+// build one with tabnas.Make, install Proto, then call ToDescriptor(j.Parse(src)).
 //
 // A document nesting deeper than MaxNestingDepth is refused before the
-// engine runs: see Preflight.
+// engine runs, the message naming its depth: see Preflight. The engine
+// refuses one too, as it reads the brace past the cap (read.go).
 func Parse(src string, opts *ProtoOptions) (FileDescriptorProto, error) {
 	cst, err := parseCST(src)
 	if err != nil {

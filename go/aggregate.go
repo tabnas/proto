@@ -20,64 +20,74 @@ import (
 
 const tabWidth = 8
 
-// aggregateText is the text protoc 36 records for the aggregate whose
-// braces are at src[open] and src[close].
-//
+// at is a place in the text as protoc counts it: the line, and the column
+// on it.
+type at struct{ line, col int }
+
+// step moves a past src[i], protoc's way, and returns the index after it.
 // A Go string is bytes, so a byte offset is a column step already: a
 // multi-byte character advances the column once per byte, as protoc's
 // tokenizer does.
-func aggregateText(src string, open, close int) string {
-	line := 0
-	col := 0
-	step := func(i int) int {
-		switch src[i] {
-		case '\n':
-			line++
-			col = 0
-		case '\t':
-			col += tabWidth - col%tabWidth
-		default:
-			col++
-		}
-		return i + 1
+func (a *at) step(src string, i int) int {
+	switch src[i] {
+	case '\n':
+		a.line++
+		a.col = 0
+	case '\t':
+		a.col += tabWidth - a.col%tabWidth
+	default:
+		a.col++
 	}
+	return i + 1
+}
 
+// aggregateText is the text protoc 36 records for the aggregate whose
+// braces are at src[open] and src[close].
+func aggregateText(src string, open, close int) string {
 	// The column after the opening brace depends on everything ahead of it
 	// on its line, because that decides where a later tab stops.
+	var a at
 	for i := strings.LastIndexByte(src[:open], '\n') + 1; i <= open; {
-		i = step(i)
+		i = a.step(src, i)
 	}
-	line = 0
+	return interiorText(src, open+1, close, a.col)
+}
 
+// interiorText is the text protoc records for an aggregate whose text
+// between its braces is src[from:close], the column after its opening
+// brace col: what aggregateText reads from the whole source, and what a
+// parse from a reader, which never holds the whole source, reads from the
+// tokens the lexer gave between the braces (read.go).
+func interiorText(src string, from, close, col int) string {
+	a := at{col: col}
 	isCommentStart := func(i int) bool {
 		return src[i] == '/' && i+1 < len(src) && (src[i+1] == '/' || src[i+1] == '*')
 	}
 
 	var out strings.Builder
-	from := open + 1
 	i := from
 	for i < close {
 		c := src[i]
 		if isCommentStart(i) {
 			out.WriteString(src[from:i])
-			gapLine, gapCol := line, col
+			gapLine, gapCol := a.line, a.col
 			// Comments with nothing between them form one gap: protoc pads
 			// from the token before the first to the token after the last.
 			for i < close && isCommentStart(i) {
 				if src[i+1] == '/' {
 					for i < close && src[i] != '\n' {
-						i = step(i)
+						i = a.step(src, i)
 					}
 					if i < close {
-						i = step(i)
+						i = a.step(src, i)
 					}
 				} else {
-					i = step(step(i))
+					i = a.step(src, a.step(src, i))
 					for i < close && !(src[i] == '*' && i+1 < len(src) && src[i+1] == '/') {
-						i = step(i)
+						i = a.step(src, i)
 					}
 					if i < close {
-						i = step(step(i))
+						i = a.step(src, a.step(src, i))
 					}
 				}
 			}
@@ -85,35 +95,46 @@ func aggregateText(src string, open, close int) string {
 			if close <= i {
 				break
 			}
-			if gapLine < line {
-				out.WriteString(strings.Repeat("\n", line-gapLine))
-				out.WriteString(strings.Repeat(" ", col))
-			} else if gapCol < col {
-				out.WriteString(strings.Repeat(" ", col-gapCol))
+			if gapLine < a.line {
+				out.WriteString(strings.Repeat("\n", a.line-gapLine))
+				out.WriteString(strings.Repeat(" ", a.col))
+			} else if gapCol < a.col {
+				out.WriteString(strings.Repeat(" ", a.col-gapCol))
 			}
 			continue
 		}
 		if c == '"' || c == '\'' {
 			// A string's text is copied as written; a `//` inside one is not
 			// a comment. protoc ends an unterminated string at the newline.
-			i = step(i)
+			i = a.step(src, i)
 			for i < close && src[i] != c && src[i] != '\n' {
 				if src[i] == '\\' && i+1 < close && src[i+1] != '\n' {
-					i = step(i)
+					i = a.step(src, i)
 				}
-				i = step(i)
+				i = a.step(src, i)
 			}
 			if i < close && src[i] == c {
-				i = step(i)
+				i = a.step(src, i)
 			}
 			continue
 		}
-		i = step(i)
+		i = a.step(src, i)
 	}
 	if from < close {
 		out.WriteString(src[from:close])
 	}
 	return out.String()
+}
+
+// aggregateKey is the member of a closing brace's Use that holds, in a
+// parse from a reader, the aggregate it closes (read.go).
+const aggregateKey = "protoAggregate"
+
+// aggregateRead is what a closing brace carries in a parse from a reader:
+// the position of the aggregate's opening brace, and its text.
+type aggregateRead struct {
+	open int
+	text string
 }
 
 // recordAggregate is the after-close action Proto installs on the grammar's
@@ -122,7 +143,10 @@ func aggregateText(src string, open, close int) string {
 // The node's "src" stays the tokens run together, as on every node. The
 // opening brace is the rule's first token (O0) and the closing brace the
 // last token consumed (V1); a node where either is not a brace is left
-// without "aggregate". Port of recordAggregate in ts/src/aggregate.ts.
+// without "aggregate". A parse from a reader holds a window of the source,
+// never the whole of it: there the closing brace carries the text, which
+// readToken (read.go) kept as the tokens between the braces went by. Port
+// of recordAggregate in ts/src/aggregate.ts.
 func recordAggregate(r *tabnas.Rule, ctx *tabnas.Context) {
 	node, ok := r.Node.(map[string]any)
 	if !ok || nrule(node) != "constant" {
@@ -132,8 +156,14 @@ func recordAggregate(r *tabnas.Rule, ctx *tabnas.Context) {
 	if s == "" || s[0] != '{' || r.O0 == nil || ctx.V1 == nil || ctx.Lex == nil {
 		return
 	}
-	src := ctx.Lex.Src
 	open, close := r.O0.SI, ctx.V1.SI
+	if ctx.Lex.Windowed() {
+		if read, ok := ctx.V1.Use[aggregateKey].(aggregateRead); ok && read.open == open {
+			node["aggregate"] = read.text
+		}
+		return
+	}
+	src := ctx.Lex.Src
 	if !(0 <= open && open < close && close < len(src)) {
 		return
 	}
