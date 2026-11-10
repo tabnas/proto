@@ -3,6 +3,9 @@
 // What the parser reads as the lexer gives it its tokens, a token at a
 // time, so that nothing waits for the document's end: the nesting cap,
 // and, in a parse from a reader, the text of an aggregate option value.
+// The `Proto` plugin installs `readToken`, which reads both; the parser
+// `makeStreaming()` builds keeps no tree, and so no aggregate's text, and
+// installs `readNesting`, which reads the cap alone.
 //
 // The cap. The lexer hands every token it cuts to the lex subscribers
 // before the parser sees it, ignored ones and the brace a word or a number
@@ -68,16 +71,25 @@ type Reading = {
   open: Open[]
 }
 
-// The lex subscriber the `Proto` plugin installs.
-function readToken(tkn: any, _rule: any, ctx: any): void {
+// What has been read of the parse whose context is `ctx`, made at its
+// first token; or undefined where `tkn` was read already: a token the
+// lexer gives again is not read again.
+function readingOf(tkn: any, ctx: any): Reading | undefined {
   let reading: Reading = ctx.u[READING]
   if (undefined === reading) {
     reading = ctx.u[READING] = {
       next: 0, depth: 0, at: { line: 0, col: 0 }, eq: false, text: '', open: [],
     }
   }
-  if (tkn.sI < reading.next) return
+  if (tkn.sI < reading.next) return undefined
   reading.next = tkn.sI + tkn.len
+  return reading
+}
+
+// The cap: a brace opens a level and its closing brace ends one, and the
+// brace that opens a level past the cap is made a bad token. Whether `tkn`
+// is that brace.
+function refused(tkn: any, ctx: any, reading: Reading): boolean {
   const fixed = ctx.cfg.fixed.token
   const tin = tkn.tin
   if (fixed['{'] === tin) {
@@ -86,13 +98,28 @@ function readToken(tkn: any, _rule: any, ctx: any): void {
       tkn.name = '#BD'
       tkn.why = TOO_DEEP
       tkn.err = TOO_DEEP
-      return
+      return true
     }
     reading.depth++
   } else if (fixed['}'] === tin && 0 < reading.depth) {
     reading.depth--
   }
+  return false
+}
+
+// The lex subscriber the `Proto` plugin installs: the cap, and in a parse
+// from a reader the aggregates' text, which the CST keeps.
+function readToken(tkn: any, _rule: any, ctx: any): void {
+  const reading = readingOf(tkn, ctx)
+  if (undefined === reading || refused(tkn, ctx, reading)) return
   if ('' === ctx.src()) readAggregate(tkn, ctx, reading)
+}
+
+// The lex subscriber of the parser `makeStreaming()` builds: the cap
+// alone, since that parser builds no CST to keep an aggregate's text in.
+function readNesting(tkn: any, _rule: any, ctx: any): void {
+  const reading = readingOf(tkn, ctx)
+  if (undefined !== reading) refused(tkn, ctx, reading)
 }
 
 // In a parse from a reader: protoc's column, and the text of the
@@ -127,4 +154,4 @@ function advance(src: string, at: At): void {
   for (let i = 0; i < src.length;) i = step(src, i, at)
 }
 
-export { TOO_DEEP, TOO_DEEP_HINT, TOO_DEEP_MESSAGE, readToken }
+export { TOO_DEEP, TOO_DEEP_HINT, TOO_DEEP_MESSAGE, readNesting, readToken }

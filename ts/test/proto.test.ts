@@ -204,7 +204,7 @@ describe('aggregate option values', () => {
     // The walk has only the CST, so the text has to be on the CST: the
     // plugin puts it on the aggregate's `constant` node as `aggregate`,
     // and leaves `src` the tokens run together, as on every node.
-    const tn = new Tabnas({ rewind: { history: 8192 } }).use(Proto)
+    const tn = new Tabnas().use(Proto)
     const cst = tn.parse(src)
     assert.equal(toDescriptor(cst).messageType[0].options['(f)'], text)
     const find = (n: any): any =>
@@ -221,7 +221,7 @@ describe('aggregate option values', () => {
     const fdp = parse(adjacent)
     assert.equal(fdp.messageType[0].options['(f)'], ' a: "x" "y" ')
     // Two or more literals are the entry's `strLit` children, one each.
-    const tn = new Tabnas({ rewind: { history: 8192 } }).use(Proto)
+    const tn = new Tabnas().use(Proto)
     assert.deepEqual(entryKids(tn.parse(adjacent), 'a:"x""y"'), ['strLit', 'strLit'])
   })
 })

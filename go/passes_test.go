@@ -5,7 +5,9 @@ package tabnasproto
 // passes_test.go — the rule passes the transducer part
 // (alchemy/transduce.alc) reads a statement by, held to the shared
 // fixtures in test/passes/*.tsv, as ts/test/passes.test.ts holds the
-// TypeScript port and rs/tests/passes_test.rs the Rust one; and the
+// TypeScript port and rs/tests/passes_test.rs the Rust one, for both
+// parsers, Make's and MakeStreaming's, whose passes are the same
+// (streaming_test.go); and the
 // ten-thousand items test: repetition is replacement, so the items of a
 // list add no rule depth however many there are.
 
@@ -13,6 +15,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"path/filepath"
+	"reflect"
 	"regexp"
 	"strings"
 	"testing"
@@ -25,9 +28,10 @@ var statementRule = regexp.MustCompile(
 	`^((syntaxOrEdition|topLevelDef|messageElement|enumElement|oneofElement|serviceElement)\$alt\d+|field|optionStmt|fieldOption|messageValueEntry)$`)
 
 // statements is the names of the statements' rules, in the order their open
-// passes come, and constant$alt5 where a constant opens an aggregate.
-func statements(src string) ([]string, error) {
-	j, err := Make()
+// passes come, and constant$alt5 where a constant opens an aggregate, on a
+// parser build makes.
+func statements(src string, build func() (*tabnas.Tabnas, error)) ([]string, error) {
+	j, err := build()
 	if err != nil {
 		return nil, err
 	}
@@ -56,9 +60,16 @@ func TestPassesSpec(t *testing.T) {
 	}
 	support.Runner{
 		Parse: func(input string) (any, error) {
-			names, err := statements(input)
+			names, err := statements(input, Make)
 			if err != nil {
 				return nil, err
+			}
+			streamed, err := statements(input, MakeStreaming)
+			if err != nil {
+				return nil, err
+			}
+			if !reflect.DeepEqual(streamed, names) {
+				return nil, fmt.Errorf("MakeStreaming's statements %v, where Make's are %v", streamed, names)
 			}
 			text, err := json.Marshal(names)
 			return string(text), err

@@ -3,7 +3,10 @@
 //! What the parser reads as the lexer gives it its tokens, a token at a
 //! time, so that nothing waits for the document's end: the nesting cap,
 //! and, in a parse from a reader, the text of an aggregate option value.
-//! Port of `ts/src/read.ts`, which explains both in full.
+//! Port of `ts/src/read.ts`, which explains both in full. [`crate::proto`]
+//! installs [`read_token`], which reads both; the parser
+//! [`crate::make_streaming`] builds keeps no tree, and so no aggregate's
+//! text, and installs [`read_nesting`], which reads the cap alone.
 //!
 //! The cap: [`read_token`] counts the braces among the tokens the lexer
 //! hands the parser, ignored ones and the brace a word or a number is cut
@@ -127,30 +130,60 @@ impl Reading {
     }
 }
 
-/// The lex subscriber [`crate::proto`] installs.
-pub(crate) fn read_token(token: &mut Token, _rule: &mut Rule, context: &mut Context) {
+/// What has been read of the parse, made at its first token; or `None`
+/// where `token` was read already: a token the lexer gives again is not
+/// read again.
+fn reading_of(token: &Token, context: &Context) -> Option<Reading> {
     let mut reading = Reading::load(context);
     if token.site.si < reading.next {
-        return;
+        return None;
     }
     reading.next = token.site.si + token.len;
-    let (open, close) = (token.src.as_str() == "{", token.src.as_str() == "}");
-    if open {
-        if MAX_NESTING_DEPTH <= reading.depth {
-            token.tin = TIN_BD;
-            token.name = "#BD".into();
-            token.why = TOO_DEEP.into();
-            token.err = TOO_DEEP.into();
-            reading.store(context);
-            return;
+    Some(reading)
+}
+
+/// The cap: a brace opens a level and its closing brace ends one, and the
+/// brace that opens a level past the cap is made a bad token. Whether
+/// `token` is that brace.
+fn refused(token: &mut Token, reading: &mut Reading) -> bool {
+    match token.src.as_str() {
+        "{" => {
+            if MAX_NESTING_DEPTH <= reading.depth {
+                token.tin = TIN_BD;
+                token.name = "#BD".into();
+                token.why = TOO_DEEP.into();
+                token.err = TOO_DEEP.into();
+                return true;
+            }
+            reading.depth += 1;
         }
-        reading.depth += 1;
-    } else if close {
-        reading.depth = reading.depth.saturating_sub(1);
+        "}" => reading.depth = reading.depth.saturating_sub(1),
+        _ => {}
     }
-    if context.source.is_empty() {
+    false
+}
+
+/// The lex subscriber [`crate::proto`] installs: the cap, and in a parse
+/// from a reader the aggregates' text, which the CST keeps.
+pub(crate) fn read_token(token: &mut Token, _rule: &mut Rule, context: &mut Context) {
+    let Some(mut reading) = reading_of(token, context) else {
+        return;
+    };
+    if !refused(token, &mut reading) && context.source.is_empty() {
+        let (open, close) = (token.src.as_str() == "{", token.src.as_str() == "}");
         read_aggregate(token, context, &mut reading, open, close);
     }
+    reading.store(context);
+}
+
+/// The lex subscriber of the parser [`crate::make_streaming`] builds: the
+/// cap alone, since that parser builds no CST to keep an aggregate's text
+/// in.
+pub(crate) fn read_nesting(token: &mut Token, _rule: &mut Rule, context: &mut Context) {
+    let Some(mut reading) = reading_of(token, context) else {
+        return;
+    };
+    refused(token, &mut reading);
     reading.store(context);
 }
 

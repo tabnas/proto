@@ -51,19 +51,32 @@ tree.body[0] // => { type: 'syntax', value: '"proto3"' }
 tree.body[1].body[0] // => { type: 'field', label: 'repeated', fieldType: 'int32', name: 'a', number: '1' }
 ```
 
-### `toTree(cst) => TreeNode` and `make() => Tabnas`
+### `toTree(cst) => TreeNode`, `make() => Tabnas` and `makeStreaming() => Tabnas`
 
-`make()` builds the parser `parseTree` uses: a fresh engine with the
-grammar installed. `toTree` turns its CST into the tree. A host that
-streams a document reads the rule passes of the parser `make()` builds
-through the transducer part, `translate().transduce`, which makes the
-tree's events a declaration at a time.
+`make()` builds the parser for a tree, the one `parseTree` uses: a fresh
+engine with the grammar installed, whose value is the syntax tree of
+`{rule, src, kids}` nodes. `toTree` turns its CST into the tree.
 
-It declares `lex.window`, so `tn.parseReader(reader)` reads a document a
-window at a time, never whole. The parser keeps an aggregate option
-value's text from the tokens between its braces, since a window never
-holds the whole source. The parser refuses nesting past the cap as it
-reads, so a host reading through a reader needs no check of its own.
+`makeStreaming()` builds the parser a host streams a document through.
+The host reads its rule passes through the transducer part,
+`translate().transduce`, which makes the tree's events a declaration at
+a time. Its grammar is the compiled one without the builders of the
+syntax tree, so it builds no tree and holds no declaration it has closed.
+Its rule passes are `make()`'s, token for token, and it fails the same
+documents at the same place. It bounds the engine's rule history at three
+predecessors, where the engine keeps every rule a parse links by default:
+its grammar has no action left to read through the links the bound cuts,
+and `test/streaming.test.ts` holds its passes to those of `make()`'s
+unbounded parser over every document. Its value is no syntax tree, so
+never hand it to `toTree` or `toDescriptor`.
+
+Both parsers declare `lex.window`, so `tn.parseReader(reader)` reads a
+document a window at a time, never whole. `make()`'s parser keeps an
+aggregate option value's text from the tokens between its braces, since
+a window never holds the whole source. Both refuse nesting past the cap
+as they read, so a host reading through a reader needs no check of its
+own. Both keep the engine's default rewind history, 64 consumed tokens:
+the grammar never rewinds.
 
 ### `preflight(src)` and `MAX_NESTING_DEPTH`
 

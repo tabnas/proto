@@ -15,7 +15,7 @@ const { Tabnas } = require('@tabnas/parser')
 
 describe('size', () => {
   it('compiles to a few hundred alternates and a handful per decision', () => {
-    const tn = new Tabnas({ rewind: { history: 8192 } })
+    const tn = new Tabnas()
     tn.use(Proto)
     const rules = Object.entries(tn.rule()) as Array<[string, any]>
     let total = 0

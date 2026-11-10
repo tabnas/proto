@@ -118,8 +118,7 @@ func TestScalarTypes(t *testing.T) {
 func TestBuildFile(t *testing.T) {
 	// Parse to a CST with the engine directly, then descend to the exported
 	// BuildFile with an explicitly resolved version.
-	rh := 8192
-	j := tabnas.Make(tabnas.Options{Rewind: &tabnas.RewindOptions{History: &rh}})
+	j := tabnas.Make()
 	if err := Proto(j); err != nil {
 		t.Fatalf("Proto install error: %v", err)
 	}

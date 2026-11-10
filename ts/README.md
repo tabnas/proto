@@ -52,9 +52,18 @@ agree (`reconcile: true`, the default) or `parse` throws; set
   runs it first. The plugin's parser refuses the same documents as it
   reads them, with the code `proto_too_deep`, so a caller who drives the
   engine needs no check of its own.
-- `make()`. The parser a host streams a document through. It declares
-  `lex.window`, so `tn.parseReader(reader)` reads a document a window at
-  a time, never whole.
+- `make()`. The parser for a tree: `tn.parse(src)` returns the
+  `{rule, src, kids}` syntax tree that `toTree` and `toDescriptor` walk. It
+  declares `lex.window`, so `tn.parseReader(reader)` reads a document a
+  window at a time, never whole.
+- `makeStreaming()`. The parser a host streams a document through. Its
+  rule passes, which the transducer part reads, are `make()`'s, and it
+  builds no tree, so it holds no declaration it has closed. It also keeps
+  only the last three rules the engine links, where the engine keeps every
+  rule by default. No action of its grammar reads through the links the
+  bound cuts, as `test/streaming.test.ts` holds. Its value is no syntax
+  tree: hand `toTree` and `toDescriptor` what `make()`'s parser returns,
+  never what this one does. It declares `lex.window` too.
 
 Options: `{ version?: 'proto2'|'proto3'|'2023'|'2024' | null,
 reconcile?: boolean }`.

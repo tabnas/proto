@@ -130,8 +130,7 @@ func TestPreflightOnItsOwn(t *testing.T) {
 		t.Error("one past the cap passed")
 	}
 
-	rh := 8192
-	j := tabnas.Make(tabnas.Options{Rewind: &tabnas.RewindOptions{History: &rh}})
+	j := tabnas.Make()
 	if err := Proto(j); err != nil {
 		t.Fatal(err)
 	}
@@ -162,7 +161,7 @@ func TestPreflightOnItsOwn(t *testing.T) {
 	// an engine with the grammar alone and not the plugin builds, is walked
 	// whole. The Rust walk refuses one, which DIVERGENCE.md section 2
 	// records.
-	bare := tabnas.Make(tabnas.Options{Rewind: &tabnas.RewindOptions{History: &rh}})
+	bare := tabnas.Make()
 	gs, err := tabnas.GrammarSpecFromJSON(grammarSpec)
 	if err != nil {
 		t.Fatal(err)

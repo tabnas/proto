@@ -65,6 +65,15 @@ documents itself as it reads them, so calling `parser.parse` and
 `lex.window`, so `parser.parse_reader(reader)` reads a document a window
 at a time, never whole.
 
+`make()` builds the parser for a tree. A host that streams a document
+through the transducer part takes `make_streaming()` instead: its rule
+passes are `make()`'s, token for token, and it builds no tree, so it
+holds no declaration it has closed. It keeps the engine's rule history at
+three predecessors, the engine's default here, which the TypeScript and Go
+parsers set themselves. Its value is no syntax tree: a parse returns a
+null, so never hand it to `to_descriptor` or `to_tree`. It declares
+`lex.window` too.
+
 The descriptor serializes to the JSON shape `protoc --descriptor_set_out`
 produces: camelCase names, enum values as their string names, and the
 fields a single source file settles. A number in it is spelt the way
@@ -213,9 +222,11 @@ parser refuses a document nesting past the cap as it reads it, with the
 code `proto_too_deep` at the brace past the cap. `preflight`, as above,
 checks a whole text before the engine runs.
 
-Use `engine()` rather than a bare `tabnas::Tabnas::new()`: it sets the
-retained backtracking history the union grammar needs, and the engine's
-default of 64 consumed tokens is not enough to rewind one statement.
+`engine()` builds the engine as this crate's parsers build it, with the
+engine's default rewind history, `REWIND_HISTORY`, 64 consumed tokens.
+The grammar has no probe, so no parse rewinds: every document of the
+fixtures and the corpus parses alike at 64 and at 8,192, the history
+this crate kept through 0.7.0.
 
 ### Errors
 
@@ -343,8 +354,8 @@ runtimes to the rest.
   `plugin()` and `proto()`, `toDescriptor` is `to_descriptor`, and the
   descriptor types, `SCALAR_TYPES`, `preflight` and the four `MAX_`
   constants carry their own names. The additions exist because a Rust
-  caller cannot reach for a JavaScript object: `engine()` and `make()`
-  build an instance with the rewind history the union grammar needs,
+  caller cannot reach for a JavaScript object: `engine()` builds an
+  instance as this crate's parsers do,
   `parse_with` carries the nesting bound onto a caller's own instance,
   `parse_value`, `parse_value_with` and `to_descriptor_value` give the
   descriptor as the plain tree the canonical `parse` returns, and

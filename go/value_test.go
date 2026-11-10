@@ -217,8 +217,7 @@ func TestDescriptorTypesHaveNoUnexportedFields(t *testing.T) {
 
 // ToDescriptorValue is ParseValue for a caller that reuses an engine.
 func TestToDescriptorValueOnAReusedEngine(t *testing.T) {
-	rh := 8192
-	j := tabnas.Make(tabnas.Options{Rewind: &tabnas.RewindOptions{History: &rh}})
+	j := tabnas.Make()
 	if err := Proto(j); err != nil {
 		t.Fatal(err)
 	}

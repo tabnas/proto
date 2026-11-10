@@ -7,8 +7,10 @@
 // knows a statement by that name; `test/passes/*.tsv` holds each source to
 // the names its passes open, so a grammar that renumbers them fails here,
 // in every runtime (`go/passes_test.go`, `rs/tests/passes_test.rs`), and
-// not in a host's stream. The rest of the part, every event of it, is held
-// to the tree's walk where it runs, in a host that carries alchemy.
+// not in a host's stream. Both parsers are held to it: `make()`'s and
+// `makeStreaming()`'s, whose passes are the same (./streaming.test.ts). The
+// rest of the part, every event of it, is held to the tree's walk where it
+// runs, in a host that carries alchemy.
 //
 // Repetition is replacement (AGENTS.md): the items of a list, the
 // declarations of a file, the fields of a message, the values of an enum,
@@ -21,15 +23,16 @@ import { test } from 'node:test'
 
 import { findSpecDir, makeRunner } from '@tabnas/support'
 
-import { make } from '../dist/proto'
+import { make, makeStreaming } from '../dist/proto'
 
 const STATEMENT =
   /^((syntaxOrEdition|topLevelDef|messageElement|enumElement|oneofElement|serviceElement)\$alt\d+|field|optionStmt|fieldOption|messageValueEntry)$/
 
 // The names of the statements' rules, in the order their open passes come,
-// and `constant$alt5` where a constant opens an aggregate.
-function statements(src: string): string[] {
-  const tn = make()
+// and `constant$alt5` where a constant opens an aggregate, on a parser
+// `build` makes.
+function statements(src: string, build: () => any): string[] {
+  const tn = build()
   const names: string[] = []
   tn.sub({
     ruleDone: (rule: any, _ctx: any, done: any) => {
@@ -43,7 +46,11 @@ function statements(src: string): string[] {
 }
 
 makeRunner({
-  parse: (input) => JSON.stringify(statements(input)),
+  parse: (input) => {
+    const names = statements(input, make)
+    assert.deepEqual(statements(input, makeStreaming), names, 'makeStreaming()')
+    return JSON.stringify(names)
+  },
   parseExpected: (expected) => expected,
 }).dir(path.join(findSpecDir(__dirname), '..', 'passes'))
 
