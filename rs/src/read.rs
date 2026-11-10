@@ -24,7 +24,7 @@
 
 use std::sync::Arc;
 
-use tabnas::{Context, LexMatcher, Lexer, Rule, Token, Value, TIN_BD, TIN_CM, TIN_LN, TIN_SP};
+use tabnas::{Context, Rule, Token, Value, TIN_BD, TIN_CM, TIN_LN, TIN_SP};
 
 use crate::aggregate::{interior_text, Position, AGGREGATE, AGGREGATE_OPEN};
 use crate::MAX_NESTING_DEPTH;
@@ -232,50 +232,5 @@ fn append(context: &mut Context, src: &str) {
                 .u
                 .insert(TEXT.to_string(), Value::String(src.to_string()));
         }
-    }
-}
-
-/// Whether the window decides where the word at its start ends: `Ok` when
-/// a character that is no word's lies in it, or the window holds no word,
-/// and otherwise `Err` with the characters the window holds.
-fn word_reach(window: &str) -> Result<(), usize> {
-    let mut read = 0;
-    for ch in window.chars() {
-        if !(ch.is_ascii_alphanumeric() || '_' == ch) {
-            return Ok(());
-        }
-        read += 1;
-    }
-    Err(read)
-}
-
-/// The lexer matcher [`crate::make`]'s parser carries with `lex.window`.
-/// In a parse from a reader it reads the window on, doubling, until the
-/// word at the cursor ends inside it, or the source ends, so that a
-/// keyword's `\b` sees the character after the word as the whole text
-/// shows it. It cuts no token, and in a parse of a whole text it returns
-/// at once.
-pub(crate) fn reach_matcher() -> LexMatcher {
-    LexMatcher {
-        name: "proto-reach".to_string(),
-        order: 900_000.0,
-        matcher: None,
-        imperative: Some(Arc::new(
-            |lexer: &mut Lexer<'_>, _rule: &mut Rule, _context: &mut Context| {
-                if !lexer.windowed() {
-                    return None;
-                }
-                let mut ahead = 1;
-                loop {
-                    let held = lexer.fill(ahead);
-                    match word_reach(lexer.window()) {
-                        Ok(()) => return None,
-                        Err(_) if !held => return None,
-                        Err(read) => ahead = (read + 1).max(2 * ahead),
-                    }
-                }
-            },
-        )),
-        factory: None,
     }
 }

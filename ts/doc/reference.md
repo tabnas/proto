@@ -60,11 +60,10 @@ through the transducer part, `translate().transduce`, which makes the
 tree's events a declaration at a time.
 
 It declares `lex.window`, so `tn.parseReader(reader)` reads a document a
-window at a time, never whole. The parser reads a keyword whole before it
-cuts it, and keeps an aggregate option value's text from the tokens
-between its braces, since a window never holds the whole source. The parser refuses
-nesting past the cap as it reads, so a host reading through a reader
-needs no check of its own.
+window at a time, never whole. The parser keeps an aggregate option
+value's text from the tokens between its braces, since a window never
+holds the whole source. The parser refuses nesting past the cap as it
+reads, so a host reading through a reader needs no check of its own.
 
 ### `preflight(src)` and `MAX_NESTING_DEPTH`
 

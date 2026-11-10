@@ -148,31 +148,3 @@ func (r *reading) advance(src string) {
 		i = r.at.step(src, i)
 	}
 }
-
-// reachMatcher is the lexer matcher Make installs with Lex.Window. In a
-// parse from a reader it reads the window on, doubling, until the word at
-// the cursor ends inside it, or the source ends, so that a keyword's \b
-// sees the byte after the word as the whole text shows it. It cuts no
-// token, and in a parse of a whole text it returns at once.
-func reachMatcher() *tabnas.MatchSpec {
-	return &tabnas.MatchSpec{Order: 900000, Make: func(_ *tabnas.LexConfig, _ *tabnas.Options) tabnas.LexMatcher {
-		return func(lex *tabnas.Lex, _ *tabnas.Rule) *tabnas.Token {
-			if !lex.Windowed() {
-				return nil
-			}
-			ahead := 1
-			for {
-				held := lex.Fill(ahead)
-				window := lex.Window()
-				end := 0
-				for end < len(window) && isWord(window[end]) {
-					end++
-				}
-				if end < len(window) || !held {
-					return nil
-				}
-				ahead = max(end+1, 2*ahead)
-			}
-		}
-	}}
-}

@@ -5,12 +5,12 @@
 
 // A parse from a reader, a window of the source at a time (admin ADR-30;
 // tabnas/parser's doc/chunked-source.md, "Proving it"), against the same
-// text parsed whole. `make()` declares `lex.window`: the keywords, match
-// tokens, are read behind `proto-reach`, a matcher that reads the window on
-// until the word at the cursor ends inside it; the nesting cap is counted
-// as the lexer gives the parser its tokens; and an aggregate's text, which
-// a parse of a whole text reads from the source, is kept from the tokens
-// between its braces (`src/read.rs`).
+// text parsed whole. `make()` declares `lex.window`: the nesting cap is
+// counted as the lexer gives the parser its tokens, and an aggregate's
+// text, which a parse of a whole text reads from the source, is kept from
+// the tokens between its braces (`src/read.rs`). The keywords, match
+// tokens, need nothing of their own: the engine cuts a word that met the
+// window's end again over a wider window (tabnas/parser 0.12.17).
 //
 // Every row of the shared fixtures (`test/spec`, `test/passes`,
 // `test/tree`), every input of the protoc corpus (`test/protobuf-suite`)
@@ -450,14 +450,8 @@ fn the_parser_refuses_nesting_past_the_cap_as_it_reads() {
 
 #[test]
 fn a_long_document_parses_from_a_reader_in_time_linear_in_its_length() {
-    // Ten times the messages, read through a window in pieces of 4 KiB,
-    // take about ten times as long, never the square of it. The window's
-    // block is larger than either document, so it never drops text behind
-    // the cursor: what this measures is the reading, the window's fills,
-    // `proto-reach` and the reading of the nesting and the aggregates. The
-    // engine's own release, which in Rust walks every token the parser
-    // holds on each fetch once the window may drop text, and proto holds a
-    // history of 8,192, is tabnas/parser#334's.
+    // Ten times the messages, read through the engine's window in pieces
+    // of 4 KiB, take about ten times as long, never the square of it.
     let parser = make();
     let document = |messages: usize| -> String {
         let mut text = String::from("syntax = \"proto3\";\n");
@@ -471,18 +465,11 @@ fn a_long_document_parses_from_a_reader_in_time_linear_in_its_length() {
     let time = |text: &str| -> f64 {
         let started = Instant::now();
         parser
-            .parse_reader_with_sizes(
-                Pieces {
-                    bytes: text.as_bytes(),
-                    at: 0,
-                    size: 4096,
-                },
-                WindowSizes {
-                    margin: 64 * 1024,
-                    block: 64 * 1024 * 1024,
-                    chunk: 4096,
-                },
-            )
+            .parse_reader(Pieces {
+                bytes: text.as_bytes(),
+                at: 0,
+                size: 4096,
+            })
             .expect("the document parses");
         started.elapsed().as_secs_f64()
     };

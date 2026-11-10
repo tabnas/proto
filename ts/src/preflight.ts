@@ -53,7 +53,7 @@ const KEYWORDS = new Set([
 const SEPARATORS = ' \t\r\n[]:,;=()<>-.+'
 
 // A word character, as the keywords' `(?![A-Za-z0-9_])` reads one.
-export function isWord(ch: number): boolean {
+function isWord(ch: number): boolean {
   return (0x30 <= ch && ch <= 0x39) || (0x41 <= ch && ch <= 0x5a) ||
     (0x61 <= ch && ch <= 0x7a) || 0x5f === ch
 }

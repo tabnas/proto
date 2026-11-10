@@ -4,12 +4,12 @@ package tabnasproto
 
 // A parse from a reader, a window of the source at a time (admin ADR-30;
 // tabnas/parser's doc/chunked-source.md, "Proving it"), against the same
-// text parsed whole. Make declares Lex.Window: the keywords, match tokens,
-// are read behind proto-reach, a matcher that reads the window on until the
-// word at the cursor ends inside it; the nesting cap is counted as the lexer
-// gives the parser its tokens; and an aggregate's text, which a parse of a
-// whole text reads from the source, is kept from the tokens between its
-// braces (read.go).
+// text parsed whole. Make declares Lex.Window: the nesting cap is counted as
+// the lexer gives the parser its tokens, and an aggregate's text, which a
+// parse of a whole text reads from the source, is kept from the tokens
+// between its braces (read.go). The keywords, match tokens, need nothing of
+// their own: the engine cuts a word that met the window's end again over a
+// wider window (tabnas/parser 0.12.17).
 //
 // Every row of the shared fixtures (test/spec, test/passes, test/tree),
 // every input of the protoc corpus (test/protobuf-suite) and
