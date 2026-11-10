@@ -88,7 +88,7 @@ describe('nesting cap', () => {
 
     // The engine with the plugin refuses the same documents as it reads
     // them, at the brace past the cap (../src/read.ts, window.test.ts).
-    const tn = new Tabnas({ rewind: { history: 8192 } }).use(Proto)
+    const tn = new Tabnas().use(Proto)
     const src = nested(MAX_NESTING_DEPTH)
     preflight(src)
     assert.equal(levels(toDescriptor(tn.parse(src))), MAX_NESTING_DEPTH)
@@ -99,7 +99,7 @@ describe('nesting cap', () => {
     // an engine with the grammar alone and not the plugin builds, is walked
     // whole. The Rust walk refuses one, which DIVERGENCE.md section 2
     // records.
-    const bare = new Tabnas({ rewind: { history: 8192 } })
+    const bare = new Tabnas()
     bare.grammar(require('../dist/proto-grammar.json'))
     assert.equal(levels(toDescriptor(bare.parse(deep))), MAX_NESTING_DEPTH + 1)
   })

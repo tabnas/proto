@@ -4,10 +4,11 @@ package tabnasproto
 
 // A parse from a reader, a window of the source at a time (admin ADR-30;
 // tabnas/parser's doc/chunked-source.md, "Proving it"), against the same
-// text parsed whole. Make declares Lex.Window: the nesting cap is counted as
-// the lexer gives the parser its tokens, and an aggregate's text, which a
-// parse of a whole text reads from the source, is kept from the tokens
-// between its braces (read.go). The keywords, match tokens, need nothing of
+// text parsed whole, by each of the two parsers, Make's, whose value is the
+// CST, and MakeStreaming's, which builds no tree. Both declare Lex.Window:
+// the nesting cap is counted as the lexer gives the parser its tokens, and
+// Make's parser keeps an aggregate's text, which a parse of a whole text
+// reads from the source, from the tokens between its braces (read.go). The keywords, match tokens, need nothing of
 // their own: the engine cuts a word that met the window's end again over a
 // wider window (tabnas/parser 0.12.17).
 //
@@ -20,8 +21,9 @@ package tabnasproto
 // the edge is proved with long documents: their tokens of every kind
 // straddle the reads, and the long ones, longer than the window, run past
 // its end, in pieces of 61, 4096 and 65536 bytes. The value (the CST, an
-// aggregate's text included), the tokens the lexer gives, the rule passes,
-// and an error's code, position, row, column and token must be the same. An
+// aggregate's text included, or the streaming parser's none), the tokens
+// the lexer gives, the rule passes, and an error's code, position, row,
+// column and token must be the same. An
 // error's excerpt is not compared: a parse from a reader shows a long line
 // only as far back as the window reaches (tabnas/parser's DIVERGENCE.md).
 //
@@ -81,9 +83,16 @@ type windowLog struct {
 	rules  []string
 }
 
-// logged is Make's parser, its tokens and rule passes subscribed to log.
-func logged(t *testing.T, log *windowLog) *tabnas.Tabnas {
-	j, err := Make()
+// windowParsers are the two parsers, each by the name of its constructor.
+var windowParsers = []struct {
+	name  string
+	build func() (*tabnas.Tabnas, error)
+}{{"Make", Make}, {"MakeStreaming", MakeStreaming}}
+
+// logged is a parser build makes, its tokens and rule passes subscribed to
+// log.
+func logged(t *testing.T, log *windowLog, build func() (*tabnas.Tabnas, error)) *tabnas.Tabnas {
+	j, err := build()
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -226,14 +235,33 @@ func longDocument() string {
 	return b.String()
 }
 
-func TestMakeReadsAReaderAWindowAtATime(t *testing.T) {
-	j, err := Make()
-	if err != nil {
-		t.Fatal(err)
+// longErrorDocuments are long documents that fail: a token that runs past
+// the engine's window and is then refused, or never ends, and nesting past
+// the cap after a long run.
+func longErrorDocuments() []string {
+	pad := "// " + strings.Repeat("padding \u00fc ", 9000) + "\r\nsyntax = \"proto3\";\r\n"
+	return []string{
+		pad + "option a = \"" + strings.Repeat("unclosed string ", 6000) + "\r\n",
+		pad + "/* " + strings.Repeat("an unclosed comment ", 4000) + "\r\n",
+		pad + "message M { " + strings.Repeat("int32 a = 1; ", 6000) + "\r\n",
+		pad + "option b = {" + strings.Repeat(" c: 1", 15000) + " ) };\r\n",
+		pad + "message " + strings.Repeat("m", 70000) + " } \r\n",
+		pad + "option (x) = " + strings.Repeat("{a ", MaxNestingDepth+1) + strings.Repeat("}", MaxNestingDepth+1) + ";\r\n",
+		pad + strings.Repeat("message M{", MaxNestingDepth+1) + strings.Repeat("}", MaxNestingDepth+1),
+		pad + strings.Repeat("message M {", 100000),
 	}
-	lex := j.Options().Lex
-	if lex == nil || lex.Window == nil || !*lex.Window {
-		t.Fatal("Make does not declare Lex.Window")
+}
+
+func TestBothParsersReadAReaderAWindowAtATime(t *testing.T) {
+	for _, p := range windowParsers {
+		j, err := p.build()
+		if err != nil {
+			t.Fatal(err)
+		}
+		lex := j.Options().Lex
+		if lex == nil || lex.Window == nil || !*lex.Window {
+			t.Fatalf("%s does not declare Lex.Window", p.name)
+		}
 	}
 }
 
@@ -242,25 +270,33 @@ func TestEveryFixtureAndCorpusDocumentParsesTheSameFromAReader(t *testing.T) {
 	if len(documents) < 500 {
 		t.Fatalf("%d documents", len(documents))
 	}
-	log := &windowLog{}
-	j := logged(t, log)
-	compared, aggregates := 0, 0
-	for _, document := range documents {
-		sizes := readSizes
-		if len(document.text) > 16*1024 {
-			sizes = bigSizes
-		}
-		compared += differential(t, j, log, document.at, document.text, sizes)
-		if value, err := j.Parse(document.text); err == nil {
-			if text, _ := json.Marshal(value); strings.Contains(string(text), `"aggregate"`) {
-				aggregates++
+	tree, err := Make()
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, p := range windowParsers {
+		t.Run(p.name, func(t *testing.T) {
+			log := &windowLog{}
+			j := logged(t, log, p.build)
+			compared, aggregates := 0, 0
+			for _, document := range documents {
+				sizes := readSizes
+				if len(document.text) > 16*1024 {
+					sizes = bigSizes
+				}
+				compared += differential(t, j, log, document.at, document.text, sizes)
+				if value, err := tree.Parse(document.text); err == nil {
+					if text, _ := json.Marshal(value); strings.Contains(string(text), `"aggregate"`) {
+						aggregates++
+					}
+				}
 			}
-		}
+			if aggregates < 50 {
+				t.Fatalf("%d documents hold an aggregate", aggregates)
+			}
+			t.Logf("%d documents, %d with an aggregate, %d reader parses", len(documents), aggregates, compared)
+		})
 	}
-	if aggregates < 50 {
-		t.Fatalf("%d documents hold an aggregate", aggregates)
-	}
-	t.Logf("%d documents, %d with an aggregate, %d reader parses", len(documents), aggregates, compared)
 }
 
 func TestALongDocumentParsesTheSameFromAReader(t *testing.T) {
@@ -275,32 +311,29 @@ func TestALongDocumentParsesTheSameFromAReader(t *testing.T) {
 	if body, _ := tree.Get("body"); len(body.([]any)) != 508 {
 		t.Fatalf("%d declarations", len(body.([]any)))
 	}
-	log := &windowLog{}
-	differential(t, logged(t, log), log, "the long document", text, longSizes)
+	for _, p := range windowParsers {
+		t.Run(p.name, func(t *testing.T) {
+			log := &windowLog{}
+			differential(t, logged(t, log, p.build), log, "the long document", text, longSizes)
+		})
+	}
 }
 
 func TestALongDocumentFailsTheSameFromAReader(t *testing.T) {
 	// A token that runs past the engine's window and is then refused, or
 	// never ends, and nesting past the cap after a long run: the error is
 	// the whole text's, code, place and token.
-	pad := "// " + strings.Repeat("padding \u00fc ", 9000) + "\r\nsyntax = \"proto3\";\r\n"
-	bad := []string{
-		pad + "option a = \"" + strings.Repeat("unclosed string ", 6000) + "\r\n",
-		pad + "/* " + strings.Repeat("an unclosed comment ", 4000) + "\r\n",
-		pad + "message M { " + strings.Repeat("int32 a = 1; ", 6000) + "\r\n",
-		pad + "option b = {" + strings.Repeat(" c: 1", 15000) + " ) };\r\n",
-		pad + "message " + strings.Repeat("m", 70000) + " } \r\n",
-		pad + "option (x) = " + strings.Repeat("{a ", MaxNestingDepth+1) + strings.Repeat("}", MaxNestingDepth+1) + ";\r\n",
-		pad + strings.Repeat("message M{", MaxNestingDepth+1) + strings.Repeat("}", MaxNestingDepth+1),
-		pad + strings.Repeat("message M {", 100000),
-	}
-	log := &windowLog{}
-	j := logged(t, log)
-	for index, text := range bad {
-		if _, err := j.Parse(text); err == nil {
-			t.Fatalf("long error document %d parses", index)
-		}
-		differential(t, j, log, fmt.Sprintf("long error document %d", index), text, longSizes)
+	for _, p := range windowParsers {
+		t.Run(p.name, func(t *testing.T) {
+			log := &windowLog{}
+			j := logged(t, log, p.build)
+			for index, text := range longErrorDocuments() {
+				if _, err := j.Parse(text); err == nil {
+					t.Fatalf("long error document %d parses", index)
+				}
+				differential(t, j, log, fmt.Sprintf("long error document %d", index), text, longSizes)
+			}
+		})
 	}
 }
 
@@ -311,35 +344,37 @@ func TestTheParserRefusesNestingPastTheCapAsItReads(t *testing.T) {
 	nest := func(depth int, open string) string {
 		return "syntax = \"proto2\";\n" + strings.Repeat(open, depth) + strings.Repeat("}", depth)
 	}
-	j, err := Make()
-	if err != nil {
-		t.Fatal(err)
-	}
-	if _, err := j.Parse(nest(MaxNestingDepth, "message M {")); err != nil {
-		t.Fatal(err)
-	}
-	for _, c := range []struct {
-		text string
-		pos  int
-	}{
-		{nest(MaxNestingDepth+1, "message M {"), 19 + 11*MaxNestingDepth + 10},
-		{nest(MaxNestingDepth+1, "message M{"), 19 + 10*MaxNestingDepth + 9},
-		{"option (x) = " + strings.Repeat("{a ", MaxNestingDepth+1), 13 + 3*MaxNestingDepth},
-		{strings.Repeat("message M {", 100000), 11*MaxNestingDepth + 10},
-	} {
-		for _, read := range []bool{false, true} {
-			var err error
-			if read {
-				_, err = j.ParseReader(&pieces{bytes: []byte(c.text), size: 64})
-			} else {
-				_, err = j.Parse(c.text)
-			}
-			var te *tabnas.TabnasError
-			if !errors.As(err, &te) || te.Code != tooDeep || te.Pos != c.pos || te.Src != "{" {
-				t.Fatalf("%.40q (from a reader %v): %v", c.text, read, err)
-			}
-			if !strings.Contains(te.Error(), tooDeepMessage) {
-				t.Fatalf("%.40q: %s", c.text, te.Error())
+	for _, p := range windowParsers {
+		j, err := p.build()
+		if err != nil {
+			t.Fatal(err)
+		}
+		if _, err := j.Parse(nest(MaxNestingDepth, "message M {")); err != nil {
+			t.Fatal(p.name, err)
+		}
+		for _, c := range []struct {
+			text string
+			pos  int
+		}{
+			{nest(MaxNestingDepth+1, "message M {"), 19 + 11*MaxNestingDepth + 10},
+			{nest(MaxNestingDepth+1, "message M{"), 19 + 10*MaxNestingDepth + 9},
+			{"option (x) = " + strings.Repeat("{a ", MaxNestingDepth+1), 13 + 3*MaxNestingDepth},
+			{strings.Repeat("message M {", 100000), 11*MaxNestingDepth + 10},
+		} {
+			for _, read := range []bool{false, true} {
+				var err error
+				if read {
+					_, err = j.ParseReader(&pieces{bytes: []byte(c.text), size: 64})
+				} else {
+					_, err = j.Parse(c.text)
+				}
+				var te *tabnas.TabnasError
+				if !errors.As(err, &te) || te.Code != tooDeep || te.Pos != c.pos || te.Src != "{" {
+					t.Fatalf("%s: %.40q (from a reader %v): %v", p.name, c.text, read, err)
+				}
+				if !strings.Contains(te.Error(), tooDeepMessage) {
+					t.Fatalf("%s: %.40q: %s", p.name, c.text, te.Error())
+				}
 			}
 		}
 	}
@@ -348,7 +383,14 @@ func TestTheParserRefusesNestingPastTheCapAsItReads(t *testing.T) {
 func TestALongDocumentParsesFromAReaderInTimeLinearInItsLength(t *testing.T) {
 	// Ten times the messages, read through the engine's window in pieces
 	// of 4 KiB, take about ten times as long, never the square of it.
-	j, err := Make()
+	for _, p := range windowParsers {
+		t.Run(p.name, func(t *testing.T) { linearTime(t, p.build) })
+	}
+}
+
+// linearTime times a parser build makes over 300 messages and 3,000.
+func linearTime(t *testing.T, build func() (*tabnas.Tabnas, error)) {
+	j, err := build()
 	if err != nil {
 		t.Fatal(err)
 	}

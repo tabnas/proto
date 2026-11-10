@@ -5,7 +5,10 @@ package tabnasproto
 // What the parser reads as the lexer gives it its tokens, a token at a
 // time, so that nothing waits for the document's end: the nesting cap,
 // and, in a parse from a reader, the text of an aggregate option value.
-// Port of ts/src/read.ts, which explains both in full.
+// Port of ts/src/read.ts, which explains both in full. Proto installs
+// readToken, which reads both; the parser MakeStreaming builds keeps no
+// tree, and so no aggregate's text, and installs readNesting, which reads
+// the cap alone.
 //
 // The cap: readToken counts the braces among the tokens the lexer hands
 // the parser, ignored ones and the brace a word or a number is cut with
@@ -69,10 +72,12 @@ type reading struct {
 	open []openAggregate
 }
 
-// readToken is the lex subscriber Proto installs.
-func readToken(tkn *tabnas.Token, _ *tabnas.Rule, ctx *tabnas.Context) {
+// readingOf is what has been read of the parse whose context is ctx, made
+// at its first token; or nil where tkn was read already: a token the lexer
+// gives again is not read again.
+func readingOf(tkn *tabnas.Token, ctx *tabnas.Context) *reading {
 	if ctx == nil {
-		return
+		return nil
 	}
 	r, _ := ctx.U[readingKey].(*reading)
 	if r == nil {
@@ -83,9 +88,15 @@ func readToken(tkn *tabnas.Token, _ *tabnas.Rule, ctx *tabnas.Context) {
 		ctx.U[readingKey] = r
 	}
 	if tkn.SI < r.next {
-		return
+		return nil
 	}
 	r.next = tkn.SI + len(tkn.Src)
+	return r
+}
+
+// refused counts the braces, and makes the brace that opens a level past
+// the cap a bad token: whether tkn is that brace.
+func (r *reading) refused(tkn *tabnas.Token) bool {
 	switch tkn.Src {
 	case "{":
 		if MaxNestingDepth <= r.depth {
@@ -93,7 +104,7 @@ func readToken(tkn *tabnas.Token, _ *tabnas.Rule, ctx *tabnas.Context) {
 			tkn.Name = "#BD"
 			tkn.Why = tooDeep
 			tkn.Err = tooDeep
-			return
+			return true
 		}
 		r.depth++
 	case "}":
@@ -101,8 +112,26 @@ func readToken(tkn *tabnas.Token, _ *tabnas.Rule, ctx *tabnas.Context) {
 			r.depth--
 		}
 	}
+	return false
+}
+
+// readToken is the lex subscriber Proto installs: the cap, and in a parse
+// from a reader the aggregates' text, which the CST keeps.
+func readToken(tkn *tabnas.Token, _ *tabnas.Rule, ctx *tabnas.Context) {
+	r := readingOf(tkn, ctx)
+	if r == nil || r.refused(tkn) {
+		return
+	}
 	if ctx.Lex != nil && ctx.Lex.Windowed() {
 		r.readAggregate(tkn)
+	}
+}
+
+// readNesting is the lex subscriber of the parser MakeStreaming builds: the
+// cap alone, since that parser builds no CST to keep an aggregate's text in.
+func readNesting(tkn *tabnas.Token, _ *tabnas.Rule, ctx *tabnas.Context) {
+	if r := readingOf(tkn, ctx); r != nil {
+		r.refused(tkn)
 	}
 }
 

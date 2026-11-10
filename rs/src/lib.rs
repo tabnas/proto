@@ -106,14 +106,16 @@ pub const PLUGIN_NAME: &str = "Proto";
 /// stale). Generated: never edit it.
 const GRAMMAR_SPEC: &str = include_str!("../proto-grammar.json");
 
-/// The engine's retained backtracking history, as the canonical
-/// `new Tabnas({ rewind: { history: 8192 } })` sets it.
+/// The engine's retained rewind history: its default, 64 consumed tokens,
+/// which the canonical `new Tabnas()` keeps.
 ///
-/// The union grammar backtracks across whole statements, and the engine's
-/// default of 64 consumed tokens is not enough to rewind one. This is a
-/// parse-affecting setting, not a tuning knob: lower it and documents
-/// that should parse stop parsing.
-pub const REWIND_HISTORY: usize = 8192;
+/// The compiled grammar has no probe, the one builtin that rewinds, so no
+/// parse rewinds, and the one reader of the history is the action that
+/// records an aggregate's text, which reads the last token consumed. Every
+/// document of the fixtures and the corpus parses alike at 64 and at 8,192,
+/// the bound this crate kept through 0.7.0 (`tests/history_test.rs`); a
+/// longer history only holds a window's text back to its oldest token.
+pub const REWIND_HISTORY: usize = 64;
 
 /// How a `.proto` document is read.
 ///
@@ -225,8 +227,8 @@ pub fn plugin() -> Plugin {
 /// A bare engine configured the way this plugin needs it, with no grammar
 /// installed yet.
 ///
-/// The canonical `new Tabnas({ rewind: { history: 8192 } })`. See
-/// [`REWIND_HISTORY`] for why the setting is not optional.
+/// The canonical `new Tabnas()`, with the engine's default
+/// [`REWIND_HISTORY`].
 pub fn engine() -> Tabnas {
     Tabnas::with_options(EngineOptions {
         rewind: RewindOptions {
@@ -236,24 +238,28 @@ pub fn engine() -> Tabnas {
     })
 }
 
-/// A proto parser: [`engine`] with this plugin installed, the
-/// counterpart of `new Tabnas().use(Proto)` and the Go `Proto(j)`.
+/// The parser for a tree: [`engine`] with this plugin installed, the
+/// counterpart of `new Tabnas().use(Proto)` and the Go `Proto(j)`. Its
+/// value is the `{rule, src, kids}` CST that [`to_tree`] and
+/// [`to_descriptor`] walk, as [`parse_with`], [`parse_value_with`] and
+/// [`parse_tree_with`] take it. A CST holds the whole document: for a
+/// stream, take [`make_streaming`].
+///
+/// The two parsers, this and [`make_streaming`]'s, each refuse a document
+/// nesting past [`MAX_NESTING_DEPTH`] as they read it, with the code
+/// `proto_too_deep` at the brace past the cap, and declare `lex.window`, so
+/// that [`Tabnas::parse_reader`] reads a document a window at a time, never
+/// whole. Both make the same rule passes, token for token, and fail the
+/// same documents at the same place. Their values differ, so neither
+/// stands in for the other. This one keeps an aggregate option value's
+/// text from the tokens between its braces in a parse from a reader, since
+/// a window never holds the whole source.
 ///
 /// Installing the grammar dominates a parse by more than an order of
 /// magnitude, so it is installed once per process, and each call returns
 /// a clone of that parser. A clone is a parser of its own: it prepares
 /// its own state, and a subscriber added to it, or an option changed on
-/// it, reaches no other parser, so a host that needs a parser per
-/// document, as one that reads the rule passes does, pays the install
-/// once.
-///
-/// The parser refuses a document nesting past [`MAX_NESTING_DEPTH`] as it
-/// reads it, with the code `proto_too_deep` at the brace past the cap. It
-/// declares `lex.window`, so that [`Tabnas::parse_reader`] reads a
-/// document a window at a time, never whole: its rule passes, which the
-/// transducer part reads, come as the reader gives the text, and an
-/// aggregate option value's text is kept from the tokens between its
-/// braces, since a window never holds the whole source.
+/// it, reaches no other parser.
 ///
 /// ```
 /// fn main() -> Result<(), Box<dyn std::error::Error>> {
@@ -266,6 +272,118 @@ pub fn engine() -> Tabnas {
 /// ```
 pub fn make() -> Tabnas {
     shared().clone()
+}
+
+/// The parser a host streams a `.proto` document through: its rule passes,
+/// which the transducer part (`alchemy/transduce.alc`) reads a declaration
+/// at a time, are [`make`]'s, and it builds no tree. Its grammar is the
+/// compiled one without the CST's builders, so a parse holds no
+/// declaration it has closed, nor any of their text, and its value is not
+/// the CST: [`Tabnas::parse`] returns a null, which no walk takes. For a
+/// tree, take [`make`].
+///
+/// Like [`make`], it refuses a document nesting past [`MAX_NESTING_DEPTH`]
+/// as it reads it, declares `lex.window`, and returns a clone of a parser
+/// installed once per process, so a host that needs a parser per document
+/// pays the install once.
+///
+/// ```
+/// fn main() -> Result<(), Box<dyn std::error::Error>> {
+///     let parser = tabnas_proto::make_streaming();
+///     let value = parser.parse("syntax = \"proto3\";\nmessage M { int32 a = 1; }")?;
+///     assert_eq!(value, tabnas::Value::Null);
+///     Ok(())
+/// }
+/// ```
+pub fn make_streaming() -> Tabnas {
+    shared_streaming().clone()
+}
+
+/// The compiled grammar's tree builders, the engine's builtins that build
+/// the `{rule, src, kids}` CST, each with the member of an alternate's `k`
+/// that configures it, if any.
+const TREE_BUILDERS: [(&str, Option<&str>); 3] = [
+    ("@node$", Some("node$")),
+    ("@capture$", Some("capture$")),
+    ("@bubble$", None),
+];
+
+/// The compiled grammar without its tree builders, which the parser
+/// [`make_streaming`] builds installs: the same rules, alternates, tokens
+/// and counters, so the same rule passes, and no node built. A builder is
+/// an alternate's action, which runs after the alternate has matched, and
+/// the grammar's conditions read counters, never a node, so taking the
+/// builders away changes what a parse builds and nothing of how it goes.
+/// Port of `withoutTree` in `ts/src/proto.ts`.
+fn streaming_grammar() -> Result<GrammarSpec, ProtoError> {
+    let mut document: serde_json::Value = serde_json::from_str(GRAMMAR_SPEC)
+        .map_err(|error| ProtoError::Grammar(format!("proto: {error}")))?;
+    if let Some(serde_json::Value::Object(rules)) = document.get_mut("rule") {
+        for rule in rules.values_mut() {
+            for state in ["open", "close"] {
+                let Some(serde_json::Value::Array(alternates)) = rule.get_mut(state) else {
+                    continue;
+                };
+                for alternate in alternates.iter_mut() {
+                    let Some(alternate) = alternate.as_object_mut() else {
+                        continue;
+                    };
+                    let builder = alternate.get("a").and_then(serde_json::Value::as_str);
+                    let Some((_, config)) = TREE_BUILDERS
+                        .iter()
+                        .find(|(name, _)| Some(*name) == builder)
+                    else {
+                        continue;
+                    };
+                    alternate.shift_remove("a");
+                    if let Some(config) = config {
+                        let emptied = match alternate.get_mut("k") {
+                            Some(serde_json::Value::Object(k)) => {
+                                k.shift_remove(*config);
+                                k.is_empty()
+                            }
+                            _ => false,
+                        };
+                        if emptied {
+                            alternate.shift_remove("k");
+                        }
+                    }
+                }
+            }
+        }
+    }
+    GrammarSpec::from_value(document)
+        .map_err(|error| ProtoError::Grammar(format!("proto: {error}")))
+}
+
+/// [`engine`] with the grammar without its tree builders installed, built
+/// anew: the parser [`shared_streaming`] holds, which [`make_streaming`]
+/// clones.
+fn build_streaming() -> Tabnas {
+    let mut parser = engine();
+    let spec = streaming_grammar().expect("the embedded proto grammar is fixed and valid");
+    parser
+        .grammar(&spec)
+        .expect("the embedded proto grammar installs");
+    parser
+        .set_options(|options| {
+            options
+                .error
+                .insert(read::TOO_DEEP.to_string(), read::too_deep_message());
+            options
+                .hint
+                .insert(read::TOO_DEEP.to_string(), read::too_deep_hint());
+            options.lex.window = true;
+        })
+        .expect("the streaming proto parser takes its options");
+    parser.subscribe_lex(read::read_nesting);
+    parser
+}
+
+/// The shared streaming parser, installed once, as [`shared`] is.
+fn shared_streaming() -> &'static Tabnas {
+    static STREAMING: OnceLock<Tabnas> = OnceLock::new();
+    STREAMING.get_or_init(build_streaming)
 }
 
 /// [`engine`] with this plugin installed, built anew: the parser

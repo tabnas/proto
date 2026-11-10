@@ -97,8 +97,7 @@ func TestAggregateTakesAdjacentStringLiterals(t *testing.T) {
 // the C library builds one.
 func aggregateEngine(t *testing.T) *tabnas.Tabnas {
 	t.Helper()
-	rh := 8192
-	j := tabnas.Make(tabnas.Options{Rewind: &tabnas.RewindOptions{History: &rh}})
+	j := tabnas.Make()
 	if err := Proto(j); err != nil {
 		t.Fatal(err)
 	}

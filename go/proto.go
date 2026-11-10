@@ -77,6 +77,81 @@ func Proto(j *tabnas.Tabnas) error {
 		Hint:  map[string]string{tooDeep: tooDeepHint},
 	})
 	j.Sub(readToken, nil)
+	startUndefined(j)
+	return nil
+}
+
+// startUndefined gives the start rule the engine's Undefined as its node.
+// The Go engine starts a parse with a nil node, which a pass carries as a
+// null value (transduce's parser-event source), where TypeScript's and
+// Rust's start with no node at all. The start rule closes with the CST
+// lifted into its node, but on a document that fails it closes with the
+// node it began with, and that pass carried a null here and nothing in the
+// canonical runtime; and the parser MakeStreaming builds makes no node, so
+// every rule there would carry one. With Undefined, a rule carries a value
+// in neither parser, as in TypeScript and Rust.
+func startUndefined(j *tabnas.Tabnas) {
+	j.Rule("__start__", func(rs *tabnas.RuleSpec, _ *tabnas.Parser) {
+		rs.AddBO(func(r *tabnas.Rule, _ *tabnas.Context) { r.Node = tabnas.Undefined })
+	})
+}
+
+// treeBuilders are the compiled grammar's tree builders, the engine's
+// builtins that build the {rule, src, kids} CST, each with the member of an
+// alternate's K that configures it, if any.
+var treeBuilders = map[string]string{
+	"@node$":    "node$",
+	"@capture$": "capture$",
+	"@bubble$":  "",
+}
+
+// streamingGrammar is the compiled grammar without its tree builders, which
+// the parser MakeStreaming builds installs: the same rules, alternates,
+// tokens and counters, so the same rule passes, and no node built. A
+// builder is an alternate's action, which runs after the alternate has
+// matched, and the grammar's conditions read counters, never a node, so
+// taking the builders away changes what a parse builds and nothing of how
+// it goes. Port of withoutTree in ts/src/proto.ts.
+func streamingGrammar() (*tabnas.GrammarSpec, error) {
+	gs, err := tabnas.GrammarSpecFromJSON(grammarSpec)
+	if err != nil {
+		return nil, fmt.Errorf("proto: the compiled grammar failed to load: %w", err)
+	}
+	for _, rule := range gs.Rule {
+		if rule == nil {
+			continue
+		}
+		for _, state := range []any{rule.Open, rule.Close} {
+			for _, alt := range alternates(state) {
+				ref, _ := alt.A.(string)
+				config, builder := treeBuilders[ref]
+				if !builder {
+					continue
+				}
+				alt.A = nil
+				if config != "" && alt.K != nil {
+					delete(alt.K, config)
+					if len(alt.K) == 0 {
+						alt.K = nil
+					}
+				}
+			}
+		}
+	}
+	return gs, nil
+}
+
+// alternates are the alternates a rule state of a grammar spec holds, in
+// either of the shapes the engine reads.
+func alternates(state any) []*tabnas.GrammarAltSpec {
+	switch v := state.(type) {
+	case []*tabnas.GrammarAltSpec:
+		return v
+	case *tabnas.GrammarAltListSpec:
+		if v != nil {
+			return v.Alts
+		}
+	}
 	return nil
 }
 
@@ -124,8 +199,8 @@ func toDescriptor(cst any, opts *ProtoOptions) (FileDescriptorProto, *order, err
 }
 
 // Parse parses a .proto source string to a FileDescriptorProto in one call.
-// It builds a fresh engine each time; for repeated parsing reuse an engine:
-// build one with tabnas.Make, install Proto, then call ToDescriptor(j.Parse(src)).
+// It builds a fresh engine each time; for repeated parsing reuse Make's
+// parser and call ToDescriptor(j.Parse(src)).
 //
 // A document nesting deeper than MaxNestingDepth is refused before the
 // engine runs, the message naming its depth: see Preflight. The engine

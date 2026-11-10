@@ -16,7 +16,7 @@ import { buildTree } from './build-tree'
 import type { TreeNode, TreeValue } from './build-tree'
 import { recordAggregate } from './aggregate'
 import { MAX_NESTING_DEPTH, preflight } from './preflight'
-import { TOO_DEEP, TOO_DEEP_HINT, TOO_DEEP_MESSAGE, readToken } from './read'
+import { TOO_DEEP, TOO_DEEP_HINT, TOO_DEEP_MESSAGE, readNesting, readToken } from './read'
 import {
   ProtoVersion, declaredVersion, resolveVersion,
 } from './detect-version'
@@ -35,6 +35,41 @@ export interface ProtoOptions {
 // serialized form carries it as an `@~/…/` string, which `tn.grammar()`
 // resolves on install. Hence the cast.
 const COMPILED = compiledGrammar as unknown as GrammarSpec
+
+// The compiled grammar's tree builders, the engine's builtins that build
+// the `{rule, src, kids}` CST, each with the member of an alternate's `k`
+// that configures it, if any.
+const TREE_BUILDERS: Record<string, string | undefined> = {
+  '@node$': 'node$',
+  '@capture$': 'capture$',
+  '@bubble$': undefined,
+}
+
+// The compiled grammar without its tree builders, which the parser
+// `makeStreaming()` builds installs: the same rules, alternates, tokens and
+// counters, so the same rule passes, and no node built. A builder is an
+// alternate's action, which runs after the alternate has matched, and the
+// grammar's conditions read counters, never a node, so taking the builders
+// away changes what a parse builds and nothing of how it goes.
+const STREAMING = withoutTree(compiledGrammar)
+
+function withoutTree(spec: unknown): GrammarSpec {
+  const copy = JSON.parse(JSON.stringify(spec))
+  for (const rule of Object.values<any>(copy.rule)) {
+    for (const state of ['open', 'close']) {
+      for (const alt of rule[state] ?? []) {
+        if ('string' !== typeof alt.a || !(alt.a in TREE_BUILDERS)) continue
+        const config = TREE_BUILDERS[alt.a]
+        delete alt.a
+        if (undefined !== config && null != alt.k) {
+          delete alt.k[config]
+          if (0 === Object.keys(alt.k).length) delete alt.k
+        }
+      }
+    }
+  }
+  return copy as GrammarSpec
+}
 
 // The Tabnas plugin: installs the union proto grammar so the engine can
 // parse `.proto` source into a `{rule, src, kids}` CST. Use the exported
@@ -83,32 +118,64 @@ function toDescriptor(cst: any, options?: Partial<ProtoOptions>): FileDescriptor
 }
 
 // Convenience: parse a `.proto` source string to a FileDescriptorProto in
-// one call. Builds a fresh engine each time; for repeated parsing reuse an
-// engine via `const j = new Tabnas().use(Proto)` and call
-// `toDescriptor(j.parse(src), opts)`.
+// one call. Builds a fresh engine each time; for repeated parsing reuse
+// `make()`'s parser and call `toDescriptor(tn.parse(src), opts)`.
 //
 // A document nesting deeper than MAX_NESTING_DEPTH is refused before the
 // engine runs, the message naming its depth: see ./preflight.ts. The
 // engine refuses one too, as it reads the brace past the cap (./read.ts).
 function parse(src: string, options?: Partial<ProtoOptions>): FileDescriptorProto {
   preflight(src)
-  const tn = new Tabnas({ rewind: { history: 8192 } })
+  const tn = new Tabnas()
   Proto(tn, options)
   return toDescriptor(tn.parse(src), options)
 }
 
-// The parser a host reads a `.proto` document with: a fresh engine with
-// the grammar installed, as `parse` builds one. Its rule passes are what
-// the transducer part (alchemy/transduce.alc) reads, and its value is the
-// `{rule, src, kids}` CST that `toTree` and `toDescriptor` walk. It
-// refuses a document nesting past MAX_NESTING_DEPTH as it reads it, with
-// the code `proto_too_deep`, and declares `lex.window`, so that
+// Two parsers: `make()`'s for a tree, `makeStreaming()`'s for a stream.
+//
+// Each is a fresh engine with the grammar installed, refuses a document
+// nesting past MAX_NESTING_DEPTH as it reads it, with the code
+// `proto_too_deep`, and declares `lex.window`, so that
 // `tn.parseReader(reader)` reads a document a window at a time, never
-// whole: see ./read.ts.
+// whole: see ./read.ts. Both make the same rule passes, token for token,
+// and fail the same documents at the same place. Their values differ, so
+// neither stands in for the other.
+//
+// Each keeps the engine's default rewind history, 64 consumed tokens. The
+// compiled grammar has no probe, so no parse rewinds, and the one reader
+// of that history is `recordAggregate`, which reads the last token
+// consumed (`ctx.v1`). Every document of the fixtures and the corpus
+// parses alike at 64 and at 8,192, the bound proto kept through 0.7.0
+// (test/history.test.ts); a longer history would hold the window's text
+// back to its oldest token.
+
+// The parser for a tree. Its value is the `{rule, src, kids}` CST that
+// `toTree` and `toDescriptor` walk, as `parse` and `parseTree` build it; a
+// parse from a reader keeps an aggregate's text from the tokens between its
+// braces, since a window never holds the whole source. A CST holds the
+// whole document: for a stream, take `makeStreaming()`.
 function make(): Tabnas {
-  const tn = new Tabnas({ rewind: { history: 8192 } })
+  const tn = new Tabnas()
   Proto(tn)
   tn.options({ lex: { window: true } })
+  return tn
+}
+
+// The parser a host streams a `.proto` document through: its rule passes,
+// which the transducer part (alchemy/transduce.alc) reads a declaration at
+// a time, are `make()`'s, and it builds no tree. Its grammar is the
+// compiled one without the CST's builders, so a parse holds no declaration
+// it has closed, nor any of their text, and its value is not the CST:
+// `tn.parse(src)` returns nothing a walk takes. For a tree, take `make()`.
+function makeStreaming(): Tabnas {
+  const tn = new Tabnas()
+  tn.grammar(STREAMING)
+  tn.options({
+    error: { [TOO_DEEP]: TOO_DEEP_MESSAGE },
+    hint: { [TOO_DEEP]: TOO_DEEP_HINT },
+    lex: { window: true },
+  })
+  tn.sub({ lex: readNesting })
   return tn
 }
 
@@ -133,7 +200,7 @@ function parseTree(src: string): TreeNode {
 const VERSION = '0.7.0'
 
 export {
-  Proto, parse, toDescriptor, parseTree, toTree, make, preflight,
+  Proto, parse, toDescriptor, parseTree, toTree, make, makeStreaming, preflight,
   MAX_NESTING_DEPTH, VERSION,
 }
 export type { ProtoVersion, TreeNode, TreeValue }

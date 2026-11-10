@@ -79,7 +79,7 @@ describe('compiled grammar', () => {
       }
       const { Tabnas } = require('@tabnas/parser')
       const { Proto, parse } = require(${JSON.stringify(Path.join(TS, 'dist', 'proto.js'))})
-      const tn = new Tabnas({ rewind: { history: 8192 } }).use(Proto)
+      const tn = new Tabnas().use(Proto)
       const cst = tn.parse('syntax = "proto3"; message M { int32 a = 1; }')
       const file = parse('syntax = "proto3"; message M { int32 a = 1; }')
       Module._load = load

@@ -454,21 +454,61 @@ func buildTree(proto map[string]any) *tabnas.OrderedMap {
 	return astNode("type", "file", "body", body)
 }
 
-// Make returns the parser a host reads a .proto document with: a fresh
-// engine with the grammar installed, as Parse builds one. Its rule passes
-// are what the transducer part (alchemy/transduce.alc) reads, and its value
-// is the {rule, src, kids} CST that ToTree and ToDescriptor walk. It refuses
-// a document nesting past MaxNestingDepth as it reads it, with the code
-// proto_too_deep, and declares Lex.Window, so that its ParseReader reads a
-// document a window at a time, never whole: see read.go.
+// Two parsers: Make's for a tree, MakeStreaming's for a stream.
+//
+// Each is a fresh engine with the grammar installed, refuses a document
+// nesting past MaxNestingDepth as it reads it, with the code proto_too_deep,
+// and declares Lex.Window, so that its ParseReader reads a document a window
+// at a time, never whole: see read.go. Both make the same rule passes, token
+// for token, and fail the same documents at the same place. Their values
+// differ, so neither stands in for the other.
+//
+// Each keeps the engine's default rewind history, 64 consumed tokens. The
+// compiled grammar has no probe, so no parse rewinds, and the one reader of
+// that history is recordAggregate, which reads the last token consumed
+// (ctx.V1). Every document of the fixtures and the corpus parses alike at 64
+// and at 8,192, the bound proto kept through 0.7.0 (history_test.go); a
+// longer history would hold the window's text back to its oldest token.
+
+// Make returns the parser for a tree. Its value is the {rule, src, kids} CST
+// that ToTree and ToDescriptor walk, as Parse and ParseTree build it; a
+// parse from a reader keeps an aggregate's text from the tokens between its
+// braces, since a window never holds the whole source. A CST holds the
+// whole document: for a stream, take MakeStreaming.
 func Make() (*tabnas.Tabnas, error) {
-	rh := 8192
-	j := tabnas.Make(tabnas.Options{Rewind: &tabnas.RewindOptions{History: &rh}})
+	j := tabnas.Make()
 	if err := Proto(j); err != nil {
 		return nil, err
 	}
 	window := true
 	j.SetOptions(tabnas.Options{Lex: &tabnas.LexOptions{Window: &window}})
+	return j, nil
+}
+
+// MakeStreaming returns the parser a host streams a .proto document
+// through: its rule passes, which the transducer part
+// (alchemy/transduce.alc) reads a declaration at a time, are Make's, and it
+// builds no tree. Its grammar is the compiled one without the CST's
+// builders, so a parse holds no declaration it has closed, nor any of their
+// text, and its value is not the CST: Parse returns nothing a walk takes.
+// For a tree, take Make.
+func MakeStreaming() (*tabnas.Tabnas, error) {
+	gs, err := streamingGrammar()
+	if err != nil {
+		return nil, err
+	}
+	j := tabnas.Make()
+	if err := j.Grammar(gs); err != nil {
+		return nil, err
+	}
+	startUndefined(j)
+	window := true
+	j.SetOptions(tabnas.Options{
+		Error: map[string]string{tooDeep: tooDeepMessage},
+		Hint:  map[string]string{tooDeep: tooDeepHint},
+		Lex:   &tabnas.LexOptions{Window: &window},
+	})
+	j.Sub(readNesting, nil)
 	return j, nil
 }
 

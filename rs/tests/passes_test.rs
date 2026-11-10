@@ -1,7 +1,9 @@
 // The rule passes the transducer part (`alchemy/transduce.alc`) reads a
 // statement by, held to the shared fixtures in `test/passes/*.tsv`, as
 // `ts/test/passes.test.ts` holds the TypeScript port and
-// `go/passes_test.go` the Go one; and the ten-thousand items test:
+// `go/passes_test.go` the Go one, for both parsers, `make()`'s and
+// `make_streaming()`'s, whose passes are the same
+// (`tests/streaming_test.rs`); and the ten-thousand items test:
 // repetition is replacement, so the items of a list add no rule depth
 // however many there are.
 
@@ -29,9 +31,13 @@ fn is_statement(name: &str) -> bool {
 }
 
 /// The names of the statements' rules, in the order their open passes
-/// come, and `constant$alt5` where a constant opens an aggregate.
-fn statements(src: &str) -> Result<Vec<String>, tabnas_proto::ProtoError> {
-    let mut parser = tabnas_proto::make();
+/// come, and `constant$alt5` where a constant opens an aggregate, on a
+/// parser `build` makes.
+fn statements(
+    src: &str,
+    build: fn() -> tabnas::Tabnas,
+) -> Result<Vec<String>, tabnas_proto::ProtoError> {
+    let mut parser = build();
     let names = Arc::new(Mutex::new(Vec::new()));
     let seen = names.clone();
     parser.subscribe_rule_done(move |rule, _ctx, done| {
@@ -61,7 +67,10 @@ fn statements(src: &str) -> Result<Vec<String>, tabnas_proto::ProtoError> {
 fn passes_spec() {
     let dir = common::spec_dir().join("..").join("passes");
     Runner::new(|input| {
-        let names = statements(input).map_err(common::to_failure)?;
+        let names = statements(input, tabnas_proto::make).map_err(common::to_failure)?;
+        let streamed =
+            statements(input, tabnas_proto::make_streaming).map_err(common::to_failure)?;
+        assert_eq!(streamed, names, "make_streaming()'s statements: {input:?}");
         let text = serde_json::to_string(&names).expect("names are JSON");
         Ok(Value::from(serde_json::Value::String(text)))
     })
