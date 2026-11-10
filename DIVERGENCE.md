@@ -71,9 +71,11 @@ rows go red and name themselves for deletion.
 
 ## 2. Nesting: every runtime caps the document; Rust also bounds its walk
 
-**All three refuse a document nesting deeper than 100 levels, before the
-engine runs, with the same message. Rust alone also refuses such a tree
-when a caller hands one to its walk directly.**
+**All three refuse a document nesting deeper than 100 levels, before a
+tree that deep exists: `parse` before the engine runs, with the same
+message, and the parser itself as it reads, with the same code at the
+same brace. Rust alone also refuses such a tree when a caller hands one
+to its walk directly.**
 
 Each runtime counts the document's braces, skipping string literals and
 the comments the lexer skips, where the lexer finds them, and refuses
@@ -86,9 +88,19 @@ proto: document nests 101 levels deep, past the 100 this parser accepts
 Like every refusal the plugin makes on its own account, it carries no
 code. `parse` runs the check in every runtime (`Parse` in Go, and Rust's
 `parse_with` too), and each exports it alone, `preflight` in TypeScript
-and Rust and `Preflight` in Go, for a caller that drives the engine and
-wants the CST. The scan is the same in all three: `ts/src/preflight.ts`
-and `go/preflight.go` port `brace_depth` from `rs/src/build_descriptor.rs`.
+and Rust and `Preflight` in Go. The scan is the same in all three:
+`ts/src/preflight.ts` and `go/preflight.go` port `brace_depth` from
+`rs/src/build_descriptor.rs`.
+
+The parser refuses the same documents as it reads them, which a parse
+from a reader needs, since it never holds the whole text the scan counts.
+The plugin installs a lex subscriber in every runtime (`ts/src/read.ts`,
+`go/read.go`, `rs/src/read.rs`) that counts the braces among the tokens
+the lexer hands the parser and turns the brace that opens level 101 into
+a bad token: the parse fails at that brace with the code
+`proto_too_deep`, the same position in every runtime, from a text and
+from a reader. Counting the lexer's own tokens, it needs no scan of its
+own to agree with the lexer.
 
 The scan has to find strings and comments exactly where the lexer does,
 because a brace it skips and the lexer counts lets a document past the
@@ -134,16 +146,16 @@ of those, matches the recursion budget protoc's own parser carries, and
 is more than an order of magnitude past anything a hand-written `.proto`
 nests.
 
-**What stays Rust's alone: the walk refuses a deep tree.** A caller who
-drives the engine and skips the check can still build a CST past the
-cap. Rust's `to_descriptor` and `build_file` refuse it (`proto: document
+**What stays Rust's alone: the walk refuses a deep tree.** The plugin's
+parser builds no CST past the cap, but an engine with the grammar alone
+can. Rust's `to_descriptor` and `build_file` refuse such a CST (`proto: document
 nests deeper than 100 levels`), because the descriptor walk recurses and
 so do `tabnas::Value`'s drop and its JSON rendering. TypeScript's
 `toDescriptor` and Go's `ToDescriptor` and `BuildFile` walk the tree
 whole, as such a caller asked. That refusal does not protect the Rust
 caller either, since the tree exists by then and a deep enough
-`tabnas::Value` aborts as it drops; the check on the source is the
-protection, in every runtime.
+`tabnas::Value` aborts as it drops; refusing the document before its
+tree exists is the protection, in every runtime.
 
 **Owner: Rust, permanently,** for the walk's bound: it is a property of
 the language's stack discipline, not a defect to repair.
@@ -157,7 +169,10 @@ inside a word and a string straight after a keyword.
 `rs/tests/untrusted_test.rs`, `ts/test/preflight.test.ts` and
 `go/preflight_test.go` add the depth under the cap, the missing code,
 and the walk: each runtime's test hands its walk a tree one level past
-the cap, which Rust refuses and the other two walk.
+the cap, from an engine with the grammar alone, which Rust refuses and
+the other two walk. `ts/test/window.test.ts`, `go/window_test.go` and
+`rs/tests/window_test.rs` hold the parser's refusal, its code and the
+brace it names, alike from a text and from a reader.
 
 ## 3. Divergences this repository records that are NOT Rust's
 

@@ -48,8 +48,13 @@ agree (`reconcile: true`, the default) or `parse` throws; set
 - `toDescriptor(cst, options?)`. Turn a parsed CST into a
   FileDescriptorProto.
 - `preflight(src)`. Refuse a source nesting deeper than
-  `MAX_NESTING_DEPTH`, which is 100 levels. `parse` runs it first, and a
-  caller who drives the engine runs it before `tn.parse`.
+  `MAX_NESTING_DEPTH`, which is 100 levels, naming its depth. `parse`
+  runs it first. The plugin's parser refuses the same documents as it
+  reads them, with the code `proto_too_deep`, so a caller who drives the
+  engine needs no check of its own.
+- `make()`. The parser a host streams a document through. It declares
+  `lex.window`, so `tn.parseReader(reader)` reads a document a window at
+  a time, never whole.
 
 Options: `{ version?: 'proto2'|'proto3'|'2023'|'2024' | null,
 reconcile?: boolean }`.

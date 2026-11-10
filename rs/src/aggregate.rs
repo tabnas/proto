@@ -15,9 +15,10 @@ use tabnas::{Context, Rule, Value};
 const TAB_WIDTH: usize = 8;
 
 /// Line and column, kept protoc's way while a scan moves through bytes.
-struct Position {
-    line: usize,
-    col: usize,
+#[derive(Default)]
+pub(crate) struct Position {
+    pub(crate) line: usize,
+    pub(crate) col: usize,
 }
 
 impl Position {
@@ -25,7 +26,7 @@ impl Position {
     ///
     /// Stepping a byte at a time is what makes a multi-byte character
     /// count once per byte, as protoc's tokenizer counts it.
-    fn step(&mut self, bytes: &[u8], at: usize) -> usize {
+    pub(crate) fn step(&mut self, bytes: &[u8], at: usize) -> usize {
         match bytes[at] {
             b'\n' => {
                 self.line += 1;
@@ -42,7 +43,7 @@ impl Position {
 /// `src[open]` and `src[close]`, byte offsets.
 pub(crate) fn aggregate_text(src: &str, open: usize, close: usize) -> String {
     let bytes = src.as_bytes();
-    let mut pos = Position { line: 0, col: 0 };
+    let mut pos = Position::default();
 
     // The column after the opening brace depends on everything ahead of it
     // on its line, because that decides where a later tab stops.
@@ -50,13 +51,23 @@ pub(crate) fn aggregate_text(src: &str, open: usize, close: usize) -> String {
     while at <= open {
         at = pos.step(bytes, at);
     }
-    pos.line = 0;
+    interior_text(src, open + 1, close, pos.col)
+}
+
+/// The text protoc records for an aggregate whose text between its braces
+/// is `src[from..close]`, the column after its opening brace `col`: what
+/// [`aggregate_text`] reads from the whole source, and what a parse from a
+/// reader, which never holds the whole source, reads from the tokens the
+/// lexer gave between the braces (`read.rs`).
+pub(crate) fn interior_text(src: &str, from: usize, close: usize, col: usize) -> String {
+    let bytes = src.as_bytes();
+    let mut pos = Position { line: 0, col };
 
     let is_comment_start =
         |at: usize| b'/' == bytes[at] && matches!(bytes.get(at + 1), Some(b'/') | Some(b'*'));
 
     let mut out = String::new();
-    let mut from = open + 1;
+    let mut from = from;
     let mut at = from;
     while at < close {
         let byte = bytes[at];
@@ -120,6 +131,14 @@ pub(crate) fn aggregate_text(src: &str, open: usize, close: usize) -> String {
     out
 }
 
+/// The member of a closing brace's use data that holds, in a parse from a
+/// reader, the text of the aggregate it closes (`read.rs`).
+pub(crate) const AGGREGATE: &str = "protoAggregate";
+
+/// The member that holds where that aggregate's opening brace is, its
+/// byte offset.
+pub(crate) const AGGREGATE_OPEN: &str = "protoAggregateOpen";
+
 /// The after-close action [`crate::proto`] installs on the grammar's
 /// `constant` rule: on an aggregate value's CST node it sets `aggregate`
 /// to the text protoc records, read from the source between the value's
@@ -128,7 +147,10 @@ pub(crate) fn aggregate_text(src: &str, open: usize, close: usize) -> String {
 /// The node's `src` stays the tokens run together, as on every node. The
 /// opening brace is the rule's first token and the closing brace the last
 /// token consumed; a node where either is not a brace is left without
-/// `aggregate`. Port of `recordAggregate` in `ts/src/aggregate.ts`.
+/// `aggregate`. A parse from a reader holds a window of the source, never
+/// the whole of it, and its context holds no source: there the closing
+/// brace carries the text, which `read.rs` kept as the tokens between the
+/// braces went by. Port of `recordAggregate` in `ts/src/aggregate.ts`.
 pub(crate) fn record_aggregate(rule: &mut Rule, ctx: &mut Context) {
     let is_aggregate = matches!(
         &*rule.node.borrow(),
@@ -142,15 +164,25 @@ pub(crate) fn record_aggregate(rule: &mut Rule, ctx: &mut Context) {
     let (Some(open), Some(close)) = (rule.o.first(), ctx.v1()) else {
         return;
     };
-    let (open, close) = (open.site.si, close.site.si);
-    let src = ctx.source.as_str();
-    if !(open < close && close < src.len()) {
-        return;
-    }
-    if b'{' != src.as_bytes()[open] || b'}' != src.as_bytes()[close] {
-        return;
-    }
-    let text = aggregate_text(src, open, close);
+    let text = if ctx.source.is_empty() {
+        let read = close.use_data();
+        match (read.get(AGGREGATE_OPEN), read.get(AGGREGATE)) {
+            (Some(Value::Number(at)), Some(Value::String(text))) if *at == open.site.si as f64 => {
+                text.clone()
+            }
+            _ => return,
+        }
+    } else {
+        let (open, close) = (open.site.si, close.site.si);
+        let src = ctx.source.as_str();
+        if !(open < close && close < src.len()) {
+            return;
+        }
+        if b'{' != src.as_bytes()[open] || b'}' != src.as_bytes()[close] {
+            return;
+        }
+        aggregate_text(src, open, close)
+    };
     if let Some(node) = rule.node.borrow_mut().as_object_mut() {
         node.insert("aggregate".to_string(), Value::String(text));
     }

@@ -30,90 +30,104 @@
 
 const TAB = 8
 
+// A place in the text as protoc counts it: the line, and the column on it.
+type At = { line: number; col: number }
+
+// Move past `src[i]`, keeping `at` protoc's way. Returns the index after
+// it: a surrogate pair is one character and four bytes.
+function step(src: string, i: number, at: At): number {
+  const c = src.charCodeAt(i)
+  if (10 === c) {
+    at.line++
+    at.col = 0
+  } else if (9 === c) {
+    at.col += TAB - (at.col % TAB)
+  } else if (c < 0x80) {
+    at.col += 1
+  } else if (c < 0x800) {
+    at.col += 2
+  } else if (0xd800 <= c && c < 0xdc00 && i + 1 < src.length) {
+    const d = src.charCodeAt(i + 1)
+    if (0xdc00 <= d && d < 0xe000) {
+      at.col += 4
+      return i + 2
+    }
+    at.col += 3
+  } else {
+    at.col += 3
+  }
+  return i + 1
+}
+
 // The text protoc 36 records for the aggregate whose braces are at
 // `src[open]` and `src[close]`.
 function aggregateText(src: string, open: number, close: number): string {
-  let line = 0
-  let col = 0
-
-  // Move past `src[i]`, keeping `line` and `col` protoc's way. Returns the
-  // index after it: a surrogate pair is one character and four bytes.
-  const step = (i: number): number => {
-    const c = src.charCodeAt(i)
-    if (10 === c) {
-      line++
-      col = 0
-    } else if (9 === c) {
-      col += TAB - (col % TAB)
-    } else if (c < 0x80) {
-      col += 1
-    } else if (c < 0x800) {
-      col += 2
-    } else if (0xd800 <= c && c < 0xdc00 && i + 1 < src.length) {
-      const d = src.charCodeAt(i + 1)
-      if (0xdc00 <= d && d < 0xe000) {
-        col += 4
-        return i + 2
-      }
-      col += 3
-    } else {
-      col += 3
-    }
-    return i + 1
-  }
-
   // The column after the opening brace depends on everything ahead of it
   // on its line, because that decides where a later tab stops.
-  for (let i = src.lastIndexOf('\n', open) + 1; i <= open;) i = step(i)
-  line = 0
+  const at: At = { line: 0, col: 0 }
+  for (let i = src.lastIndexOf('\n', open) + 1; i <= open;) i = step(src, i, at)
+  return interiorText(src, open + 1, close, at.col)
+}
+
+// The text protoc records for an aggregate whose text between its braces
+// is `src` from `from` to `close`, the column after its opening brace
+// `col`: what `aggregateText` reads from the whole source, and what a
+// parse from a reader, which never holds the whole source, reads from the
+// tokens the lexer gave between the braces (./read.ts).
+function interiorText(src: string, from: number, close: number, col: number): string {
+  const at: At = { line: 0, col }
 
   const isCommentStart = (i: number): boolean =>
     '/' === src[i] && ('/' === src[i + 1] || '*' === src[i + 1])
 
   let out = ''
-  let from = open + 1
   let i = from
   while (i < close) {
     const c = src[i]
     if (isCommentStart(i)) {
       out += src.slice(from, i)
-      const gapLine = line
-      const gapCol = col
+      const gapLine = at.line
+      const gapCol = at.col
       // Comments with nothing between them form one gap: protoc pads from
       // the token before the first to the token after the last.
       while (i < close && isCommentStart(i)) {
         if ('/' === src[i + 1]) {
-          while (i < close && '\n' !== src[i]) i = step(i)
-          if (i < close) i = step(i)
+          while (i < close && '\n' !== src[i]) i = step(src, i, at)
+          if (i < close) i = step(src, i, at)
         } else {
-          i = step(step(i))
-          while (i < close && !('*' === src[i] && '/' === src[i + 1])) i = step(i)
-          if (i < close) i = step(step(i))
+          i = step(src, step(src, i, at), at)
+          while (i < close && !('*' === src[i] && '/' === src[i + 1])) i = step(src, i, at)
+          if (i < close) i = step(src, step(src, i, at), at)
         }
       }
       from = i
       if (close <= i) break
-      if (gapLine < line) out += '\n'.repeat(line - gapLine) + ' '.repeat(col)
-      else if (gapCol < col) out += ' '.repeat(col - gapCol)
+      if (gapLine < at.line) out += '\n'.repeat(at.line - gapLine) + ' '.repeat(at.col)
+      else if (gapCol < at.col) out += ' '.repeat(at.col - gapCol)
       continue
     }
     if ('"' === c || "'" === c) {
       // A string's text is copied as written; a `//` inside one is not a
       // comment. protoc ends an unterminated string at the newline.
-      i = step(i)
+      i = step(src, i, at)
       while (i < close && c !== src[i] && '\n' !== src[i]) {
-        if ('\\' === src[i] && i + 1 < close && '\n' !== src[i + 1]) i = step(i)
-        i = step(i)
+        if ('\\' === src[i] && i + 1 < close && '\n' !== src[i + 1]) i = step(src, i, at)
+        i = step(src, i, at)
       }
-      if (i < close && c === src[i]) i = step(i)
+      if (i < close && c === src[i]) i = step(src, i, at)
       continue
     }
-    i = step(i)
+    i = step(src, i, at)
   }
   return out + src.slice(from, close)
 }
 
 type AggregateNode = { rule?: unknown; src?: unknown; aggregate?: string }
+
+// The member of a closing brace's `use` that holds, in a parse from a
+// reader, the text of the aggregate it closes: `{ open, text }`, `open`
+// the position of the aggregate's opening brace (./read.ts).
+const AGGREGATE = 'protoAggregate'
 
 // After-close action for the grammar's `constant` rule, which the `Proto`
 // plugin installs: on an aggregate value's CST node it sets `aggregate` to
@@ -121,17 +135,26 @@ type AggregateNode = { rule?: unknown; src?: unknown; aggregate?: string }
 // braces. The node's `src` stays the tokens run together, as on every
 // node. The opening brace is the rule's first token (`o0`) and the closing
 // brace the last token consumed (`v1`); a node where either is not a brace
-// is left without `aggregate`.
+// is left without `aggregate`. A parse from a reader holds no whole
+// source (`ctx.src()` is empty): there the closing brace carries the
+// text, which the lex subscriber in ./read.ts kept as the tokens between
+// the braces went by.
 function recordAggregate(rule: any, ctx: any): void {
   const node: AggregateNode | undefined = rule?.node
   if (!node || 'constant' !== node.rule) return
   if ('string' !== typeof node.src || '{' !== node.src[0]) return
   const src: string = ctx.src()
   const open: number = rule.o0?.sI
+  if ('' === src) {
+    const read = ctx.v1?.use?.[AGGREGATE]
+    if (null != read && read.open === open) node.aggregate = read.text
+    return
+  }
   const close: number = ctx.v1?.sI
   if (!(0 <= open && open < close && close < src.length)) return
   if ('{' !== src[open] || '}' !== src[close]) return
   node.aggregate = aggregateText(src, open, close)
 }
 
-export { aggregateText, recordAggregate }
+export { AGGREGATE, aggregateText, interiorText, recordAggregate, step }
+export type { At }

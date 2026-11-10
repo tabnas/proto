@@ -30,7 +30,9 @@ A translation reads a file as its source-ordered tree instead,
 `parseTree`: the file's declarations in the order the file writes them,
 each scalar the text the source spells. A host streams it through the
 package's transducer part, a declaration at a time, and writes it back
-with the package's render; [`AGENTS.md`](AGENTS.md) has the details.
+with the package's render. The parser it streams through reads from a
+reader a window at a time, never the whole file, and refuses nesting
+past the cap as it reads; [`AGENTS.md`](AGENTS.md) has the details.
 
 ## How it works
 

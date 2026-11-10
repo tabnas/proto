@@ -57,6 +57,7 @@ mod grammar;
 mod jsnum;
 mod node;
 mod order;
+mod read;
 mod tree;
 
 /// The README's Rust examples run as doctests, so a stale one fails the
@@ -145,9 +146,10 @@ impl Default for ProtoOptions {
 /// Use [`to_descriptor`] to turn that CST into a [`FileDescriptorProto`].
 /// The Rust spelling of the canonical `tn.use(Proto)`.
 ///
-/// Driving the engine's own `parse` skips the nesting [`preflight`], so
-/// a caller handing it untrusted source runs that check first; see
-/// [`preflight`] for what the tree costs without it.
+/// The parser refuses a document nesting past [`MAX_NESTING_DEPTH`] as it
+/// reads it: the brace that opens the level past the cap fails the parse,
+/// at that brace, with the code `proto_too_deep`, so no tree deeper than
+/// the cap is built, from a text or from a reader.
 ///
 /// ```
 /// fn main() -> Result<(), Box<dyn std::error::Error>> {
@@ -190,6 +192,19 @@ pub fn proto(parser: &mut Tabnas) -> Result<(), ProtoError> {
     parser.define_rule("constant", |spec| {
         spec.add_ac(aggregate::record_aggregate);
     });
+    // The nesting cap, counted as the lexer gives the parser its tokens,
+    // and in a parse from a reader an aggregate's text: see `read.rs`.
+    parser
+        .set_options(|options| {
+            options
+                .error
+                .insert(read::TOO_DEEP.to_string(), read::too_deep_message());
+            options
+                .hint
+                .insert(read::TOO_DEEP.to_string(), read::too_deep_hint());
+        })
+        .map_err(|error| ProtoError::Grammar(format!("proto: {error}")))?;
+    parser.subscribe_lex(read::read_token);
     Ok(())
 }
 
@@ -230,8 +245,15 @@ pub fn engine() -> Tabnas {
 /// its own state, and a subscriber added to it, or an option changed on
 /// it, reaches no other parser, so a host that needs a parser per
 /// document, as one that reads the rule passes does, pays the install
-/// once. Read each document through [`parse_with`], which runs the
-/// nesting [`preflight`] the engine's own `parse` does not.
+/// once.
+///
+/// The parser refuses a document nesting past [`MAX_NESTING_DEPTH`] as it
+/// reads it, with the code `proto_too_deep` at the brace past the cap. It
+/// declares `lex.window`, so that [`Tabnas::parse_reader`] reads a
+/// document a window at a time, never whole: its rule passes, which the
+/// transducer part reads, come as the reader gives the text, and an
+/// aggregate option value's text is kept from the tokens between its
+/// braces, since a window never holds the whole source.
 ///
 /// ```
 /// fn main() -> Result<(), Box<dyn std::error::Error>> {
@@ -247,10 +269,22 @@ pub fn make() -> Tabnas {
 }
 
 /// [`engine`] with this plugin installed, built anew: the parser
-/// [`shared`] holds, which [`make`] clones.
+/// [`shared`] holds, which [`make`] clones. It declares `lex.window`, so
+/// that a parse from a reader reads the source a window at a time, with
+/// the matcher that reads a word whole before a keyword is cut from it
+/// (`read.rs`); a parse of a whole text is unchanged by either.
 fn build() -> Tabnas {
     let mut parser = engine();
     proto(&mut parser).expect("the embedded proto grammar is fixed and valid");
+    parser
+        .set_options(|options| {
+            options.lex.window = true;
+            options
+                .lex
+                .matchers
+                .insert("proto-reach".to_string(), read::reach_matcher());
+        })
+        .expect("the proto parser takes the window and its reach");
     parser
 }
 
@@ -268,10 +302,12 @@ fn shared() -> &'static Tabnas {
 /// Turn a parsed proto CST into a [`FileDescriptorProto`], resolving the
 /// version from the file's declaration and the supplied options.
 ///
-/// The walk refuses a CST nesting past [`MAX_NESTING_DEPTH`], but by
-/// then the tree EXISTS, and a `tabnas::Value` that deep aborts the
-/// process when it drops. A caller who parsed the source itself runs
-/// [`preflight`] on that source first; [`parse_with`] does both.
+/// The walk refuses a CST nesting past [`MAX_NESTING_DEPTH`]. A parser
+/// this crate builds never builds one: it refuses the document as it
+/// reads the brace past the cap. A CST from an engine with the grammar
+/// alone can be that deep, and by then the tree EXISTS, and a
+/// `tabnas::Value` that deep aborts the process when it drops, so such a
+/// caller runs [`preflight`] on the source first.
 pub fn to_descriptor(
     cst: &Value,
     options: Option<&ProtoOptions>,
@@ -303,8 +339,9 @@ fn to_descriptor_ordered(
 /// descriptor and [`descriptor_value`], handed the descriptor alone,
 /// cannot know.
 ///
-/// As for [`to_descriptor`], a caller who parsed the source itself runs
-/// [`preflight`] on that source first; [`parse_value_with`] does both.
+/// As for [`to_descriptor`], a CST deeper than the cap comes only from
+/// an engine with the grammar alone; [`parse_value_with`] parses and
+/// walks in one call.
 ///
 /// ```
 /// fn main() -> Result<(), Box<dyn std::error::Error>> {
@@ -332,13 +369,17 @@ pub fn to_descriptor_value(
 /// with the same scan, cap and message, and their `parse` and `Parse`
 /// run it as [`parse`] does here.
 ///
-/// [`parse`] and [`parse_with`] run this themselves. It is public for
-/// the caller who drives the engine directly, through [`make`] or
-/// [`proto`] on an instance of their own: the engine's `parse` builds a
-/// [`tabnas::Value`] tree that mirrors the document, and that value
-/// DROPS recursively, so a deep enough document aborts the process even
-/// when the descriptor walk refuses it. An abort cannot be caught, so
-/// the check has to come before the tree exists.
+/// [`parse`] and [`parse_with`] run this themselves, so that their
+/// refusal names the document's depth. The parser [`proto`] installs
+/// refuses the same documents as it reads them, at the brace past the cap
+/// with the code `proto_too_deep`, which a parse from a reader needs,
+/// since it never holds the whole text this counts. The check matters
+/// because the engine's `parse` builds a [`tabnas::Value`] tree that
+/// mirrors the document, and that value DROPS recursively, so a deep
+/// enough tree aborts the process even when the descriptor walk refuses
+/// it; an abort cannot be caught, so the refusal has to come before the
+/// tree exists. It is public for a caller that wants a whole text's
+/// depth checked before any engine runs.
 ///
 /// The depth is counted in braces, skipping the string literals and
 /// comments the lexer skips, where it skips them: a line comment ends at
@@ -379,9 +420,9 @@ pub fn preflight(src: &str) -> Result<(), ProtoError> {
 ///
 /// The high-throughput path. Installing the grammar dominates a parse by
 /// more than an order of magnitude, so a caller reading many documents builds one
-/// instance with [`make`] and passes it here, rather than driving the
-/// engine directly: this runs the same [`preflight`] [`parse`] runs, and
-/// the engine's own `parse` does not.
+/// instance with [`make`] and passes it here: this runs the same
+/// [`preflight`] [`parse`] runs, whose refusal names the document's depth,
+/// then the engine, then the walk.
 ///
 /// ```
 /// fn main() -> Result<(), Box<dyn std::error::Error>> {
@@ -485,9 +526,10 @@ pub fn parse_value_with(
 /// and the one the transducer part (`alchemy/transduce.alc`) streams from
 /// the parse's rule passes.
 ///
-/// As for [`to_descriptor`], a caller who parsed the source itself runs
-/// [`preflight`] on that source first; [`parse_tree_with`] does both, and
-/// the walk refuses a CST nesting past [`MAX_NESTING_DEPTH`].
+/// As for [`to_descriptor`], a CST deeper than the cap comes only from
+/// an engine with the grammar alone; [`parse_tree_with`] parses and walks
+/// in one call, and the walk refuses a CST nesting past
+/// [`MAX_NESTING_DEPTH`].
 ///
 /// ```
 /// fn main() -> Result<(), Box<dyn std::error::Error>> {

@@ -297,17 +297,25 @@ fn the_reusable_path_carries_the_same_bound() {
 }
 
 /// The walk's own bound, which is this port's alone: a tree past the cap,
-/// built by a caller who drove the engine and skipped the preflight, is
-/// refused by `to_descriptor`, because a Rust stack that runs out aborts.
-/// TypeScript's `toDescriptor` and Go's `ToDescriptor` walk it
+/// which only an engine with the grammar alone and not the plugin builds
+/// (the plugin's parser refuses the document as it reads the brace past
+/// the cap), is refused by `to_descriptor`, because a Rust stack that runs
+/// out aborts. TypeScript's `toDescriptor` and Go's `ToDescriptor` walk it
 /// (`ts/test/preflight.test.ts`, `go/preflight_test.go`), as
 /// `DIVERGENCE.md` section 2 records.
 #[test]
 fn the_walk_refuses_a_tree_past_the_cap() {
-    let parser = make();
-    let cst = parser
-        .parse(&nested(MAX_NESTING_DEPTH + 1))
-        .expect("the engine's own parse has no cap");
+    let deep = nested(MAX_NESTING_DEPTH + 1);
+    let error = make()
+        .parse(&deep)
+        .expect_err("the plugin's parser refuses it");
+    assert_eq!(error.code, "proto_too_deep");
+
+    let mut bare = tabnas_proto::engine();
+    let spec = tabnas::GrammarSpec::from_json(include_str!("../proto-grammar.json"))
+        .expect("the compiled grammar loads");
+    bare.grammar(&spec).expect("the compiled grammar installs");
+    let cst = bare.parse(&deep).expect("the grammar alone has no cap");
     let error = tabnas_proto::to_descriptor(&cst, None).expect_err("the walk refuses it");
     assert_eq!(
         error.to_string(),
