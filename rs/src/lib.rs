@@ -270,21 +270,14 @@ pub fn make() -> Tabnas {
 
 /// [`engine`] with this plugin installed, built anew: the parser
 /// [`shared`] holds, which [`make`] clones. It declares `lex.window`, so
-/// that a parse from a reader reads the source a window at a time, with
-/// the matcher that reads a word whole before a keyword is cut from it
-/// (`read.rs`); a parse of a whole text is unchanged by either.
+/// that a parse from a reader reads the source a window at a time; a
+/// parse of a whole text is unchanged by it.
 fn build() -> Tabnas {
     let mut parser = engine();
     proto(&mut parser).expect("the embedded proto grammar is fixed and valid");
     parser
-        .set_options(|options| {
-            options.lex.window = true;
-            options
-                .lex
-                .matchers
-                .insert("proto-reach".to_string(), read::reach_matcher());
-        })
-        .expect("the proto parser takes the window and its reach");
+        .set_options(|options| options.lex.window = true)
+        .expect("the proto parser takes the window");
     parser
 }
 

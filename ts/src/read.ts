@@ -25,12 +25,8 @@
 // gives each closing brace the text protoc records for the value it
 // closes, which the action reads. A token's text is the source's, so the
 // text kept is the text between the braces.
-//
-// `protoReach` is the one matcher a parse from a reader needs besides the
-// engine's: the grammar's keywords are match tokens, each a word with `\b`
-// after it, and a regular expression sees only the window.
 
-import { MAX_NESTING_DEPTH, isWord } from './preflight'
+import { MAX_NESTING_DEPTH } from './preflight'
 import { AGGREGATE, interiorText, step } from './aggregate'
 import type { At } from './aggregate'
 
@@ -131,27 +127,4 @@ function advance(src: string, at: At): void {
   for (let i = 0; i < src.length;) i = step(src, i, at)
 }
 
-// The lexer matcher `make()` installs with `lex.window`. In a parse from a
-// reader it reads the window on, doubling, until the word at the cursor
-// ends inside it, or the source ends, so that a keyword's `\b` sees the
-// character after the word as the whole text shows it. It cuts no token,
-// and in a parse of a whole text it returns at once.
-function protoReach(): any {
-  return {
-    order: 9e5,
-    make: () => (lex: any) => {
-      if (!lex.windowOpen) return undefined
-      let ahead = 1
-      for (;;) {
-        lex.fill(ahead)
-        const w: string = lex.window()
-        let end = 0
-        while (end < w.length && isWord(w.charCodeAt(end))) end++
-        if (end < w.length || !lex.windowOpen) return undefined
-        ahead = Math.max(end + 1, 2 * w.length)
-      }
-    },
-  }
-}
-
-export { TOO_DEEP, TOO_DEEP_HINT, TOO_DEEP_MESSAGE, protoReach, readToken }
+export { TOO_DEEP, TOO_DEEP_HINT, TOO_DEEP_MESSAGE, readToken }

@@ -16,9 +16,7 @@ import { buildTree } from './build-tree'
 import type { TreeNode, TreeValue } from './build-tree'
 import { recordAggregate } from './aggregate'
 import { MAX_NESTING_DEPTH, preflight } from './preflight'
-import {
-  TOO_DEEP, TOO_DEEP_HINT, TOO_DEEP_MESSAGE, protoReach, readToken,
-} from './read'
+import { TOO_DEEP, TOO_DEEP_HINT, TOO_DEEP_MESSAGE, readToken } from './read'
 import {
   ProtoVersion, declaredVersion, resolveVersion,
 } from './detect-version'
@@ -110,7 +108,7 @@ function parse(src: string, options?: Partial<ProtoOptions>): FileDescriptorProt
 function make(): Tabnas {
   const tn = new Tabnas({ rewind: { history: 8192 } })
   Proto(tn)
-  tn.options({ lex: { window: true, match: { 'proto-reach': protoReach() } } })
+  tn.options({ lex: { window: true } })
   return tn
 }
 

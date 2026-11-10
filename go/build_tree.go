@@ -468,10 +468,7 @@ func Make() (*tabnas.Tabnas, error) {
 		return nil, err
 	}
 	window := true
-	j.SetOptions(tabnas.Options{Lex: &tabnas.LexOptions{
-		Window: &window,
-		Match:  map[string]*tabnas.MatchSpec{"proto-reach": reachMatcher()},
-	}})
+	j.SetOptions(tabnas.Options{Lex: &tabnas.LexOptions{Window: &window}})
 	return j, nil
 }
 

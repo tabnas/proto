@@ -20,8 +20,7 @@ rs/proto-grammar.json      GENERATED compiled grammar (tests/grammar_spec_test.r
                            -- do not edit; src/lib.rs installs it
 rs/src/aggregate.rs        an aggregate option value's text, as protoc records it
 rs/src/read.rs             the lex subscriber: the nesting cap as the parser reads
-                           (proto_too_deep), an aggregate's text from a reader,
-                           and proto-reach, make()'s window matcher
+                           (proto_too_deep), and an aggregate's text from a reader
 rs/src/descriptor.rs       output types + the scalar table
 rs/src/order.rs            the order record the walk keeps beside the descriptor
 rs/src/tree.rs             descriptor_value: the descriptor as the canonical tree,
