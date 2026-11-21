@@ -131,7 +131,7 @@ parse, then the walk.
 | 3,000 | `RangeError` after 0.7 s | parses, 0.7 s, 187 MB allocated | **process abort** |
 | 10,000 | `RangeError` after 3.7 s, 553 MB resident | not run | **process abort** |
 
-Measured through alchemy-cli the same day: Go's tree for a 330 KB
+Measured through alchemy-cli, now dmog, the same day: Go's tree for a 330 KB
 document nesting 30,000 levels passed 13 GB, and the process was killed;
 TypeScript reached its `RangeError` only after 41 s at 100,000 levels. A
 Rust stack that runs out ABORTS the process, and the abort cannot be
