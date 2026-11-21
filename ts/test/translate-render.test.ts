@@ -22,7 +22,7 @@ import { after, test } from 'node:test'
 const { parseTree, translate } = require('..')
 
 const ALCHEMY = process.env.TABNAS_ALCHEMY
-const skip = ALCHEMY ? false : 'TABNAS_ALCHEMY does not name the alchemy command'
+const skip = ALCHEMY ? false : 'TABNAS_ALCHEMY does not name the dmog command'
 
 // Every transient task reports progress at least every 30 seconds
 // (AGENTS.md), so the command runs asynchronously, and while a run is out
